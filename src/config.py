@@ -1,0 +1,62 @@
+"""
+配置管理模块
+
+处理环境变量和应用配置。
+"""
+
+from dotenv import load_dotenv, find_dotenv
+from pydantic_settings import BaseSettings
+import os
+
+# 移除硬编码API密钥，改用环境变量
+
+def safe_load_dotenv():
+    """安全加载.env文件，自动处理编码问题"""
+    env_path = find_dotenv()
+    if not env_path:
+        print("WARNING: .env file not found, using environment variables")
+        return
+    
+    encodings = ['utf-8', 'utf-8-sig', 'utf-16', 'utf-16-le', 'utf-16-be', 'gbk', 'gb2312']
+    
+    for encoding in encodings:
+        try:
+            load_dotenv(env_path, encoding=encoding)
+            print(f"SUCCESS: .env file loaded with encoding: {encoding}")
+            return
+        except (UnicodeDecodeError, FileNotFoundError):
+            continue
+    
+    print("WARNING: Could not read .env file, using environment variables or defaults")
+
+# 加载环境变量
+safe_load_dotenv()
+
+class Settings(BaseSettings):
+    """应用设置类"""
+    zhipu_api_key: str = os.getenv("ZHIPU_API_KEY") or ""
+    
+    # Tavily Search API 配置
+    tavily_api_key: str = os.getenv("TAVILY_API_KEY") or ""
+
+    class Config:
+        env_file = None  # 禁用自动读取.env文件，我们手动处理
+
+# 全局设置实例
+settings = Settings()
+
+# 检查API密钥
+if not settings.zhipu_api_key:
+    print("ERROR: ZHIPU_API_KEY not found")
+    print("HINT: Please set your ZhipuAI API key in .env file")
+    print("HINT: Ensure .env file is saved with UTF-8 encoding") 
+else:
+    print(f"SUCCESS: ZhipuAI API key configured: {settings.zhipu_api_key[:10]}...{settings.zhipu_api_key[-10:]}") 
+
+# 检查Tavily API密钥
+if not settings.tavily_api_key:
+    print("WARNING: TAVILY_API_KEY not found")
+    print("HINT: Please set your Tavily API key in .env file for enhanced search functionality")
+    print("HINT: Get your API key from https://tavily.com/")
+else:
+    print(f"SUCCESS: Tavily API key configured: {settings.tavily_api_key[:10]}...{settings.tavily_api_key[-10:]}") 
