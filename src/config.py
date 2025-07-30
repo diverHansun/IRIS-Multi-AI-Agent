@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     
     # Tavily Search API 配置
     tavily_api_key: str = os.getenv("TAVILY_API_KEY") or ""
+    
+    # 高德地图 API 配置
+    amap_api_key: str = os.getenv("AMAP_API_KEY") or ""
 
     class Config:
         env_file = None  # 禁用自动读取.env文件，我们手动处理
@@ -57,6 +60,12 @@ else:
 if not settings.tavily_api_key:
     print("WARNING: TAVILY_API_KEY not found")
     print("HINT: Please set your Tavily API key in .env file for enhanced search functionality")
-    print("HINT: Get your API key from https://tavily.com/")
 else:
     print(f"SUCCESS: Tavily API key configured: {settings.tavily_api_key[:10]}...{settings.tavily_api_key[-10:]}") 
+
+# 检查高德地图API密钥
+if not settings.amap_api_key:
+    print("WARNING: AMAP_API_KEY not found")
+    print("HINT: Please set your Amap API key in .env file for map search functionality")
+else:
+    print(f"SUCCESS: Amap API key configured: {settings.amap_api_key[:10]}...{settings.amap_api_key[-10:]}") 

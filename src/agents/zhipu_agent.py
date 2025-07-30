@@ -16,6 +16,7 @@ from ..llm.zhipu_llm import create_zhipu_llm
 from ..tools.math_tools import add_numbers, calculate_math
 from ..tools.search_tools import SEARCH_TOOLS
 from ..tools.tavily_search_tool import get_available_tavily_tools
+from ..tools.amap_search import get_available_amap_tools
 from ..memory.chat_memory import ChatMemoryManager
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
@@ -67,6 +68,16 @@ Final Answer: 完整、准确的最终回答
 - **计算工具**:
   - `add_numbers`: 数字加法运算
   - `calculate_math`: 复杂数学计算和表达式求解
+
+- **高德地图工具**:
+  - `amap_search_place`: 地点搜索，输入格式："关键词"，如"星巴克"
+  - `amap_search_nearby`: 附近搜索，输入格式："关键词,经度,纬度,半径"，如"餐厅,116.397477,39.908692,1000"
+  - `amap_search_in_city`: 城市内搜索，输入格式："关键词,城市"，如"购物中心,北京"
+  - `amap_route_driving`: 驾车路线规划，输入格式："起点,终点"，如"上海世博展览馆,上海火车站"
+  - `amap_route_walking`: 步行路线规划，输入格式："起点,终点"，如"天安门,故宫"
+  - `amap_route_transit`: 公共交通路线规划，输入格式："起点,终点,策略,城市"，如"天安门,故宫,0,北京"（0-最快，1-最经济，2-最少换乘，3-最少步行，5-不乘地铁）
+  - `amap_route_subway`: 地铁路线规划，输入格式："起点,终点,城市"，如"天安门,故宫,北京"
+  - `amap_route_bus`: 公交路线规划，输入格式："起点,终点,城市"，如"天安门,故宫,北京"
 
 ## 处理策略
 1. **问题分析**: 首先理解用户问题的核心需求
@@ -195,6 +206,14 @@ class ZhipuAgent:
         if SEARCH_TOOLS:
             self.tools.extend(SEARCH_TOOLS)
             logger.info(f"✅ 已加载备用搜索工具: {len(SEARCH_TOOLS)} 个")
+        
+        # 添加高德地图工具
+        amap_tools = get_available_amap_tools()
+        if amap_tools:
+            self.tools.extend(amap_tools)
+            logger.info(f"✅ 已加载高德地图工具: {len(amap_tools)} 个")
+        else:
+            logger.warning("⚠️ 高德地图工具未配置，需要设置 AMAP_API_KEY")
         
         logger.info(f"📋 总共收集到 {len(self.tools)} 个工具")
     

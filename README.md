@@ -1,13 +1,14 @@
 # 智谱AI Agent Demo
 
-基于LangChain和智谱AI构建的中文优化智能代理演示项目，集成了上下文记忆系统和多搜索引擎。
+基于LangChain和智谱AI构建的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎和高德地图功能。
 
 ## 功能特性
 
 - 🤖 **智能对话**: 基于智谱AI GLM-4-PLUS模型的自然语言交互
 - 🧠 **上下文记忆**: 基于LangChain 2025最佳实践的会话记忆系统
-- 🔧 **工具调用**: 支持数学计算、网络搜索等多种工具
+- 🔧 **工具调用**: 支持数学计算、网络搜索、地图导航等多种工具
 - 🔍 **多搜索引擎**: 集成Tavily搜索API + DuckDuckGo备用搜索
+- 🗺️ **高德地图集成**: 支持地点搜索、附近查询、驾车导航、步行导航、公共交通规划等完整功能
 - 🎯 **ReAct架构**: 使用推理-行动循环进行复杂问题解决
 - 💬 **中文优化**: 针对中文场景优化的提示词和交互体验
 - ⚡ **异步支持**: 支持同步和异步调用模式
@@ -42,8 +43,9 @@ pip install -r requirements.txt
 
 1. 访问 [智谱AI开放平台](https://open.bigmodel.cn/) 申请API密钥
 2. 访问 [Tavily](https://tavily.com/) 申请搜索API密钥
-3. 复制 `.env.example` 为 `.env`
-4. 在 `.env` 文件中填入您的API密钥
+3. 访问 [高德地图开放平台](https://lbs.amap.com/dev/key/app) 申请地图API密钥
+4. 复制 `.env.example` 为 `.env`
+5. 在 `.env` 文件中填入您的API密钥
 
 ```bash
 cp .env.example .env
@@ -53,6 +55,7 @@ cp .env.example .env
 ```
 ZHIPU_API_KEY=your_zhipu_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
+AMAP_API_KEY=your_amap_api_key_here
 ```
 
 ### 3. 运行程序
@@ -83,6 +86,7 @@ Agent_Demo/
 │   │   ├── math_tools.py           # 数学计算工具
 │   │   ├── search_tools.py         # DuckDuckGo搜索工具
 │   │   ├── tavily_search_tool.py   # Tavily搜索工具
+│   │   ├── amap_search.py          # 高德地图工具（地点搜索、路线规划、公共交通）
 │   │   ├── mcp_client.py           # MCP客户端（备用）
 │   │   └── mcp_search_server.py    # MCP服务器（备用）
 │   ├── config.py           # 配置管理
@@ -147,6 +151,55 @@ Observation: [Tavily搜索结果]
 Final Answer: 根据搜索结果，人工智能最新发展包括...
 ```
 
+### 高德地图功能
+
+#### 地点搜索
+```
+你 > 搜索北京的星巴克
+智谱AI > 我来为您搜索北京的星巴克...
+Action: amap_search_place
+Action Input: 星巴克
+Observation: [找到900个星巴克位置]
+Final Answer: 找到北京的星巴克店铺，包括...
+```
+
+#### 驾车路线规划
+```
+你 > 规划从南京富贵山小区到南京市第13中学的驾车路线
+智谱AI > 我来为您规划驾车路线...
+Action: amap_route_driving
+Action Input: 南京富贵山小区,南京市第13中学
+Observation: [路线规划结果]
+Final Answer: 从南京富贵山小区到南京市第13中学的驾车路线...
+```
+
+#### 公共交通规划
+```
+你 > 规划从西直门到国贸的公共交通路线
+智谱AI > 我来为您规划公共交通路线...
+Action: amap_route_transit
+Action Input: 西直门,国贸,0,北京
+Observation: TRANSIT 公共交通路线规划结果:
+...
+路线 3:
+详细路段:
+1. 步行 0.98公里 - 向西72米右转
+2. [公交]: 1路(西山樊各庄北站--万惠服装市场)
+   西直门北 → 团结湖 - 8.5公里, 37分钟
+3. 步行 0.56公里 - 沿建国门内大街向西60米右转
+Final Answer: 为您推荐3条公共交通路线，最快路线需要93分钟...
+```
+
+#### 地铁路线规划
+```
+你 > 规划从天安门到王府井的地铁路线
+智谱AI > 我来为您规划地铁路线...
+Action: amap_route_subway
+Action Input: 天安门,王府井,北京
+Observation: [地铁路线结果]
+Final Answer: 从天安门到王府井的地铁路线...
+```
+
 ### 上下文记忆搜索
 ```
 你 > 搜索Python教程
@@ -174,11 +227,37 @@ Final Answer: 根据搜索结果，人工智能最新发展包括...
 ### 内容获取工具
 - **get_webpage_content**: 获取指定网页的文本内容
 
+### 高德地图工具
+
+#### 地点搜索工具
+- **amap_search_place**: 地点搜索，搜索商店、景点、服务设施等
+- **amap_search_nearby**: 附近搜索，查找指定位置周围的POI
+- **amap_search_in_city**: 城市内搜索，在指定城市内搜索地点
+
+#### 路线规划工具
+- **amap_route_driving**: 驾车路线规划，规划最优驾车路线
+- **amap_route_walking**: 步行路线规划，规划步行路线
+
+#### 公共交通工具
+- **amap_route_transit**: 综合公共交通路线规划（公交、地铁、火车等）
+  - 支持多种策略：最快路线(0)、最经济(1)、最少换乘(2)、最少步行(3)、不乘地铁(5)
+- **amap_route_subway**: 地铁优先路线规划，使用最少换乘策略
+- **amap_route_bus**: 公交专线规划，只使用公交车不包含地铁
+
+#### 公共交通功能特点
+- 🚌 **详细线路信息**: 显示具体公交/地铁线路名称、起终点站
+- 🚶 **步行导航**: 提供详细的步行指导和距离
+- ⏱️ **时间估算**: 准确的行程时间和费用估算
+- 🗺️ **多路线选择**: 提供3-5条不同策略的路线选择
+- 📍 **智能地址解析**: 自动将地址转换为精确坐标
+- 🏙️ **城市上下文**: 支持城市限定，避免同名地点混淆
+
 ## 技术栈
 
 - **LangChain**: Agent框架和工具链 (2025最佳实践)
 - **智谱AI (GLM-4-PLUS)**: 大语言模型
 - **Tavily**: 高质量AI搜索API
+- **高德地图**: 地理位置服务和导航API
 - **RunnableWithMessageHistory**: 标准化记忆管理
 - **Rich**: 终端美化和交互
 - **Pydantic**: 配置管理和数据验证
@@ -192,6 +271,7 @@ Final Answer: 根据搜索结果，人工智能最新发展包括...
 
 - `ZHIPU_API_KEY`: 智谱AI API密钥（必需）
 - `TAVILY_API_KEY`: Tavily搜索API密钥（推荐）
+- `AMAP_API_KEY`: 高德地图API密钥（推荐，用于地图和导航功能）
 - `MODEL_NAME`: 模型名称，默认为 `glm-4-plus`
 - `TEMPERATURE`: 温度参数，控制输出随机性，默认为 `0.1`
 - `MAX_TOKENS`: 最大输出token数，默认为 `2048`
@@ -355,6 +435,23 @@ MIT License
 4. 发起Pull Request
 
 ## 更新日志
+
+### v2.1.0 (2025-07-30)
+- 🗺️ **高德地图集成**：完整的地图服务集成
+  - 地点搜索：支持关键词、附近、城市内搜索
+  - 驾车导航：智能路线规划和导航指导
+  - 步行导航：精确的步行路线规划
+  - 公共交通：完整的公交、地铁、综合交通规划
+- 🚌 **公共交通增强**：
+  - 详细线路信息显示（线路名称、起终点站、距离时间）
+  - 多种路线策略（最快、最经济、最少换乘等）
+  - 智能地址解析和坐标转换
+  - 城市上下文支持，避免同名地点混淆
+- 🛠️ **工具系统优化**：
+  - ReAct模式兼容的单参数工具设计
+  - 完善的错误处理和参数验证
+  - 详细的步行指导和路线展示
+- 🧹 **代码清理**：移除冗余测试文件，完善文档
 
 ### v2.0.0 (2025-07-17)
 - 🧠 **重大更新**：集成LangChain 2025最佳实践的记忆系统
