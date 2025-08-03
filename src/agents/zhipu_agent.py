@@ -106,7 +106,7 @@ class ZhipuAgent:
                  model: str = "glm-4-plus",
                  temperature: float = 0.1,
                  verbose: bool = False,
-                 max_iterations: int = 5,
+                 max_iterations: int = 10,
                  enable_memory: bool = True,
                  memory_config: Optional[Dict[str, Any]] = None):
         """
