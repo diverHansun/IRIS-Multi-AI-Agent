@@ -1,4 +1,4 @@
-# 智谱AI Agent Demo
+# Muti-AI Agent Demo
 
 基于LangChain和多LLM的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎、高德地图和OKX加密货币分析功能。
 
