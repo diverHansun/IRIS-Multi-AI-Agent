@@ -1,5 +1,5 @@
 """
-智谱AI Agent Demo - 主程序
+AI Agent Demo - 主程序
 
 提供命令行交互界面和异步演示功能。
 简化版本，使用新的MCP集成架构。
@@ -21,6 +21,8 @@ sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from src.agents.zhipu_agent import build_zhipu_agent, build_simple_zhipu_chat
+from src.agents.agent_factory import agent_factory, create_default_agent, get_available_configurations
+from src.llm.llm_manager import llm_manager
 from src.config import settings
 
 console = Console()
@@ -28,18 +30,25 @@ console = Console()
 def print_welcome():
     """打印欢迎信息"""
     welcome_text = """
-智谱AI Agent Demo (Tavily搜索 + 高德地图集成版)
+多LLM智能Agent Demo (完整功能集成版)
 
 支持的功能：
-• 智能对话
+• 多LLM支持 (智谱AI GLM-4、OpenAI GPT-4o/4o-mini)
+• 智能对话和复杂推理
 • 数学计算 (add_numbers, calculate_math)
 • 网络搜索 (Tavily搜索 + DuckDuckGo备用)
 • 高德地图搜索和导航 (地点搜索、路线规划)
-• 复杂推理和多轮对话
+• OKX加密货币行情分析 (价格查询、趋势分析、价格预警)
+• 会话记忆和多轮对话
 
+基本命令：
 输入 'exit' 或 'quit' 退出
 输入 'help' 查看帮助信息
-输入 'info' 查看Agent信息
+输入 'info' 查看当前Agent信息
+输入 'llms' 查看可用的LLM列表
+输入 'switch <provider> [model]' 切换LLM (如: switch openai gpt-4o-mini)
+
+记忆管理：
 输入 'clear' 清除当前会话记忆
 输入 'sessions' 查看历史会话列表
 输入 'restore <session_id>' 恢复指定会话
@@ -68,12 +77,20 @@ def print_help():
    "规划从北京站到首都机场的公共交通路线"
    "规划从天安门到故宫的地铁路线"
    "规划从北京站到王府井的公交路线"
-5. 支持复杂的推理和分析任务
+5. 加密货币行情查询：
+   "获取比特币的当前价格"
+   "获取BTC、ETH、SOL的行情数据"
+   "分析比特币最近24小时的价格趋势"
+   "获取比特币的1小时K线数据"
+   "创建价格预警：当比特币超过10万美元时通知我"
+   "查看市场概览"
+6. 支持复杂的推理和分析任务
 
 可用工具：
 • 数学工具：简单加法、一般运算
 • 搜索工具：Tavily搜索、DuckDuckGo搜索、网页内容获取
 • 高德地图工具：地点搜索、附近搜索、驾车导航、步行导航、公共交通、地铁规划、公交规划
+• OKX加密货币工具：价格查询、市场数据、K线分析、趋势分析、价格预警、市场概览
 
 搜索功能：
 • 优先使用Tavily搜索（高质量AI搜索）
@@ -90,6 +107,14 @@ def print_help():
 • 地铁规划：优先使用地铁的路线规划
 • 公交规划：只使用公交车的路线规划
 
+OKX加密货币功能：
+• 实时价格：获取单个或多个加密货币的实时价格
+• K线数据：获取历史K线数据用于技术分析
+• 趋势分析：基于技术指标分析价格趋势和方向
+• 价格预警：创建和管理价格突破预警
+• 市场概览：查看整体市场表现和热门币种
+• 交易对搜索：搜索和查找可用的交易对
+
 记忆功能：
 • 每次启动生成新的会话ID，避免历史对话干扰
 • 输入 'clear' 可清除当前会话记忆
@@ -99,11 +124,83 @@ def print_help():
     """
     console.print(Panel(help_text, title="帮助信息", border_style="green"))
 
+def print_available_llms():
+    """显示可用的LLM列表"""
+    try:
+        configs = get_available_configurations()
+        
+        if not configs["available_providers"]:
+            console.print("[red]❌ 没有可用的LLM提供商[/]")
+            console.print("[yellow]请确保至少配置了一个API密钥 (ZHIPU_API_KEY 或 OPENAI_API_KEY)[/]")
+            return
+        
+        llm_text = "可用的LLM提供商：\n\n"
+        
+        for provider in configs["available_providers"]:
+            llm_text += f"🔹 {provider['name']} ({provider['provider']})\n"
+            llm_text += f"   默认模型: {provider['default_model']}\n"
+            
+            if "models_detail" in provider:
+                llm_text += "   支持的模型:\n"
+                for model, info in provider["models_detail"].items():
+                    recommended = " ⭐" if info.get("recommended", False) else ""
+                    llm_text += f"     • {model}{recommended}: {info['description']}\n"
+            
+            llm_text += "\n"
+        
+        if configs["recommended_configs"]:
+            llm_text += "推荐配置:\n"
+            for rec in configs["recommended_configs"]:
+                llm_text += f"   • {rec['provider_name']} {rec['model']}: {rec['description']}\n"
+        
+        llm_text += f"\n启动默认LLM: {configs.get('default_config', {}).get('provider', 'N/A')} / {configs.get('default_config', {}).get('model', 'N/A')}"
+        
+        console.print(Panel(llm_text, title="LLM信息", border_style="blue"))
+        
+    except Exception as e:
+        console.print(f"[red]获取LLM信息失败: {str(e)}[/]")
+
+async def switch_llm(provider: str, model: str = None) -> bool:
+    """切换LLM"""
+    try:
+        # 验证提供商
+        available_providers = [p["provider"] for p in get_available_configurations()["available_providers"]]
+        if provider not in available_providers:
+            console.print(f"[red]❌ 不支持的LLM提供商: {provider}[/]")
+            console.print(f"[yellow]可用提供商: {', '.join(available_providers)}[/]")
+            return False
+        
+        # 创建新Agent
+        console.print(f"[yellow]正在切换到 {provider} {model or '(默认模型)'}...[/]")
+        
+        new_agent = await agent_factory.create_agent(
+            provider=provider,
+            model=model,
+            verbose=True,
+            temperature=0.1,
+            use_cache=False  # 切换时不使用缓存
+        )
+        
+        # 获取Agent信息
+        info = new_agent.get_info()
+        console.print(f"[green]✅ 成功切换到 {info['provider']} / {info['model']}[/]")
+        console.print(f"[dim]工具数: {info['tool_count']}, 记忆: {'启用' if info['memory_enabled'] else '禁用'}[/]")
+        
+        return new_agent
+        
+    except Exception as e:
+        console.print(f"[red]❌ 切换LLM失败: {str(e)}[/]")
+        return False
+
 def cli():
     """命令行交互界面"""
-    if not settings.zhipu_api_key:
-        console.print("[bold red]错误: 未设置ZHIPU_API_KEY环境变量[/]")
-        console.print("请在.env文件中设置您的智谱AI API密钥")
+    # 检查至少有一个LLM可用
+    configs = get_available_configurations()
+    if not configs["available_providers"]:
+        console.print("[bold red]错误: 没有可用的LLM提供商[/]")
+        console.print("请在.env文件中设置至少一个API密钥:")
+        console.print("- ZHIPU_API_KEY (智谱AI)")
+        console.print("- OPENAI_API_KEY (OpenAI)")
         return
     
     print_welcome()
@@ -116,20 +213,19 @@ def cli():
     memory_restored = False
     
     try:
-        # 创建智谱AI代理
-        console.print("[yellow]正在初始化智谱AI代理...[/]")
+        # 创建默认Agent
+        console.print("[yellow]正在初始化默认Agent...[/]")
         
         # 使用同步方式运行异步初始化
-        agent = asyncio.run(build_zhipu_agent(
-            model="glm-4-plus",
+        agent = asyncio.run(create_default_agent(
             verbose=True,
             temperature=0.1
         ))
         
         # 显示初始化信息
         info = agent.get_info()
-        console.print(f"[green]代理初始化完成！[/]")
-        console.print(f"[dim]模型: {info['model']}, 工具数: {info['tool_count']}[/]")
+        console.print(f"[green]Agent初始化完成！[/]")
+        console.print(f"[dim]提供商: {info['provider']}, 模型: {info['model']}, 工具数: {info['tool_count']}[/]")
         
         while True:
             try:
@@ -146,12 +242,35 @@ def cli():
                 if query.strip().lower() in {"info", "信息"}:
                     info = agent.get_info()
                     console.print(f"[bold blue]Agent信息：[/]")
+                    console.print(f"  LLM提供商: {info.get('provider', 'N/A')}")
                     console.print(f"  模型: {info['model']}")
-                    console.print(f"  温度: {info['temperature']}")
+                    console.print(f"  温度: {info.get('temperature', 'N/A')}")
                     console.print(f"  已初始化: {info['initialized']}")
+                    console.print(f"  记忆功能: {'启用' if info.get('memory_enabled', False) else '禁用'}")
                     console.print(f"  工具数量: {info['tool_count']}")
                     console.print(f"  可用工具: {', '.join(info['tools'])}")
                     console.print(f"  当前会话ID: {session_id}")
+                    continue
+                
+                if query.strip().lower() in {"llms", "llm", "模型列表"}:
+                    print_available_llms()
+                    continue
+                
+                if query.strip().lower().startswith("switch "):
+                    # 解析switch命令
+                    parts = query.strip().split()
+                    if len(parts) < 2:
+                        console.print("[yellow]⚠️ 使用格式: switch <provider> [model][/]")
+                        console.print("[dim]示例: switch openai gpt-4o-mini[/]")
+                        continue
+                    
+                    provider = parts[1]
+                    model = parts[2] if len(parts) > 2 else None
+                    
+                    # 异步切换LLM
+                    new_agent = asyncio.run(switch_llm(provider, model))
+                    if new_agent:
+                        agent = new_agent
                     continue
                 
                 if query.strip().lower() in {"clear", "清除记忆", "重置"}:
@@ -202,7 +321,7 @@ def cli():
                 
                 if result["success"]:
                     answer = result.get("output", "抱歉，我无法回答这个问题。")
-                    console.print(f"[bold green]智谱AI >[/] {answer}")
+                    console.print(f"[bold green]AI Agent >[/] {answer}")
                     
                     # 显示工具调用信息
                     if result.get("tool_calls", 0) > 0:
@@ -221,42 +340,82 @@ def cli():
                 console.print(f"[bold red]错误: {e}[/]")
                 
     except Exception as e:
-        console.print(f"[bold red]代理初始化失败: {e}[/]")
+        console.print(f"[bold red]Agent初始化失败: {e}[/]")
         console.print("请检查您的API密钥和网络连接")
 
 async def async_demo():
-    """异步使用示例"""
-    console.print("[bold blue]Async Demo[/]")
+    """异步使用示例 - 演示多LLM功能"""
+    console.print("[bold blue]Multi-LLM Async Demo[/]")
     
-    if not settings.zhipu_api_key:
-        console.print("[bold red]错误: 未设置ZHIPU_API_KEY环境变量[/]")
+    # 检查可用的LLM
+    configs = get_available_configurations()
+    if not configs["available_providers"]:
+        console.print("[bold red]错误: 没有可用的LLM提供商[/]")
         return
     
     try:
-        # 演示简单的LLM调用
-        console.print("\n1. 简单LLM调用演示:")
-        llm = build_simple_zhipu_chat(model="glm-4-plus", temperature=0.1)
-        response = await llm.ainvoke("请用一句话介绍人工智能")
-        console.print(f"[green]LLM Response:[/] {response.content}")
+        console.print(f"[blue]可用的LLM提供商: {', '.join([p['provider'] for p in configs['available_providers']])}")
         
-        # 演示Agent异步调用
-        console.print("\n2. Agent Async Demo:")
-        agent = await build_zhipu_agent(verbose=False)
+        # 演示每个可用的LLM
+        for provider_info in configs["available_providers"]:
+            provider = provider_info["provider"]
+            default_model = provider_info["default_model"]
+            
+            console.print(f"\n[bold cyan]🔸 测试 {provider_info['name']} ({provider}/{default_model})[/]")
+            
+            try:
+                # 创建Agent
+                agent = await agent_factory.create_agent(
+                    provider=provider,
+                    model=default_model,
+                    verbose=False,
+                    use_cache=False
+                )
+                
+                # 测试数学计算
+                console.print("   📊 Testing math calculation...")
+                result = await agent.ainvoke("计算 123 + 456")
+                console.print(f"   Math: {result['output'][:80]}...")
+                
+                # 测试简单对话
+                console.print("   💬 Testing conversation...")
+                result = await agent.ainvoke("请用一句话介绍人工智能")
+                console.print(f"   AI: {result['output'][:80]}...")
+                
+                # 如果有搜索工具，测试搜索功能
+                info = agent.get_info()
+                if any("search" in tool.lower() for tool in info.get("tools", [])):
+                    console.print("   🔍 Testing search function...")
+                    result = await agent.ainvoke("搜索最新的AI新闻", session_id="demo_search")
+                    console.print(f"   Search: {result['output'][:80]}...")
+                
+                console.print(f"   ✅ {provider_info['name']} 测试完成")
+                
+            except Exception as e:
+                console.print(f"   ❌ {provider_info['name']} 测试失败: {str(e)}")
         
-        # 测试数学计算
-        console.print("   Testing math calculation...")
-        result = await agent.ainvoke("计算 42 + 58")
-        console.print(f"   Math result: {result['output']}")
+        # 演示LLM切换
+        console.print(f"\n[bold magenta]🔄 演示LLM切换功能[/]")
+        if len(configs["available_providers"]) > 1:
+            first_provider = configs["available_providers"][0]["provider"]
+            second_provider = configs["available_providers"][1]["provider"]
+            
+            console.print(f"   切换从 {first_provider} 到 {second_provider}")
+            
+            agent1 = await agent_factory.create_agent(provider=first_provider)
+            result1 = await agent1.ainvoke("你是什么模型？")
+            console.print(f"   {first_provider}: {result1['output'][:60]}...")
+            
+            agent2 = await agent_factory.create_agent(provider=second_provider)
+            result2 = await agent2.ainvoke("你是什么模型？")
+            console.print(f"   {second_provider}: {result2['output'][:60]}...")
+        else:
+            console.print("   需要至少2个LLM提供商才能演示切换功能")
         
-        # 测试搜索功能
-        console.print("   Testing search function...")
-        result = await agent.ainvoke("搜索Python教程")
-        console.print(f"   Search result: {result['output'][:100]}...")
-        
-        console.print("\nAsync demo completed")
+        console.print("\n[green]✅ Multi-LLM异步演示完成[/]")
         
     except Exception as e:
-        console.print(f"[red]异步调用失败: {e}[/]")
+        console.print(f"[red]异步演示失败: {e}[/]")
 
 def main():
     """主函数"""

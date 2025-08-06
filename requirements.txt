@@ -24,4 +24,8 @@ numpy>=1.24.0
 sympy>=1.12.0
 
 # 工具支持
-typeguard>=4.0.0 
+typeguard>=4.0.0
+
+# OKX市场数据
+# 注意：如果需要使用官方OKX Python SDK，请取消注释下面一行
+ python-okx>=1.0.0 

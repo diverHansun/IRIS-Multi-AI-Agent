@@ -34,13 +34,22 @@ safe_load_dotenv()
 
 class Settings(BaseSettings):
     """应用设置类"""
+    # 智谱AI API 配置
     zhipu_api_key: str = os.getenv("ZHIPU_API_KEY") or ""
+    
+    # OpenAI API 配置
+    openai_api_key: str = os.getenv("OPENAI_API_KEY") or ""
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL") or ""
     
     # Tavily Search API 配置
     tavily_api_key: str = os.getenv("TAVILY_API_KEY") or ""
     
     # 高德地图 API 配置
     amap_api_key: str = os.getenv("AMAP_API_KEY") or ""
+    
+    # 默认LLM配置
+    default_llm_provider: str = os.getenv("DEFAULT_LLM_PROVIDER") or "zhipu"
+    default_llm_model: str = os.getenv("DEFAULT_LLM_MODEL") or ""
 
     class Config:
         env_file = None  # 禁用自动读取.env文件，我们手动处理
@@ -63,9 +72,33 @@ if not settings.tavily_api_key:
 else:
     print(f"SUCCESS: Tavily API key configured: {settings.tavily_api_key[:10]}...{settings.tavily_api_key[-10:]}") 
 
+# 检查OpenAI API密钥
+if not settings.openai_api_key:
+    print("WARNING: OPENAI_API_KEY not found")
+    print("HINT: Please set your OpenAI API key in .env file for GPT models")
+else:
+    try:
+        print(f"SUCCESS: OpenAI API key configured: {settings.openai_api_key[:10]}...{settings.openai_api_key[-10:]}")
+    except UnicodeEncodeError:
+        print("SUCCESS: OpenAI API key configured (length: {} chars)".format(len(settings.openai_api_key)))
+
 # 检查高德地图API密钥
 if not settings.amap_api_key:
     print("WARNING: AMAP_API_KEY not found")
     print("HINT: Please set your Amap API key in .env file for map search functionality")
 else:
     print(f"SUCCESS: Amap API key configured: {settings.amap_api_key[:10]}...{settings.amap_api_key[-10:]}") 
+
+# 显示LLM配置信息
+available_llms = []
+if settings.zhipu_api_key:
+    available_llms.append("zhipu")
+if settings.openai_api_key:
+    available_llms.append("openai")
+
+if available_llms:
+    print(f"SUCCESS: Available LLM providers: {', '.join(available_llms)}")
+    print(f"INFO: Default LLM provider: {settings.default_llm_provider}")
+else:
+    print("ERROR: No LLM providers configured!")
+    print("HINT: Please set at least one of ZHIPU_API_KEY or OPENAI_API_KEY")
