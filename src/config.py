@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # 默认LLM配置
     default_llm_provider: str = os.getenv("DEFAULT_LLM_PROVIDER") or "zhipu"
     default_llm_model: str = os.getenv("DEFAULT_LLM_MODEL") or ""
+    
+    # 流式输出配置
+    enable_streaming_by_default: bool = os.getenv("ENABLE_STREAMING_BY_DEFAULT", "false").lower() == "true"
+    streaming_display_refresh_rate: int = int(os.getenv("STREAMING_DISPLAY_REFRESH_RATE", "10"))
+    streaming_delay_ms: int = int(os.getenv("STREAMING_DELAY_MS", "50"))
 
     class Config:
         env_file = None  # 禁用自动读取.env文件，我们手动处理

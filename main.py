@@ -23,104 +23,73 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from src.agents.zhipu_agent import build_zhipu_agent, build_simple_zhipu_chat
 from src.agents.agent_factory import agent_factory, create_default_agent, get_available_configurations
 from src.llm.llm_manager import llm_manager
+from src.llm.streaming_llm import streaming_manager, stream_llm_response
 from src.config import settings
+from src.memory import GlobalMemoryManager, SessionManager
 
 console = Console()
 
 def print_welcome():
     """打印欢迎信息"""
     welcome_text = """
-多LLM智能Agent Demo (完整功能集成版)
+多LLM智能Agent Demo
 
 支持的功能：
 • 多LLM支持 (智谱AI GLM-4、OpenAI GPT-4o/4o-mini)
 • 智能对话和复杂推理
-• 数学计算 (add_numbers, calculate_math)
-• 网络搜索 (Tavily搜索 + DuckDuckGo备用)
-• 高德地图搜索和导航 (地点搜索、路线规划)
-• OKX加密货币行情分析 (价格查询、趋势分析、价格预警)
+• 数学计算、网络搜索、地图导航、加密货币行情
 • 会话记忆和多轮对话
 
 基本命令：
-输入 'exit' 或 'quit' 退出
-输入 'help' 查看帮助信息
-输入 'info' 查看当前Agent信息
-输入 'llms' 查看可用的LLM列表
-输入 'switch <provider> [model]' 切换LLM (如: switch openai gpt-4o-mini)
+exit/quit - 退出程序
+help - 查看帮助信息
+info - 查看系统状态
+llms - 查看可用的LLM列表
+switch <provider> [model] - 切换LLM
+
+工作模式：
+mode llm - LLM模式 (流式输出，快速响应)
+mode agent - Agent模式 (工具调用，推理分析)
+stream on/off - 控制流式输出
 
 记忆管理：
-输入 'clear' 清除当前会话记忆
-输入 'sessions' 查看历史会话列表
-输入 'restore <session_id>' 恢复指定会话
+clear - 清除当前会话记忆
+sessions - 查看历史会话列表
+restore <session_id> - 恢复指定会话
     """
     console.print(Panel(welcome_text, title="欢迎使用", border_style="cyan"))
 
 def print_help():
     """打印帮助信息"""
     help_text = """
-使用说明：
+使用示例：
 
-1. 直接输入问题进行对话
-2. 数学计算问题：
-   "计算 125 + 375"  
-   "帮我算一下 15 * 23 + 100"
-   "计算 sin(pi/4) + sqrt(16)"
-3. 网络搜索问题：
-   "搜索最新的AI新闻"
-   "查找Python教程"
-   "搜索人工智能发展趋势"
-4. 高德地图查询：
-   "搜索北京的星巴克"
-   "查找天安门附近的酒店"
-   "规划从上海世博展览馆到东方明珠的驾车路线"
-   "规划从天安门到故宫的步行路线"
-   "规划从北京站到首都机场的公共交通路线"
-   "规划从天安门到故宫的地铁路线"
-   "规划从北京站到王府井的公交路线"
-5. 加密货币行情查询：
-   "获取比特币的当前价格"
-   "获取BTC、ETH、SOL的行情数据"
-   "分析比特币最近24小时的价格趋势"
-   "获取比特币的1小时K线数据"
-   "创建价格预警：当比特币超过10万美元时通知我"
-   "查看市场概览"
-6. 支持复杂的推理和分析任务
+数学计算：
+"计算 125 + 375"、"帮我算一下 15 * 23 + 100"
+
+网络搜索：
+"搜索最新的AI新闻"、"查找Python教程"
+
+地图导航：
+"搜索北京的星巴克"、"规划从天安门到故宫的步行路线"
+
+加密货币：
+"获取比特币的当前价格"、"分析比特币价格趋势"
+
+工作模式：
+• LLM模式: 快速对话，支持流式输出 (默认)
+• Agent模式: 完整功能，工具调用，会话记忆
+
+流式输出：
+• 仅在LLM模式下可用
+• 'stream on/off' 控制启用/禁用
 
 可用工具：
-• 数学工具：简单加法、一般运算
-• 搜索工具：Tavily搜索、DuckDuckGo搜索、网页内容获取
-• 高德地图工具：地点搜索、附近搜索、驾车导航、步行导航、公共交通、地铁规划、公交规划
-• OKX加密货币工具：价格查询、市场数据、K线分析、趋势分析、价格预警、市场概览
+• 数学计算、网络搜索、地图导航、加密货币行情
+• 详细功能请直接尝试相关问题
 
-搜索功能：
-• 优先使用Tavily搜索（高质量AI搜索）
-• 自动降级到DuckDuckGo搜索作为备用
-• 支持基础搜索、高级搜索、新闻搜索等
-
-高德地图功能：
-• 地点搜索：搜索商店、景点、服务设施等
-• 附近搜索：查找指定位置周围的POI
-• 城市搜索：在指定城市内搜索地点
-• 驾车导航：规划最优驾车路线
-• 步行导航：规划步行路线
-• 公共交通：规划公交、地铁、火车等综合路线
-• 地铁规划：优先使用地铁的路线规划
-• 公交规划：只使用公交车的路线规划
-
-OKX加密货币功能：
-• 实时价格：获取单个或多个加密货币的实时价格
-• K线数据：获取历史K线数据用于技术分析
-• 趋势分析：基于技术指标分析价格趋势和方向
-• 价格预警：创建和管理价格突破预警
-• 市场概览：查看整体市场表现和热门币种
-• 交易对搜索：搜索和查找可用的交易对
-
-记忆功能：
-• 每次启动生成新的会话ID，避免历史对话干扰
-• 输入 'clear' 可清除当前会话记忆
-• 输入 'info' 可查看当前会话ID
-• 输入 'sessions' 查看所有历史会话列表
-• 输入 'restore <session_id>' 恢复指定会话的记忆
+基本命令：
+输入命令名查看具体说明 (如: 输入'llms'查看模型列表)
     """
     console.print(Panel(help_text, title="帮助信息", border_style="green"))
 
@@ -137,21 +106,21 @@ def print_available_llms():
         llm_text = "可用的LLM提供商：\n\n"
         
         for provider in configs["available_providers"]:
-            llm_text += f"🔹 {provider['name']} ({provider['provider']})\n"
-            llm_text += f"   默认模型: {provider['default_model']}\n"
+            llm_text += f"- {provider['name']} ({provider['provider']})\n"
+            llm_text += f"  默认模型: {provider['default_model']}\n"
             
             if "models_detail" in provider:
-                llm_text += "   支持的模型:\n"
+                llm_text += "  支持的模型:\n"
                 for model, info in provider["models_detail"].items():
-                    recommended = " ⭐" if info.get("recommended", False) else ""
-                    llm_text += f"     • {model}{recommended}: {info['description']}\n"
+                    recommended = " [推荐]" if info.get("recommended", False) else ""
+                    llm_text += f"    * {model}{recommended}: {info['description']}\n"
             
             llm_text += "\n"
         
         if configs["recommended_configs"]:
             llm_text += "推荐配置:\n"
             for rec in configs["recommended_configs"]:
-                llm_text += f"   • {rec['provider_name']} {rec['model']}: {rec['description']}\n"
+                llm_text += f"  * {rec['provider_name']} {rec['model']}: {rec['description']}\n"
         
         llm_text += f"\n启动默认LLM: {configs.get('default_config', {}).get('provider', 'N/A')} / {configs.get('default_config', {}).get('model', 'N/A')}"
         
@@ -160,7 +129,7 @@ def print_available_llms():
     except Exception as e:
         console.print(f"[red]获取LLM信息失败: {str(e)}[/]")
 
-async def switch_llm(provider: str, model: str = None) -> bool:
+async def switch_llm(provider: str, model: str = None, global_memory=None) -> bool:
     """切换LLM"""
     try:
         # 验证提供商
@@ -170,7 +139,7 @@ async def switch_llm(provider: str, model: str = None) -> bool:
             console.print(f"[yellow]可用提供商: {', '.join(available_providers)}[/]")
             return False
         
-        # 创建新Agent
+        # 创建新Agent并传递全局记忆管理器
         console.print(f"[yellow]正在切换到 {provider} {model or '(默认模型)'}...[/]")
         
         new_agent = await agent_factory.create_agent(
@@ -178,13 +147,15 @@ async def switch_llm(provider: str, model: str = None) -> bool:
             model=model,
             verbose=True,
             temperature=0.1,
-            use_cache=False  # 切换时不使用缓存
+            use_cache=False,  # 切换时不使用缓存
+            global_memory_manager=global_memory  # 传递全局记忆管理器
         )
         
         # 获取Agent信息
         info = new_agent.get_info()
         console.print(f"[green]✅ 成功切换到 {info['provider']} / {info['model']}[/]")
         console.print(f"[dim]工具数: {info['tool_count']}, 记忆: {'启用' if info['memory_enabled'] else '禁用'}[/]")
+        console.print(f"[dim]记忆已保持连续，切换后可继续之前的对话[/]")
         
         return new_agent
         
@@ -192,8 +163,8 @@ async def switch_llm(provider: str, model: str = None) -> bool:
         console.print(f"[red]❌ 切换LLM失败: {str(e)}[/]")
         return False
 
-def cli():
-    """命令行交互界面"""
+async def cli_async():
+    """命令行交互界面（异步版，单一事件循环）"""
     # 检查至少有一个LLM可用
     configs = get_available_configurations()
     if not configs["available_providers"]:
@@ -202,60 +173,103 @@ def cli():
         console.print("- ZHIPU_API_KEY (智谱AI)")
         console.print("- OPENAI_API_KEY (OpenAI)")
         return
-    
+
     print_welcome()
+
+    # 初始化全局记忆管理系统
+    console.print("[yellow]正在初始化记忆系统...[/]")
+    global_memory = GlobalMemoryManager(storage_dir="data/sessions", max_messages=50)
+    session_manager = SessionManager(global_memory)
     
-    # 生成唯一会话ID
-    session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+    # 获取或创建会话ID
+    session_id = session_manager.get_or_create_default_session()
     console.print(f"[dim]会话ID: {session_id}[/]")
     
-    # 记忆恢复模式标识
-    memory_restored = False
+    # 显示会话摘要（如果有历史对话）
+    session_summary = session_manager.get_current_session_summary()
+    if session_summary != "暂无对话历史":
+        console.print(f"[dim]会话摘要: {session_summary}[/]")
     
+    # 工作模式标识
+    # True: LLM模式（流式输出，直接与LLM交互）
+    # False: Agent模式（完整Agent功能，包括工具调用）
+    llm_mode = True  # 默认为LLM模式
+    
+    # 流式输出标识 (仅LLM模式支持)
+    streaming_enabled = True  # LLM模式下的流式输出
+
     try:
-        # 创建默认Agent
-        console.print("[yellow]正在初始化默认Agent...[/]")
-        
-        # 使用同步方式运行异步初始化
-        agent = asyncio.run(create_default_agent(
-            verbose=True,
-            temperature=0.1
-        ))
-        
+        # 创建默认Agent（异步）并集成全局记忆
+        with console.status("[yellow]正在初始化默认Agent...[/]"):
+            base_agent = await create_default_agent(
+                verbose=True,
+                temperature=0.1,
+                global_memory_manager=global_memory  # 传递全局记忆管理器
+            )
+            
+            # 直接使用基础Agent
+            agent = base_agent
+
         # 显示初始化信息
         info = agent.get_info()
         console.print(f"[green]Agent初始化完成！[/]")
         console.print(f"[dim]提供商: {info['provider']}, 模型: {info['model']}, 工具数: {info['tool_count']}[/]")
         
+        # 显示当前模式和提示
+        if llm_mode:
+            console.print(f"[green]当前模式: LLM模式（流式输出）[/]")
+            console.print(f"[dim]特点: 快速响应 | 实时显示 | 直接对话[/]")
+            console.print(f"[dim]切换: 输入 'mode agent' 使用工具功能[/]")
+        else:
+            console.print(f"[blue]当前模式: Agent模式（工具调用）[/]")
+            console.print(f"[dim]特点: 智能推理 | 工具调用 | 会话记忆[/]")
+            console.print(f"[dim]切换: 输入 'mode llm' 使用快速对话[/]")
+
         while True:
             try:
-                query = console.input("\n[bold cyan]你[/] > ")
+                # 动态提示符显示当前模式
+                mode_indicator = "LLM" if llm_mode else "Agent"
+                stream_indicator = "[S]" if (llm_mode and streaming_enabled) else ""
                 
+                prompt = f"\n[bold cyan]{mode_indicator}{stream_indicator}[/] > "
+                query = await asyncio.to_thread(console.input, prompt)
+
                 if query.strip().lower() in {"exit", "quit", "退出"}:
                     console.print("[yellow]再见！[/]")
                     break
-                    
+
                 if query.strip().lower() in {"help", "帮助"}:
                     print_help()
                     continue
-                
+
                 if query.strip().lower() in {"info", "信息"}:
                     info = agent.get_info()
-                    console.print(f"[bold blue]Agent信息：[/]")
+                    console.print(f"[bold blue]系统信息：[/]")
                     console.print(f"  LLM提供商: {info.get('provider', 'N/A')}")
                     console.print(f"  模型: {info['model']}")
                     console.print(f"  温度: {info.get('temperature', 'N/A')}")
                     console.print(f"  已初始化: {info['initialized']}")
-                    console.print(f"  记忆功能: {'启用' if info.get('memory_enabled', False) else '禁用'}")
-                    console.print(f"  工具数量: {info['tool_count']}")
-                    console.print(f"  可用工具: {', '.join(info['tools'])}")
+                    
+                    # 显示当前模式
+                    mode_text = "LLM模式（流式输出）" if llm_mode else "Agent模式（工具调用）"
+                    console.print(f"  工作模式: {mode_text}")
+                    
+                    if llm_mode:
+                        console.print(f"    流式输出: {'启用' if streaming_enabled else '禁用'}")
+                        console.print(f"    功能特点: 快速响应，实时显示，无工具调用")
+                    else:
+                        console.print(f"    记忆功能: {'启用' if info.get('memory_enabled', False) else '禁用'}")
+                        console.print(f"    工具数量: {info['tool_count']}")
+                        console.print(f"    可用工具: {', '.join(info['tools'])}")
+                        console.print(f"    功能特点: 完整推理，工具调用，会话记忆")
+                    
                     console.print(f"  当前会话ID: {session_id}")
                     continue
-                
+
                 if query.strip().lower() in {"llms", "llm", "模型列表"}:
                     print_available_llms()
                     continue
-                
+
                 if query.strip().lower().startswith("switch "):
                     # 解析switch命令
                     parts = query.strip().split()
@@ -263,82 +277,209 @@ def cli():
                         console.print("[yellow]⚠️ 使用格式: switch <provider> [model][/]")
                         console.print("[dim]示例: switch openai gpt-4o-mini[/]")
                         continue
-                    
+
                     provider = parts[1]
                     model = parts[2] if len(parts) > 2 else None
-                    
-                    # 异步切换LLM
-                    new_agent = asyncio.run(switch_llm(provider, model))
+
+                    # 异步切换LLM（复用同一事件循环）
+                    with console.status(f"[yellow]正在切换到 {provider} {model or '(默认模型)'}...[/]"):
+                        new_agent = await switch_llm(provider, model, global_memory)
                     if new_agent:
                         agent = new_agent
                     continue
-                
+
                 if query.strip().lower() in {"clear", "清除记忆", "重置"}:
-                    if agent.clear_memory(session_id):
+                    if session_manager.clear_current_session():
                         console.print("[green]✅ 当前会话记忆已清除[/]")
                     else:
-                        console.print("[yellow]⚠️ 记忆清除失败或未启用记忆功能[/]")
+                        console.print("[yellow]⚠️ 记忆清除失败[/]")
                     continue
-                
+
                 if query.strip().lower() in {"sessions", "会话列表", "ls"}:
-                    sessions = agent.list_sessions()
+                    sessions = global_memory.list_sessions()
                     if sessions:
-                        console.print(f"[bold blue]📋 历史会话列表 ({len(sessions)} 个):[/]")
+                        console.print(f"[bold blue]历史会话列表 ({len(sessions)} 个):[/]")
                         for i, session in enumerate(sessions[:10], 1):  # 显示前10个
                             created_time = session.get("created_at", "")[:19] if session.get("created_at") else "未知"
-                            console.print(f"  {i}. {session['session_id']} - {session['message_count']} 条消息 - {created_time}")
+                            current_marker = " [当前]" if session['session_id'] == session_id else ""
+                            console.print(f"  {i}. {session['session_id']}{current_marker} - {session['message_count']} 条消息 - {created_time}")
                         if len(sessions) > 10:
                             console.print(f"  ... 还有 {len(sessions) - 10} 个会话")
                         console.print("[dim]输入 'restore <session_id>' 恢复指定会话[/]")
                     else:
-                        console.print("[yellow]📋 暂无历史会话[/]")
+                        console.print("[yellow]暂无历史会话[/]")
                     continue
-                
+
                 if query.strip().lower().startswith("restore "):
                     target_session_id = query.strip()[8:].strip()
                     if target_session_id:
-                        if agent.restore_session(target_session_id):
+                        if session_manager.switch_to_session(target_session_id):
                             session_id = target_session_id
-                            memory_restored = True
-                            session_info = agent.get_session_info(session_id)
+                            session_info = global_memory.get_session_info(session_id)
                             if session_info:
-                                console.print(f"[green]✅ 已恢复会话记忆: {session_id}[/]")
+                                console.print(f"[green]✅ 已切换到会话: {session_id}[/]")
                                 console.print(f"[dim]消息数: {session_info['message_count']} | 创建时间: {session_info.get('created_at', '')[:19]}[/]")
+                                # 显示会话摘要
+                                summary = session_manager.get_current_session_summary()
+                                if summary != "暂无对话历史":
+                                    console.print(f"[dim]会话摘要: {summary}[/]")
                             else:
-                                console.print(f"[green]✅ 已恢复会话记忆: {session_id}[/]")
+                                console.print(f"[green]✅ 已切换到会话: {session_id}[/]")
                         else:
                             console.print(f"[red]❌ 会话不存在: {target_session_id}[/]")
                     else:
                         console.print("[yellow]⚠️ 请提供有效的会话ID，格式：restore <session_id>[/]")
                     continue
-                
+
+                if query.strip().lower().startswith("mode "):
+                    # 解析mode命令
+                    parts = query.strip().split()
+                    if len(parts) < 2:
+                        current_mode = "LLM模式" if llm_mode else "Agent模式"
+                        console.print(f"[yellow]⚠️ 使用格式: mode llm/agent[/]")
+                        console.print(f"[dim]当前模式: {current_mode}[/]")
+                        continue
+
+                    mode = parts[1].lower()
+                    if mode in ["llm", "流式", "stream"]:
+                        llm_mode = True
+                        streaming_enabled = True
+                        console.print("[green]已切换到LLM模式（流式输出）[/]")
+                        console.print("[dim]特点: 快速响应 | 实时显示 | 直接对话[/]")
+                        console.print("[dim]适用: 日常聊天、文本生成、快速问答[/]")
+                    elif mode in ["agent", "代理", "工具"]:
+                        llm_mode = False
+                        console.print("[blue]已切换到Agent模式（工具调用）[/]")
+                        console.print("[dim]特点: 智能推理 | 工具调用 | 会话记忆[/]")
+                        console.print("[dim]适用: 搜索查询、计算分析、复杂任务[/]")
+                    else:
+                        console.print("[yellow]⚠️ 无效模式，请使用 llm 或 agent[/]")
+                    continue
+
+                if query.strip().lower().startswith("stream "):
+                    # 解析stream命令（仅在LLM模式下有效）
+                    if not llm_mode:
+                        console.print("[yellow]⚠️ 流式输出仅在LLM模式下可用，请先切换到LLM模式[/]")
+                        console.print("[dim]使用 'mode llm' 切换到LLM模式[/]")
+                        continue
+                        
+                    parts = query.strip().split()
+                    if len(parts) < 2:
+                        console.print("[yellow]⚠️ 使用格式: stream on/off[/]")
+                        console.print(f"[dim]LLM流式输出状态: {'启用' if streaming_enabled else '禁用'}[/]")
+                        continue
+
+                    action = parts[1].lower()
+                    if action in ["on", "enable", "启用", "开启"]:
+                        streaming_enabled = True
+                        console.print("[green]✅ LLM流式输出已启用[/]")
+                    elif action in ["off", "disable", "禁用", "关闭"]:
+                        streaming_enabled = False
+                        console.print("[yellow]⚠️ LLM流式输出已禁用[/]")
+                    else:
+                        console.print("[yellow]⚠️ 无效参数，请使用 on 或 off[/]")
+                    continue
+
                 if not query.strip():
                     continue
-                
-                # 调用代理处理问题
-                console.print("[dim]正在思考...[/]")
-                result = agent.invoke(query, session_id=session_id)
-                
-                if result["success"]:
-                    answer = result.get("output", "抱歉，我无法回答这个问题。")
-                    console.print(f"[bold green]AI Agent >[/] {answer}")
-                    
-                    # 显示工具调用信息
-                    if result.get("tool_calls", 0) > 0:
-                        console.print(f"[dim]使用了 {result['tool_calls']} 次工具调用[/]")
-                    
-                    # 显示记忆状态
-                    if memory_restored:
-                        console.print(f"[dim]💾 已恢复会话记忆模式[/]")
+
+                # 根据工作模式处理查询
+                if llm_mode:
+                    # LLM模式：直接与LLM交互，支持流式输出和记忆功能
+                    try:
+                        # 获取Agent的LLM信息
+                        info = agent.get_info()
+                        provider = info.get('provider', 'unknown')
+                        
+                        if streaming_enabled:
+                            # 流式输出模式（带记忆）
+                            if hasattr(agent, 'get_llm') and callable(getattr(agent, 'get_llm')):
+                                llm = agent.get_llm()
+                                # 注册流式LLM
+                                streaming_manager.register_llm(provider, llm)
+                                
+                                # 获取历史对话用于上下文
+                                history = global_memory.get_session_history(session_id)
+                                context_messages = history.messages[-10:] if history.messages else []
+                                
+                                # 构建包含历史的提示
+                                from langchain_core.messages import HumanMessage, AIMessage
+                                full_prompt = query
+                                if context_messages:
+                                    context_text = "\n".join([f"{'用户' if isinstance(msg, HumanMessage) else 'AI'}: {msg.content}" for msg in context_messages[-6:]])
+                                    full_prompt = f"历史对话:\n{context_text}\n\n当前问题: {query}"
+                                
+                                # 执行流式输出
+                                console.print(f"[dim]LLM流式生成中...[/]")
+                                answer = await stream_llm_response(
+                                    provider=provider,
+                                    prompt=full_prompt,
+                                    llm=llm,
+                                    display_title=f"LLM回复 ({provider})",
+                                    show_display=True
+                                )
+                                
+                                # 保存对话到记忆
+                                global_memory.add_llm_conversation(session_id, query, answer)
+                                
+                            else:
+                                console.print("[red]❌ 无法获取LLM实例[/]")
+                                continue
+                        else:
+                            # 非流式LLM模式（带记忆）
+                            llm = agent.get_llm()
+                            
+                            # 获取历史对话用于上下文
+                            history = global_memory.get_session_history(session_id)
+                            context_messages = history.messages[-10:] if history.messages else []
+                            
+                            # 构建包含历史的提示
+                            full_prompt = query
+                            if context_messages:
+                                context_text = "\n".join([f"{'用户' if isinstance(msg, HumanMessage) else 'AI'}: {msg.content}" for msg in context_messages[-6:]])
+                                full_prompt = f"历史对话:\n{context_text}\n\n当前问题: {query}"
+                            
+                            with console.status("[dim]LLM思考中...[/]"):
+                                response = await llm.ainvoke([HumanMessage(content=full_prompt)])
+                                answer = response.content if hasattr(response, 'content') else str(response)
+                            
+                            console.print(f"[bold green]LLM >[/] {answer}")
+                            
+                            # 保存对话到记忆
+                            global_memory.add_llm_conversation(session_id, query, answer)
+                                
+                    except Exception as e:
+                        console.print(f"[red]❌ LLM模式处理失败: {str(e)}[/]")
+                        
                 else:
-                    console.print(f"[bold red]错误: {result.get('error', '未知错误')}[/]")
-                
+                    # Agent模式：完整的Agent功能，包括工具调用和记忆（不支持流式输出）
+                    try:
+                        with console.status("[dim]Agent推理中...[/]"):
+                            result = await agent.ainvoke(query, session_id=session_id)
+
+                        if result.get("success"):
+                            answer = result.get("output", "抱歉，我无法回答这个问题。")
+                            console.print(f"[bold blue]Agent >[/] {answer}")
+
+                            # 显示工具调用信息
+                            if result.get("tool_calls", 0) > 0:
+                                console.print(f"[dim]使用了 {result['tool_calls']} 次工具调用[/]")
+                            
+                            # Agent模式的对话会自动通过RunnableWithMessageHistory保存记忆
+                            # 这里不需要手动保存，因为Agent已经集成了全局记忆管理器
+                            
+                        else:
+                            console.print(f"[bold red]Agent错误: {result.get('error', '未知错误')}[/]")
+                            
+                    except Exception as e:
+                        console.print(f"[red]❌ Agent模式处理失败: {str(e)}[/]")
+
             except KeyboardInterrupt:
                 console.print("\n[yellow]再见！[/]")
                 break
             except Exception as e:
-                console.print(f"[bold red]错误: {e}[/]")
-                
+                console.print(f"[bold red]错误: {e}")
+
     except Exception as e:
         console.print(f"[bold red]Agent初始化失败: {e}[/]")
         console.print("请检查您的API密钥和网络连接")
@@ -424,7 +565,8 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "async":
         asyncio.run(async_demo())
     else:
-        cli()
+        # 统一使用单一事件循环的异步CLI
+        asyncio.run(cli_async())
 
 if __name__ == "__main__":
     # 运行主程序

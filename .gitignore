@@ -206,4 +206,5 @@ mcp_debug/
 
 # 记忆存储文件夹
 .memory/ 
+data/ 
 
