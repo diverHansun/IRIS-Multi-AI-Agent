@@ -1,12 +1,11 @@
-# Muti-AI Agent Demo
-
+# Multi-AI-Agent 
 基于LangChain和多LLM的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎、高德地图和OKX加密货币分析功能。
 
 ## 功能特性
 
 - **多LLM支持**: 智谱AI GLM-4系列、OpenAI GPT-4o系列，支持动态切换
 - **智能对话**: 基于ReAct推理框架的自然语言交互
-- **上下文记忆**: 基于LangChain 2025最佳实践的会话记忆系统
+- **全局记忆系统**: 基于LangChain 2025最佳实践的统一记忆管理
 - **工具调用**: 支持数学计算、网络搜索、地图导航、加密货币分析等多种工具
 - **多搜索引擎**: 集成Tavily搜索API + DuckDuckGo备用搜索
 - **高德地图集成**: 支持地点搜索、附近查询、驾车导航、步行导航、公共交通规划
@@ -25,7 +24,7 @@
 ```bash
 # 克隆项目
 git clone <your-repo-url>
-cd ZHIPU_Agent_Demo
+cd Multi-AI-Agent
 
 # 创建虚拟环境
 python -m venv .venv
@@ -108,12 +107,15 @@ ZHIPU_Agent_Demo/
 │   ├── llm/                # 语言模型封装
 │   │   ├── zhipu_llm.py            # 智谱AI LLM
 │   │   ├── openai_llm.py           # OpenAI LLM
+│   │   ├── streaming_llm.py        # 流式输出LLM
 │   │   └── llm_manager.py          # LLM管理器
-│   ├── memory/             # 记忆系统
-│   │   ├── chat_memory.py           # 统一记忆管理器
-│   │   ├── conversation_buffer.py   # 对话缓冲区
-│   │   ├── memory_storage.py        # 持久化存储
-│   │   └── memory_integration.md    # 记忆系统集成文档
+│   ├── memory/             # 全局记忆系统
+│   │   ├── global_memory.py         # 全局记忆管理器
+│   │   ├── session_manager.py       # 会话管理器
+│   │   └── global_memory_integration.md # 记忆系统集成文档
+│   ├── session/            # 会话存储系统
+│   │   ├── session_storage.py       # JSON文件存储
+│   │   └── message_filter.py        # 消息过滤器
 │   ├── tools/              # 工具实现
 │   │   ├── math_tools.py            # 数学计算工具
 │   │   ├── search_tools.py          # DuckDuckGo搜索工具
@@ -141,14 +143,20 @@ ZHIPU_Agent_Demo/
 ```bash
 # 基础命令
 输入 'help' 查看帮助信息
-输入 'info' 查看当前Agent信息
-输入 'llms' 查看可用的LLM列表
-输入 'switch <provider> [model]' 切换LLM
+输入 'info' 查看当前Agent和LLM信息
+输入 'llms' 查看可用的LLM提供商和模型列表
+输入 'switch <provider> [model]' 切换LLM提供商和模型
 
 # 记忆管理
 输入 'clear' 清除当前会话记忆
-输入 'sessions' 查看历史会话列表
-输入 'restore <session_id>' 恢复指定会话
+输入 'sessions' 查看所有历史会话列表
+输入 'mode llm' 切换到LLM对话模式
+输入 'mode agent' 切换到Agent工具模式
+
+# 会话恢复
+会话记忆自动恢复 - 使用相同session_id时自动加载历史对话
+会话数据持久保存在 data/sessions/ 目录下
+支持跨LLM和Agent模式的记忆连续性
 ```
 
 ### 多LLM切换示例
@@ -161,26 +169,58 @@ AI Agent > 已切换到 OpenAI GPT-4o-mini
 AI Agent > 已切换到 智谱AI GLM-4-Plus
 ```
 
-### 记忆功能示例
+### 全局记忆系统示例
+
+#### CLI交互记忆演示
+```
+用户 > 我的名字是张三，我喜欢编程
+AI Agent > 你好张三！很高兴认识你。编程是一个很有趣的领域...
+
+用户 > mode llm
+AI Agent > 已切换到LLM模式
+
+用户 > 你还记得我的爱好吗？
+AI Agent > 记得的，张三！你刚才告诉我你喜欢编程...
+
+用户 > mode agent  
+AI Agent > 已切换到Agent模式
+
+用户 > 帮我计算 100+200
+AI Agent > 我来为您计算...
+Action: add_numbers
+Action Input: 100+200
+Observation: 300
+Final Answer: 张三，100+200的结果是300
+```
+
+#### 编程接口记忆示例
 
 ```python
-from src.agents.agent_factory import agent_factory
+from src.memory import GlobalMemoryManager
+from src.agents.agent_factory import create_default_agent
+
+# 创建全局记忆管理器
+global_memory = GlobalMemoryManager()
 
 # 创建带记忆的Agent
-agent = await agent_factory.create_agent(
+agent = await create_default_agent(
     provider="zhipu",
     model="glm-4-plus",
-    enable_memory=True,
-    verbose=True
+    global_memory_manager=global_memory
 )
 
 # 第一轮对话
 result1 = agent.invoke("我的名字是张三", session_id="user_001")
-# 第二轮对话 - 会记住之前的信息
+# 第二轮对话 - 跨模式记忆
 result2 = agent.invoke("你还记得我的名字吗？", session_id="user_001")
 
 # 不同用户的会话完全隔离
 result3 = agent.invoke("我是谁？", session_id="user_002")  # 不会知道张三
+
+# 查看会话信息
+sessions = global_memory.list_sessions()
+for session in sessions:
+    print(f"会话: {session['session_id']}, 消息数: {session['message_count']}")
 ```
 
 ### 数学计算
@@ -299,32 +339,9 @@ Final Answer: 根据24小时K线数据分析...
 - **get_market_summary**: 市场概览
 - **search_crypto_symbols**: 交易对搜索
 
-## 技术栈
-
-### 核心框架
-- **LangChain**: Agent框架和工具链(2025最佳实践)
-- **Pydantic**: 配置管理和数据验证
-- **Rich**: 终端美化和交互
-
-### LLM支持
-- **智谱AI (GLM-4系列)**: 主要大语言模型
-- **OpenAI (GPT-4o系列)**: 备选大语言模型
-
-### 外部服务
-- **Tavily**: 高质量AI搜索API
-- **高德地图**: 地理位置服务和导航API
-- **OKX**: 加密货币交易数据API
-- **DuckDuckGo**: 备用搜索引擎
-
-### 技术特性
-- **RunnableWithMessageHistory**: 标准化记忆管理
-- **BeautifulSoup**: 网页内容解析
-- **Requests**: HTTP请求处理
-- **Python-dotenv**: 环境变量管理
-
 ## 配置选项
 
-在 `.env` 文件中可以配置：
+创建 `.env` 文件进行配置参见.env.example：
 
 ### LLM配置
 - `ZHIPU_API_KEY`: 智谱AI API密钥
@@ -363,23 +380,38 @@ Final Answer: 根据24小时K线数据分析...
 
 ## 开发说明
 
-### 记忆系统架构
+### 全局记忆系统架构
 
-项目使用LangChain 2025最佳实践的记忆系统：
+项目使用基于LangChain 2025最佳实践的全局统一记忆系统：
 
 ```
-ChatMemoryManager (统一管理器)
-├── ConversationBuffer (对话缓冲区)
+GlobalMemoryManager (全局记忆管理器)
+├── GlobalChatMessageHistory (聊天消息历史)
 │   ├── 继承 BaseChatMessageHistory
-│   ├── 智能消息修剪 (trim_messages)
-│   └── 会话级别的消息管理
-└── MemoryStorage (持久化存储)
-    ├── JSON文件存储
-    ├── 会话元数据管理
-    └── 自动清理机制
+│   ├── 自动加载和保存消息
+│   └── 跨模式记忆共享
+├── SessionStorage (会话存储)
+│   ├── JSON文件存储到 data/sessions
+│   ├── 会话索引管理
+│   └── 自动清理机制
+├── MessageFilter (消息过滤器)
+│   ├── 过滤系统命令
+│   ├── 智能消息筛选
+│   └── 上下文标记
+└── SessionManager (会话管理器)
+    ├── 高级会话操作
+    ├── 会话恢复功能
+    └── 统计信息管理
 ```
 
-详细的记忆系统集成文档请参考：`src/memory/memory_integration.md`
+**关键特性**:
+- **跨模式记忆**: LLM模式和Agent模式共享同一记忆系统
+- **自动恢复**: 系统启动时自动加载历史会话
+- **智能过滤**: 自动过滤系统命令，保持对话历史清洁
+- **多用户隔离**: 每个session_id对应独立的记忆空间
+- **持久化存储**: 所有会话数据保存到 `data/sessions` 目录
+
+详细的记忆系统集成文档请参考：`src/memory/global_memory_integration.md`
 
 ### Agent架构
 
@@ -481,8 +513,9 @@ agent = await agent_factory.create_agent(
 3. **虚拟环境**: 建议在虚拟环境中运行以避免依赖冲突
 4. **编码设置**: 项目已设置UTF-8编码，支持中文显示
 5. **备用方案**: 没有API密钥时会自动使用备用服务
-6. **记忆存储**: 会话数据自动保存到`.memory`文件夹
-7. **模型选择**: 根据需求选择合适的LLM模型和配置
+6. **记忆存储**: 会话数据自动保存到`data/sessions`文件夹
+7. **数据安全**: `data/`文件夹已添加到`.gitignore`，不会上传个人会话数据
+8. **模型选择**: 根据需求选择合适的LLM模型和配置
 
 ## 故障排除
 
@@ -515,6 +548,21 @@ agent = await agent_factory.create_agent(
 4. 发起Pull Request
 
 ## 更新日志
+
+### v2.3.0 (2025-08-08)
+- **全局记忆系统**: 重构为统一的全局记忆管理架构
+  - 跨模式记忆共享(LLM ↔ Agent)
+  - 自动消息过滤和上下文管理
+  - 智能会话恢复和持久化存储
+  - 统一存储到 `data/sessions` 目录
+- **架构清理**: 消除代码冗余，优化模块结构
+  - 移除重复的记忆管理实现
+  - 统一记忆接口和API
+  - 完善错误处理和日志记录
+- **会话管理增强**: 
+  - 自动会话索引和元数据管理
+  - 支持会话统计和清理功能
+  - 改进的消息修剪和Token管理
 
 ### v2.2.0 (2025-08-06)
 - **多LLM支持**: 新增OpenAI GPT-4o系列支持
