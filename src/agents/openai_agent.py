@@ -15,7 +15,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.language_models import BaseChatModel
 
 from ..llm.openai_llm import build_openai_chat, OpenAILLM
-from ..memory.chat_memory import ChatMemoryManager
+from ..memory.global_memory import GlobalMemoryManager
 from ..tools.math_tools import add_numbers, calculate_math
 from ..tools.search_tools import SEARCH_TOOLS
 from ..tools.tavily_search_tool import get_available_tavily_tools
@@ -44,6 +44,7 @@ class OpenAIAgent:
         temperature: float = 0.1,
         verbose: bool = False,
         enable_memory: bool = True,
+        global_memory_manager = None,
         **kwargs
     ):
         """
@@ -55,6 +56,7 @@ class OpenAIAgent:
             temperature: 温度参数
             verbose: 是否显示详细信息
             enable_memory: 是否启用记忆功能
+            global_memory_manager: 全局记忆管理器
             **kwargs: 其他参数
         """
         self.api_key = api_key
@@ -62,6 +64,7 @@ class OpenAIAgent:
         self.temperature = temperature
         self.verbose = verbose
         self.enable_memory = enable_memory
+        self.global_memory_manager = global_memory_manager
         self.kwargs = kwargs
         
         # 初始化组件
@@ -111,7 +114,12 @@ class OpenAIAgent:
             # 3. 初始化记忆系统（在创建Agent之前）
             if self.enable_memory:
                 logger.info("Initializing memory system...")
-                self._memory_manager = ChatMemoryManager()
+                if self.global_memory_manager:
+                    self._memory_manager = self.global_memory_manager
+                    logger.info("Using global memory manager")
+                else:
+                    self._memory_manager = GlobalMemoryManager()
+                    logger.info("Using local memory manager")
             
             # 4. 创建Agent
             logger.info("Creating agent...")
@@ -292,12 +300,21 @@ class OpenAIAgent:
         
         # 如果启用记忆，包装AgentExecutor
         if self.enable_memory and self._memory_manager:
-            self._agent_executor = RunnableWithMessageHistory(
-                self._agent_executor,
-                self._memory_manager.get_session_history,
-                input_messages_key="input",
-                history_messages_key="chat_history"
-            )
+            if self.global_memory_manager:
+                # 使用全局记忆管理器
+                self._agent_executor = self.global_memory_manager.create_runnable_with_memory(
+                    self._agent_executor,
+                    input_key="input",
+                    history_key="chat_history"
+                )
+            else:
+                # 使用本地记忆管理器（向后兼容）
+                self._agent_executor = RunnableWithMessageHistory(
+                    self._agent_executor,
+                    self._memory_manager.get_session_history,
+                    input_messages_key="input",
+                    history_messages_key="chat_history"
+                )
     
     def invoke(self, query: str, session_id: str = "default") -> Dict[str, Any]:
         """同步调用Agent"""
@@ -395,6 +412,10 @@ class OpenAIAgent:
             "tools": [tool.name for tool in self._tools] if self._tools else [],
             "llm_info": llm_info
         }
+    
+    def get_llm(self):
+        """获取底层LLM实例用于流式输出"""
+        return self._llm
     
     # 记忆管理方法
     def clear_memory(self, session_id: str) -> bool:

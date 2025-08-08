@@ -34,6 +34,7 @@ class AgentFactory:
         enable_memory: bool = True,
         api_key: str = None,
         use_cache: bool = True,
+        global_memory_manager = None,
         **kwargs
     ) -> Union[ZhipuAgent, OpenAIAgent]:
         """
@@ -47,6 +48,7 @@ class AgentFactory:
             enable_memory: 是否启用记忆功能
             api_key: API密钥，为None时使用配置中的密钥
             use_cache: 是否使用缓存
+            global_memory_manager: 全局记忆管理器实例
             **kwargs: 其他参数
             
         Returns:
@@ -88,6 +90,7 @@ class AgentFactory:
                     verbose=verbose,
                     temperature=temperature,
                     enable_memory=enable_memory,
+                    global_memory_manager=global_memory_manager,
                     **kwargs
                 )
             
@@ -98,6 +101,7 @@ class AgentFactory:
                     verbose=verbose,
                     temperature=temperature,
                     enable_memory=enable_memory,
+                    global_memory_manager=global_memory_manager,
                     **kwargs
                 )
             

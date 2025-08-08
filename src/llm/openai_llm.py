@@ -6,9 +6,10 @@ OpenAI LLM Integration
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, AsyncGenerator
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import HumanMessage
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class OpenAILLM:
         }
     }
     
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str = None, **kwargs):
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str = None, streaming: bool = False, **kwargs):
         """
         初始化OpenAI LLM
         
@@ -42,11 +43,13 @@ class OpenAILLM:
             api_key: OpenAI API密钥
             model: 模型名称
             base_url: 自定义API端点URL (可选)
+            streaming: 是否启用流式输出
             **kwargs: 其他LangChain ChatOpenAI参数
         """
         self.api_key = api_key
         self.model = model
         self.base_url = base_url
+        self.streaming = streaming
         self.kwargs = kwargs
         
         # 验证模型支持
@@ -58,7 +61,8 @@ class OpenAILLM:
             "temperature": 0.1,
             "max_tokens": self.SUPPORTED_MODELS.get(model, {}).get("max_tokens", 4096),
             "timeout": 60,
-            "max_retries": 3
+            "max_retries": 3,
+            "streaming": streaming
         }
         default_params.update(kwargs)
         self.llm_params = default_params
@@ -122,6 +126,31 @@ class OpenAILLM:
             return False
         
         return True
+    
+    async def astream(self, prompt: str) -> AsyncGenerator[str, None]:
+        """
+        异步流式调用模型
+        
+        Args:
+            prompt: 输入提示
+            
+        Yields:
+            生成的文本片段
+        """
+        try:
+            # 创建LLM实例（如果还没有）
+            llm = self.create_llm()
+            
+            # 确保消息格式正确
+            message = HumanMessage(content=prompt) if isinstance(prompt, str) else prompt
+            
+            async for chunk in llm.astream([message]):
+                if hasattr(chunk, 'content') and chunk.content:
+                    yield chunk.content
+                    
+        except Exception as e:
+            logger.error(f"OpenAI流式调用失败: {e}")
+            yield f"流式调用错误: {str(e)}"
 
 
 def build_openai_chat(
@@ -129,6 +158,7 @@ def build_openai_chat(
     model: str = "gpt-4o-mini", 
     temperature: float = 0.1,
     base_url: str = None,
+    streaming: bool = False,
     **kwargs
 ) -> BaseChatModel:
     """
@@ -139,6 +169,7 @@ def build_openai_chat(
         model: 模型名称
         temperature: 温度参数
         base_url: 自定义API端点URL (可选)
+        streaming: 是否启用流式输出
         **kwargs: 其他参数
     
     Returns:
@@ -149,6 +180,7 @@ def build_openai_chat(
         model=model,
         temperature=temperature,
         base_url=base_url,
+        streaming=streaming,
         **kwargs
     )
     

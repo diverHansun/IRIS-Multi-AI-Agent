@@ -27,7 +27,7 @@ from ..tools.okx_market.langchain_tools import (
     get_market_summary,
     search_crypto_symbols
 )
-from ..memory.chat_memory import ChatMemoryManager
+from ..memory.global_memory import GlobalMemoryManager
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
 logger = logging.getLogger(__name__)
@@ -157,7 +157,8 @@ class ZhipuAgent:
                  verbose: bool = False,
                  max_iterations: int = 10,
                  enable_memory: bool = True,
-                 memory_config: Optional[Dict[str, Any]] = None):
+                 memory_config: Optional[Dict[str, Any]] = None,
+                 global_memory_manager = None):
         """
         初始化智谱AI Agent
         
@@ -168,12 +169,14 @@ class ZhipuAgent:
             max_iterations: 最大迭代次数
             enable_memory: 是否启用记忆功能
             memory_config: 记忆配置参数
+            global_memory_manager: 全局记忆管理器
         """
         self.model = model
         self.temperature = temperature
         self.verbose = verbose
         self.max_iterations = max_iterations
         self.enable_memory = enable_memory
+        self.global_memory_manager = global_memory_manager
         
         # 组件
         self.llm = None
@@ -190,15 +193,17 @@ class ZhipuAgent:
     def _init_memory(self, config: Dict[str, Any]) -> None:
         """初始化记忆管理器"""
         try:
-            # 使用ChatMemoryManager
-            self.chat_memory = ChatMemoryManager(
-                storage_path=config.get("storage_path"),
-                max_messages=config.get("max_messages", 20),
-                max_tokens=config.get("max_tokens", 4000),
-                auto_save=config.get("auto_save", True)
-            )
-            
-            logger.info(f"聊天记忆管理器初始化完成")
+            if self.global_memory_manager:
+                # 使用全局记忆管理器
+                self.chat_memory = self.global_memory_manager
+                logger.info("使用全局记忆管理器")
+            else:
+                # 使用本地GlobalMemoryManager（向后兼容）
+                self.chat_memory = GlobalMemoryManager(
+                    storage_dir=config.get("storage_path", "data/sessions"),
+                    max_messages=config.get("max_messages", 50)
+                )
+                logger.info("使用本地记忆管理器")
         except Exception as e:
             logger.error(f"记忆管理器初始化失败: {e}")
             self.enable_memory = False
@@ -312,10 +317,18 @@ class ZhipuAgent:
             if not self.agent_executor:
                 raise ValueError("基础Agent必须先初始化")
             
-            # 使用ChatMemoryManager创建带记忆的Runnable
-            self.agent_with_memory = self.chat_memory.create_runnable_with_history(
-                self.agent_executor
-            )
+            if self.global_memory_manager:
+                # 使用全局记忆管理器创建带记忆的Runnable
+                self.agent_with_memory = self.global_memory_manager.create_runnable_with_memory(
+                    self.agent_executor,
+                    input_key="input",
+                    history_key="chat_history"
+                )
+            else:
+                # 使用本地GlobalMemoryManager（向后兼容）
+                self.agent_with_memory = self.chat_memory.create_runnable_with_memory(
+                    self.agent_executor
+                )
             
             logger.info("✅ 带记忆的Agent执行器创建完成")
             
@@ -467,6 +480,10 @@ class ZhipuAgent:
             info["memory_info"] = self.chat_memory.get_memory_stats()
         
         return info
+    
+    def get_llm(self):
+        """获取底层LLM实例用于流式输出"""
+        return self.llm
     
     def list_tools(self) -> List[str]:
         """列出工具名称"""
