@@ -8,8 +8,11 @@ import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
 import uuid
+from rich.console import Console
 
 from .global_memory import GlobalMemoryManager
+
+console = Console()
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +47,11 @@ class SessionManager:
         session_id = f"{user_prefix}_{timestamp}_{unique_id}"
         
         self.current_session_id = session_id
-        logger.info(f"创建新会话: {session_id}")
+        
+        # 立即在存储中创建空会话文件，避免后续加载时的警告
+        self.memory_manager.storage.initialize_empty_session(session_id)
+        
+        console.print(f"[dim]已创建新会话: {session_id}[/]")
         
         return session_id
     
@@ -60,10 +67,11 @@ class SessionManager:
             recent_session = self.get_most_recent_session()
             if recent_session:
                 self.current_session_id = recent_session["session_id"]
-                logger.info(f"恢复最近会话: {self.current_session_id}")
+                console.print(f"[dim]已加载最近会话: {self.current_session_id}[/]")
             else:
                 # 创建新会话
                 self.current_session_id = self.create_new_session()
+            
         
         return self.current_session_id
     

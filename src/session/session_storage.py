@@ -118,6 +118,49 @@ class SessionStorage:
             logger.error(f"保存会话失败 {session_id}: {e}")
             return False
     
+    def initialize_empty_session(self, session_id: str) -> bool:
+        """
+        初始化空会话文件
+        
+        Args:
+            session_id: 会话ID
+            
+        Returns:
+            初始化是否成功
+        """
+        try:
+            # 创建空会话数据
+            session_data = {
+                "session_id": session_id,
+                "messages": [],
+                "message_count": 0,
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
+                "metadata": {}
+            }
+            
+            # 保存空会话文件
+            session_file = self.storage_dir / f"{session_id}.json"
+            with open(session_file, 'w', encoding='utf-8') as f:
+                json.dump(session_data, f, ensure_ascii=False, indent=2)
+            
+            # 更新索引
+            self.sessions_index[session_id] = {
+                "session_id": session_id,
+                "message_count": 0,
+                "created_at": session_data["created_at"],
+                "updated_at": session_data["updated_at"],
+                "file_path": str(session_file)
+            }
+            
+            self._save_sessions_index()
+            logger.debug(f"空会话初始化成功: {session_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"初始化空会话失败 {session_id}: {e}")
+            return False
+    
     def load_session(self, session_id: str) -> Optional[List[BaseMessage]]:
         """
         加载会话数据
@@ -132,7 +175,8 @@ class SessionStorage:
             session_file = self.storage_dir / f"{session_id}.json"
             
             if not session_file.exists():
-                logger.warning(f"会话文件不存在: {session_id}")
+                # 对于新会话，这是正常情况，不需要警告
+                logger.debug(f"会话文件不存在，将创建新会话: {session_id}")
                 return None
             
             with open(session_file, 'r', encoding='utf-8') as f:
@@ -147,7 +191,10 @@ class SessionStorage:
                     logger.warning(f"转换消息失败: {e}")
                     continue
             
-            logger.info(f"会话加载成功: {session_id}, {len(messages)} 条消息")
+            if len(messages) > 0:
+                logger.info(f"会话加载成功: {session_id}, {len(messages)} 条消息")
+            else:
+                logger.debug(f"空会话加载成功: {session_id}")
             return messages
             
         except Exception as e:
