@@ -430,6 +430,34 @@ def search_crypto_symbols(keyword: str) -> str:
         return f"搜索时发生错误: {str(e)}"
 
 
+def get_available_okx_tools() -> List:
+    """
+    获取所有可用的OKX加密货币工具
+    
+    Returns:
+        List: OKX工具列表，如果OKX服务不可用则返回空列表
+    """
+    try:
+        # OKX工具列表 - 这些工具不需要API密钥，使用公开的市场数据API
+        okx_tools = [
+            get_crypto_price,
+            get_market_data,
+            get_kline_data,
+            analyze_price_trend,
+            create_price_alert,
+            check_price_alerts,
+            get_market_summary,
+            search_crypto_symbols
+        ]
+        
+        logger.info(f"✅ OKX工具加载成功，共 {len(okx_tools)} 个工具")
+        return okx_tools
+        
+    except Exception as e:
+        logger.error(f"❌ OKX工具加载失败: {e}")
+        return []
+
+
 # 导出所有工具函数
 __all__ = [
     "get_crypto_price",
@@ -439,5 +467,6 @@ __all__ = [
     "create_price_alert",
     "check_price_alerts",
     "get_market_summary",
-    "search_crypto_symbols"
+    "search_crypto_symbols",
+    "get_available_okx_tools"
 ]

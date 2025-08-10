@@ -7,149 +7,108 @@
 
 import logging
 import asyncio
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
+import threading
+import time
 
 from ..llm.zhipu_llm import create_zhipu_llm
 from ..tools.math_tools import add_numbers, calculate_math
 from ..tools.search_tools import SEARCH_TOOLS
 from ..tools.tavily_search_tool import get_available_tavily_tools
 from ..tools.amap_search import get_available_amap_tools
-from ..tools.okx_market.langchain_tools import (
-    get_crypto_price,
-    get_market_data,
-    get_kline_data,
-    analyze_price_trend,
-    create_price_alert,
-    check_price_alerts,
-    get_market_summary,
-    search_crypto_symbols
-)
+from ..tools.okx_market import get_available_okx_tools
 from ..memory.global_memory import GlobalMemoryManager
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
 logger = logging.getLogger(__name__)
 
-# 专业的中文ReAct提示模板
-REACT_PROMPT_ZH = """你是一个专业的智能AI助手，采用ReAct（推理-行动）框架进行逻辑推理和问题解决。你具备多领域专业知识，能够通过系统化的思考过程和工具使用为用户提供准确、全面的帮助。
+# GLM-4.5优化的ReAct提示模板（兼容LangChain标准解析器）
+REACT_PROMPT_GLM45 = """你是Hansun的AI助手，采用ReAct框架进行推理和精确工具调用。
 
-## 聊天历史上下文
-{chat_history}
-
-## 专业工具库
+可用工具:
 {tools}
 
-## 可用工具清单
-{tool_names}
+工具清单: {tool_names}
 
-## ReAct推理框架
-你必须严格遵循以下推理-行动循环，展现完整的思考过程：
+严格使用以下增强ReAct格式：
 
-**Question**: 用户提出的问题或需求
-**Thought**: 深度分析问题核心，结合聊天历史上下文，制定解决策略和工具使用计划
-**Action**: 选择最适合的工具名称
-**Action Input**: 工具所需的精确输入参数
-**Observation**: 工具执行后返回的结果和数据
-... (必要时重复 Thought/Action/Observation 循环)
-**Thought**: 综合所有观察结果和历史上下文，形成完整的解决方案
-**Final Answer**: 提供准确、完整、结构化的最终答案
+Question: 用户的问题
+Thought: 深度分析问题，制定完整解决策略
+  1. 问题分析：深度解构问题层面和隐含需求
+  2. 策略制定：制定主路径和备用方案
+  3. 工具规划：分析所需工具序列和预期结果
+Action: 选择最优工具（必须从工具清单选择）
+Action Input: 精确的工具输入参数
+Observation: 工具执行结果和数据分析
+Reflection: 评估结果质量，判断是否需要调整策略
+... (根据需要重复 Thought/Action/Action Input/Observation/Reflection)
+Thought: 综合所有信息进行最终深度分析
+Final Answer: 完整、准确、结构化的专业答案
 
-## 核心工作原则
+核心要求：
+1. Action必须严格从工具清单选择: {tool_names}
+2. Action Input必须是字符串格式，避免换行符
+3. 充分利用深度思考能力进行多层推理
+4. 必须基于工具真实结果，禁止编造信息
 
-### 思维过程标准
-1. **问题解构**: 将复杂问题分解为可管理的子问题
-2. **上下文整合**: 充分利用聊天历史中的相关信息
-3. **策略规划**: 预先思考工具使用序列和可能的替代方案
-4. **结果验证**: 评估工具输出的合理性和完整性
-5. **用户导向**: 确保最终答案直接回应用户的核心需求
+常用工具说明：
+- tavily_search: 通用搜索，适合大部分查询
+- calculate_math: 数学计算，输入表达式
+- add_numbers: 数字加法，格式"数字1 + 数字2"
+- amap_search_place: 地点搜索，输入关键词
+- amap_route_driving: 驾车路线，格式"起点,终点"
+- get_crypto_price: 加密货币价格，输入符号如"BTC"
 
-### 工具使用规范
-- **精确选择**: Action 必须严格从工具清单中选择：{tool_names}
-- **格式标准**: Action Input 必须是字符串格式，避免换行符和特殊字符
-- **渐进式推理**: 每次只执行一个动作，基于观察结果决定下一步
-- **数据驱动**: 必须基于工具返回的实际结果回答，严禁编造或推测信息
-- **协同作战**: 必要时组合多个工具以获得完整解决方案
+现在开始：
 
-## 专业工具使用指南
+Question: {input}
+Thought: {agent_scratchpad}
+"""
 
-###  智能搜索工具矩阵
-**优先级策略**: Tavily搜索 > 高级搜索 > 备用搜索
-- **`tavily_search`**: 高质量通用搜索，适合90%的信息查询需求
-- **`tavily_search_advanced`**: 深度专业搜索，用于复杂学术或技术问题
-- **`tavily_search_news`**: 实时新闻搜索，获取最新时事和动态信息
-- **`tavily_search_with_domains`**: 定向搜索，查询特定权威网站内容
-- **`web_search_tool`**: DuckDuckGo备用搜索，Tavily不可用时的替代方案
-- **`web_search_detailed`**: 详细搜索结果，需要更多细节时使用
-- **`get_webpage_content`**: 精确页面抓取，获取特定网页完整内容
+# 优化的ReAct提示模板（兼容LangChain标准解析器）
+REACT_PROMPT_ZH = """你是一个专业的智能AI助手，采用ReAct（推理-行动）框架进行逻辑推理和问题解决。
 
-### 🧮 数学计算工具
-- **`add_numbers`**: 基础数字加法，格式："数字1 + 数字2"或"数字1和数字2相加"
-- **`calculate_math`**: 复杂数学表达式，支持四则运算、函数计算等
+可用工具:
+{tools}
 
-###  高德地图服务工具集
-**地点发现**:
-- **`amap_search_place`**: 通用地点搜索，输入："关键词"（如"星巴克"）
-- **`amap_search_nearby`**: 周边搜索，格式："关键词,经度,纬度,半径米"
-- **`amap_search_in_city`**: 城市定向搜索，格式："关键词,城市名"
+工具清单: {tool_names}
 
-**智能导航**:
-- **`amap_route_driving`**: 驾车导航，格式："起点,终点"
-- **`amap_route_walking`**: 步行导航，格式："起点,终点"
-- **`amap_route_transit`**: 公共交通，格式："起点,终点,策略代码,城市"
-  - 策略：0=最快，1=最经济，2=最少换乘，3=最少步行，5=不乘地铁
-- **`amap_route_subway`**: 地铁专线，格式："起点,终点,城市"
-- **`amap_route_bus`**: 公交专线，格式："起点,终点,城市"
+严格使用以下ReAct格式：
 
-###  OKX加密货币分析工具
-**实时行情**:
-- **`get_crypto_price`**: 单币种价格，输入："符号"（BTC/BTC-USDT）
-- **`get_market_data`**: 批量行情，格式："符号1,符号2,符号3"
+Question: 用户的问题
+Thought: 分析问题，制定解决策略
+Action: 选择工具名称（必须从工具清单中选择）
+Action Input: 工具的输入参数
+Observation: 工具执行结果
+... (根据需要重复 Thought/Action/Action Input/Observation)
+Thought: 基于观察结果得出结论
+Final Answer: 最终答案
 
-**技术分析**:
-- **`get_kline_data`**: K线数据，格式："符号 时间周期 数量"（如"BTC 1H 20"）
-- **`analyze_price_trend`**: 趋势分析，格式："符号 时间周期 周期数"
+核心要求：
+1. Action必须严格从工具清单选择: {tool_names}
+2. Action Input必须是字符串格式，避免换行符
+3. 必须基于工具返回的真实结果回答，禁止编造信息
+4. 每次只执行一个Action，基于Observation决定下一步
 
-**风险管理**:
-- **`create_price_alert`**: 创建预警，格式："符号 类型 阈值 消息"
-- **`check_price_alerts`**: 检查预警状态（无参数）
+常用工具说明：
+- tavily_search: 通用搜索，适合大部分查询
+- calculate_math: 数学计算，输入表达式
+- add_numbers: 数字加法，格式"数字1 + 数字2"
+- amap_search_place: 地点搜索，输入关键词
+- amap_route_driving: 驾车路线，格式"起点,终点"
+- get_crypto_price: 加密货币价格，输入符号如"BTC"
 
-**市场洞察**:
-- **`get_market_summary`**: 市场概览（无参数）
-- **`search_crypto_symbols`**: 交易对搜索，输入："关键词"
-
-## 高级执行策略
-
-###  问题解决框架
-1. **需求识别**: 精准识别用户的核心需求和隐含期望
-2. **资源盘点**: 评估可用工具和最优执行路径
-3. **方案设计**: 制定主方案和备用方案
-4. **执行监控**: 实时评估工具执行效果
-5. **质量保证**: 验证结果准确性和完整性
-6. **价值交付**: 以用户友好的方式呈现最终答案
-
-###  质量控制与风险管理
-- **数据真实性**: 杜绝任何形式的数据编造或猜测
-- **信息时效性**: 优先使用最新、最权威的信息源
-- **错误恢复**: 工具失败时主动尝试替代方案
-- **透明度**: 保持推理过程的可见性和可理解性
-- **边界认知**: 诚实说明能力限制，避免过度承诺
-
-###  用户体验优化
-- **个性化服务**: 根据用户问题复杂度调整回答详细程度
-- **结构化呈现**: 使用清晰的格式和逻辑组织信息
-- **操作指导**: 提供可行的后续操作建议
-- **多维度价值**: 在回答核心问题的同时提供相关有用信息
-
-现在开始处理用户的问题：
+现在开始：
 
 Question: {input}
 Thought: {agent_scratchpad}"""
 
 
 class ZhipuAgent:
-    """简化的智谱AI Agent"""
+    """简化的智谱AI Agent - 支持中断功能"""
     
     def __init__(self, 
                  model: str = "glm-4-plus",
@@ -158,7 +117,8 @@ class ZhipuAgent:
                  max_iterations: int = 10,
                  enable_memory: bool = True,
                  memory_config: Optional[Dict[str, Any]] = None,
-                 global_memory_manager = None):
+                 global_memory_manager = None,
+                 execution_timeout: Optional[float] = None):
         """
         初始化智谱AI Agent
         
@@ -170,6 +130,7 @@ class ZhipuAgent:
             enable_memory: 是否启用记忆功能
             memory_config: 记忆配置参数
             global_memory_manager: 全局记忆管理器
+            execution_timeout: 执行超时时间（秒），None表示不设置超时
         """
         self.model = model
         self.temperature = temperature
@@ -177,6 +138,7 @@ class ZhipuAgent:
         self.max_iterations = max_iterations
         self.enable_memory = enable_memory
         self.global_memory_manager = global_memory_manager
+        self.execution_timeout = execution_timeout
         
         # 组件
         self.llm = None
@@ -184,11 +146,53 @@ class ZhipuAgent:
         self.agent_executor = None
         self.is_initialized = False
         
+        # 中断控制
+        self.interruptible_executor = None
+        self._progress_callback: Optional[Callable] = None
+        
         # 记忆管理
         self.chat_memory = None
         self.agent_with_memory = None
         if enable_memory:
             self._init_memory(memory_config or {})
+    
+    async def initialize(self):
+        """
+        初始化Agent - 公开接口
+        """
+        if self.is_initialized:
+            return
+        
+        try:
+            logger.info("开始初始化智谱AI Agent...")
+            
+            # 1. 创建LLM
+            llm_config = {
+                "model": self.model,
+                "temperature": self.temperature,
+                "max_tokens": 2048  # 默认值
+            }
+            
+            # GLM-4.5特殊优化
+            if self.model == "glm-4.5":
+                llm_config.update({
+                    "max_tokens": 8192,  # GLM-4.5支持更大输出
+                    "thinking_mode": True,  # 启用深度思考模式
+                })
+                logger.info("GLM-4.5检测：启用深度思考模式和大输出token配置")
+            
+            self.llm = create_zhipu_llm(**llm_config)
+            logger.info(f"LLM初始化完成: {self.model}")
+            
+            # 2. 初始化Agent
+            await self._initialize_agent()
+            
+            self.is_initialized = True
+            logger.info(f"智谱AI Agent初始化完成 - 模型: {self.model}, 工具数量: {len(self.tools)}")
+            
+        except Exception as e:
+            logger.error(f"Agent初始化失败: {e}")
+            raise
     
     def _init_memory(self, config: Dict[str, Any]) -> None:
         """初始化记忆管理器"""
@@ -208,40 +212,30 @@ class ZhipuAgent:
             logger.error(f"记忆管理器初始化失败: {e}")
             self.enable_memory = False
         
-    async def initialize(self):
+    async def _initialize_agent(self):
         """
-        异步初始化Agent
+        初始化具体的Agent实现
         """
         try:
-            logger.info("开始初始化智谱AI Agent...")
-            
-            # 1. 创建LLM
-            self.llm = create_zhipu_llm(
-                model=self.model,
-                temperature=self.temperature,
-                max_tokens=2048
-            )
-            logger.info(f"✅ LLM初始化完成: {self.model}")
-            
-            # 2. 收集工具
+            # 1. 收集工具
             self._collect_tools()
             
-            # 3. 创建Agent
+            # 2. 创建Agent
             self._build_agent()
             
-            # 4. 创建带记忆的Agent（如果启用记忆）
+            # 3. 创建带记忆的Agent（如果启用记忆）
             if self.enable_memory and self.chat_memory:
                 self._build_agent_with_memory()
             
-            self.is_initialized = True
-            logger.info(f"✅ 智谱AI Agent初始化完成 - 模型: {self.model}, 工具数量: {len(self.tools)}")
+            logger.info(f"智谱AI Agent初始化完成 - 工具数量: {len(self.tools)}")
             
         except Exception as e:
-            logger.error(f"❌ Agent初始化失败: {e}")
+            logger.error(f"Agent初始化失败: {e}")
             raise
     
     def _collect_tools(self):
         """收集所有可用工具"""
+        # 清空工具列表  
         self.tools = []
         
         # 添加数学工具
@@ -270,40 +264,57 @@ class ZhipuAgent:
             logger.warning("⚠️ 高德地图工具未配置，需要设置 AMAP_API_KEY")
         
         # 添加OKX加密货币行情工具
-        okx_tools = [
-            get_crypto_price,
-            get_market_data,
-            get_kline_data,
-            analyze_price_trend,
-            create_price_alert,
-            check_price_alerts,
-            get_market_summary,
-            search_crypto_symbols
-        ]
-        self.tools.extend(okx_tools)
-        logger.info(f"✅ 已加载OKX加密货币工具: {len(okx_tools)} 个")
+        okx_tools = get_available_okx_tools()
+        if okx_tools:
+            self.tools.extend(okx_tools)
+            logger.info(f"✅ 已加载OKX加密货币工具: {len(okx_tools)} 个")
+        else:
+            logger.warning("⚠️ OKX加密货币工具加载失败")
         
         logger.info(f"📋 总共收集到 {len(self.tools)} 个工具")
     
     def _build_agent(self):
-        """构建Agent执行器"""
+        """构建Agent执行器，根据模型选择优化的提示词"""
         try:
-            # 创建提示模板
-            prompt = PromptTemplate.from_template(REACT_PROMPT_ZH)
+            # 确保LLM已经初始化
+            if not self.llm:
+                raise ValueError("LLM未正确初始化，无法构建Agent")
             
-            # 创建ReAct Agent
+            # 根据模型选择最优化的提示模板
+            if self.model == "glm-4.5":
+                prompt_template = REACT_PROMPT_GLM45
+                logger.info("使用GLM-4.5优化提示词模板")
+            else:
+                prompt_template = REACT_PROMPT_ZH
+                logger.info("使用标准ReAct提示词模板")
+            
+            # 创建提示模板
+            prompt = PromptTemplate.from_template(prompt_template)
+            
+            # 创建ReAct Agent（self.llm直接就是LangChain模型）
             agent = create_react_agent(self.llm, self.tools, prompt)
             
+            # 为GLM-4.5优化Agent执行器配置
+            executor_config = {
+                "agent": agent,
+                "tools": self.tools,
+                "verbose": self.verbose,
+                "handle_parsing_errors": True,
+                "max_iterations": self.max_iterations,
+                "early_stopping_method": "force",
+                "return_intermediate_steps": True
+            }
+            
+            # GLM-4.5特殊优化：允许更多迭代以充分发挥深度思考能力
+            if self.model == "glm-4.5":
+                executor_config.update({
+                    "max_iterations": max(self.max_iterations, 15),  # GLM-4.5可以处理更复杂的推理链
+                    "max_execution_time": 180,  # 允许更长的执行时间用于深度思考
+                })
+                logger.info("GLM-4.5优化：增加最大迭代次数和执行时间")
+            
             # 创建Agent执行器
-            self.agent_executor = AgentExecutor(
-                agent=agent,
-                tools=self.tools,
-                verbose=self.verbose,
-                handle_parsing_errors=True,
-                max_iterations=self.max_iterations,
-                early_stopping_method="force",
-                return_intermediate_steps=True
-            )
+            self.agent_executor = AgentExecutor(**executor_config)
             
             logger.info("✅ Agent执行器创建完成")
             
@@ -337,88 +348,21 @@ class ZhipuAgent:
             self.enable_memory = False
             raise
     
-    def invoke(self, query: str, session_id: str = "default") -> Dict[str, Any]:
+    async def _execute_query(self, query: str, session_id: str = "default", **kwargs) -> Dict[str, Any]:
         """
-        同步执行查询
+        执行查询的核心逻辑
         
         Args:
             query: 用户查询
-            session_id: 会话ID，用于记忆管理
+            session_id: 会话 ID
+            **kwargs: 额外参数
             
         Returns:
-            包含输出和中间步骤的结果
+            查询结果字典
         """
-        if not self.is_initialized:
-            return {
-                "output": "Agent未初始化，请先调用 await agent.initialize()",
-                "success": False,
-                "error": "未初始化"
-            }
-        
         try:
-            logger.info(f"处理查询: {query} (会话: {session_id})")
-            
-            # 使用带记忆的Agent（如果启用记忆）
-            if self.enable_memory and self.agent_with_memory:
-                # 使用RunnableWithMessageHistory标准接口
-                result = self.agent_with_memory.invoke(
-                    {"input": query},
-                    config={"configurable": {"session_id": session_id}}
-                )
-                
-                # 保存会话到存储
-                if self.chat_memory:
-                    self.chat_memory.save_session(session_id)
-                
-                return {
-                    "output": result["output"],
-                    "intermediate_steps": result.get("intermediate_steps", []),
-                    "success": True,
-                    "tool_calls": len(result.get("intermediate_steps", [])),
-                    "session_id": session_id,
-                    "memory_enabled": True
-                }
-            else:
-                # 使用无记忆的Agent
-                result = self.agent_executor.invoke({"input": query})
-                
-                return {
-                    "output": result["output"],
-                    "intermediate_steps": result.get("intermediate_steps", []),
-                    "success": True,
-                    "tool_calls": len(result.get("intermediate_steps", [])),
-                    "session_id": None,
-                    "memory_enabled": False
-                }
-            
-        except Exception as e:
-            logger.error(f"查询处理失败: {e}")
-            return {
-                "output": f"抱歉，处理查询时出现错误: {str(e)}",
-                "intermediate_steps": [],
-                "success": False,
-                "error": str(e)
-            }
-    
-    async def ainvoke(self, query: str, session_id: str = "default") -> Dict[str, Any]:
-        """
-        异步执行查询
-        
-        Args:
-            query: 用户查询
-            
-        Returns:
-            包含输出和中间步骤的结果
-        """
-        if not self.is_initialized:
-            return {
-                "output": "Agent未初始化，请先调用 await agent.initialize()",
-                "success": False,
-                "error": "未初始化"
-            }
-        
-        try:
-            logger.info(f"异步处理查询: {query} (会话: {session_id})")
+            # 发送思考事件
+            await self._emit_thinking_event("开始分析用户查询...")
             
             # 使用带记忆的Agent（如果启用记忆）
             if self.enable_memory and self.agent_with_memory:
@@ -454,13 +398,69 @@ class ZhipuAgent:
                 }
             
         except Exception as e:
-            logger.error(f"异步查询处理失败: {e}")
-            return {
-                "output": f"抱歉，异步处理查询时出现错误: {str(e)}",
-                "intermediate_steps": [],
-                "success": False,
-                "error": str(e)
-            }
+            logger.error(f"查询处理失败: {e}")
+            raise
+    
+    def invoke_sync(self, query: str, session_id: str = "default") -> Dict[str, Any]:
+        """
+        同步执行查询（兼容旧接口）
+        
+        Args:
+            query: 用户查询
+            session_id: 会话ID，用于记忆管理
+            
+        Returns:
+            包含输出和中间步骤的结果
+        """
+        import asyncio
+        
+        # 使用异步invoke实现
+        try:
+            loop = asyncio.get_running_loop()
+            # 在异步环境中，需要创建新任务
+            task = asyncio.create_task(self.invoke(query, session_id))
+            # 注意：这可能会导致阻塞，建议使用异步版本
+            return asyncio.run_coroutine_threadsafe(task, loop).result()
+        except RuntimeError:
+            # 在同步环境中
+            return asyncio.run(self.invoke(query, session_id))
+    
+    async def invoke(self, query: str, session_id: str = "default", **kwargs) -> Dict[str, Any]:
+        """
+        异步执行查询（主要接口）
+        
+        Args:
+            query: 用户查询
+            session_id: 会话ID，用于记忆管理
+            **kwargs: 额外参数
+            
+        Returns:
+            包含输出和中间步骤的结果字典
+        """
+        if not self.is_initialized:
+            await self.initialize()
+        
+        return await self._execute_query(query, session_id, **kwargs)
+    
+    async def ainvoke(self, query: str, session_id: str = "default", **kwargs) -> Dict[str, Any]:
+        """
+        异步调用Agent（LangChain标准接口）
+        
+        Args:
+            query: 用户查询
+            session_id: 会话ID，用于记忆管理
+            **kwargs: 额外参数
+            
+        Returns:
+            包含输出和中间步骤的结果字典
+        """
+        # ainvoke 方法与 invoke 方法功能相同，为了保持 LangChain 接口兼容性
+        return await self.invoke(query, session_id, **kwargs)
+    
+    async def _emit_thinking_event(self, message: str):
+        """发送思考事件"""
+        if self._progress_callback:
+            self._progress_callback({"type": "thinking", "message": message})
     
     def get_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
@@ -475,6 +475,23 @@ class ZhipuAgent:
             "memory_enabled": self.enable_memory
         }
         
+        # GLM-4.5特殊能力信息
+        if self.model == "glm-4.5":
+            info.update({
+                "model_type": "GLM-4.5 MoE",
+                "context_window": "128K tokens",
+                "max_output": "96K tokens", 
+                "thinking_mode": True,
+                "special_features": [
+                    "深度思考模式",
+                    "128K长上下文",
+                    "代码生成专精",
+                    "工具调用优化",
+                    "复杂推理增强"
+                ],
+                "architecture": "混合专家模型(MoE)"
+            })
+        
         # 添加记忆信息
         if self.enable_memory and self.chat_memory:
             info["memory_info"] = self.chat_memory.get_memory_stats()
@@ -484,6 +501,43 @@ class ZhipuAgent:
     def get_llm(self):
         """获取底层LLM实例用于流式输出"""
         return self.llm
+    
+    def get_llm_info(self) -> Dict[str, Any]:
+        """获取LLM详细信息，包括思考模式状态"""
+        llm_info = {
+            "model": self.model,
+            "temperature": self.temperature,
+            "thinking_mode": False,  # 默认值
+            "model_features": []
+        }
+        
+        # GLM-4.5特殊信息
+        if self.model == "glm-4.5":
+            llm_info.update({
+                "thinking_mode": True,  # GLM-4.5默认启用思考模式
+                "context_window": "128K tokens",
+                "max_output": "96K tokens",
+                "architecture": "混合专家模型(MoE)",
+                "model_features": [
+                    "深度思考模式",
+                    "128K长上下文", 
+                    "代码生成专精",
+                    "工具调用优化"
+                ]
+            })
+        elif self.model == "glm-4-plus":
+            llm_info.update({
+                "context_window": "32K tokens",
+                "max_output": "8K tokens", 
+                "architecture": "Transformer",
+                "model_features": [
+                    "通用对话",
+                    "推理分析",
+                    "工具调用"
+                ]
+            })
+        
+        return llm_info
     
     def list_tools(self) -> List[str]:
         """列出工具名称"""

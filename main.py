@@ -35,7 +35,7 @@ def print_welcome():
 多LLM智能Agent Demo
 
 支持的功能：
-• 多LLM支持 (智谱AI GLM-4、OpenAI GPT-4o/4o-mini)
+• 多LLM支持 (智谱AI GLM-4-plus/GLM-4.5 OpenAI GPT-4o/4o-mini)
 • 智能对话和复杂推理
 • 数学计算、网络搜索、地图导航、加密货币行情
 • 会话记忆和多轮对话
@@ -54,6 +54,7 @@ stream on/off - 控制流式输出
 
 记忆管理：
 clear - 清除当前会话记忆
+new - 创建新会话
 sessions - 查看历史会话列表
 restore <session_id> - 恢复指定会话
     """
@@ -181,14 +182,9 @@ async def cli_async():
     global_memory = GlobalMemoryManager(storage_dir="data/sessions", max_messages=50)
     session_manager = SessionManager(global_memory)
     
-    # 获取或创建会话ID
-    session_id = session_manager.get_or_create_default_session()
-    console.print(f"[dim]会话ID: {session_id}[/]")
-    
-    # 显示会话摘要（如果有历史对话）
-    session_summary = session_manager.get_current_session_summary()
-    if session_summary != "暂无对话历史":
-        console.print(f"[dim]会话摘要: {session_summary}[/]")
+    # 交互式选择会话（恢复或新建）
+    session_id = session_manager.prompt_for_session_choice()
+    console.print(f"[dim]当前会话ID: {session_id}[/]")
     
     # 工作模式标识
     # True: LLM模式（流式输出，直接与LLM交互）
@@ -244,11 +240,21 @@ async def cli_async():
 
                 if query.strip().lower() in {"info", "信息"}:
                     info = agent.get_info()
+                    llm_info = agent.get_llm_info()  # 获取LLM详细信息
+                    
                     console.print(f"[bold blue]系统信息：[/]")
                     console.print(f"  LLM提供商: {info.get('provider', 'N/A')}")
                     console.print(f"  模型: {info['model']}")
                     console.print(f"  温度: {info.get('temperature', 'N/A')}")
                     console.print(f"  已初始化: {info['initialized']}")
+                    
+                    # 显示模型特殊信息（GLM-4.5）
+                    if llm_info.get('architecture'):
+                        console.print(f"  架构: {llm_info['architecture']}")
+                    if llm_info.get('context_window'):
+                        console.print(f"  上下文: {llm_info['context_window']}")
+                    if llm_info.get('thinking_mode'):
+                        console.print(f"  思考模式: [green]启用[/] ")
                     
                     # 显示当前模式
                     mode_text = "LLM模式（流式输出）" if llm_mode else "Agent模式（工具调用）"
@@ -257,11 +263,17 @@ async def cli_async():
                     if llm_mode:
                         console.print(f"    流式输出: {'启用' if streaming_enabled else '禁用'}")
                         console.print(f"    功能特点: 快速响应，实时显示，无工具调用")
+                        # 显示模型特殊功能
+                        if llm_info.get('model_features'):
+                            console.print(f"    模型特性: {', '.join(llm_info['model_features'])}")
                     else:
                         console.print(f"    记忆功能: {'启用' if info.get('memory_enabled', False) else '禁用'}")
                         console.print(f"    工具数量: {info['tool_count']}")
                         console.print(f"    可用工具: {', '.join(info['tools'])}")
                         console.print(f"    功能特点: 完整推理，工具调用，会话记忆")
+                        # 显示模型特殊功能
+                        if llm_info.get('model_features'):
+                            console.print(f"    模型特性: {', '.join(llm_info['model_features'])}")
                     
                     console.print(f"  当前会话ID: {session_id}")
                     continue
@@ -293,6 +305,13 @@ async def cli_async():
                         console.print("[green]✅ 当前会话记忆已清除[/]")
                     else:
                         console.print("[yellow]⚠️ 记忆清除失败[/]")
+                    continue
+
+                if query.strip().lower() in {"new", "新会话", "创建会话"}:
+                    old_session_id = session_id
+                    session_id = session_manager.create_new_session()
+                    console.print(f"[green]✅ 已创建新会话: {session_id}[/]")
+                    console.print(f"[dim]原会话 {old_session_id} 已保存[/]")
                     continue
 
                 if query.strip().lower() in {"sessions", "会话列表", "ls"}:

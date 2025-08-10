@@ -6,10 +6,11 @@ OpenAI LLM Integration
 """
 
 import logging
-from typing import Dict, Any, Optional, List, AsyncGenerator
+from typing import Dict, Any, Optional, List, AsyncGenerator, Union
 from langchain_openai import ChatOpenAI
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, BaseMessage
+
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ class OpenAILLM:
         }
     }
     
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str = None, streaming: bool = False, **kwargs):
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str = None, streaming: bool = False,
+                 temperature: float = 0.1, max_tokens: int = 4096, callback_manager: Optional[Any] = None,
+                 **kwargs):
         """
         初始化OpenAI LLM
         
@@ -44,37 +47,48 @@ class OpenAILLM:
             model: 模型名称
             base_url: 自定义API端点URL (可选)
             streaming: 是否启用流式输出
+            temperature: 温度参数
+            max_tokens: 最大输出令牌数
+            callback_manager: 回调管理器
             **kwargs: 其他LangChain ChatOpenAI参数
         """
+        # 初始化基类
+        super().__init__(
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            streaming=streaming,
+            callback_manager=callback_manager,
+            **kwargs
+        )
+        
+        # 设置提供商信息
+        self.provider_name = "OpenAI"
         self.api_key = api_key
-        self.model = model
         self.base_url = base_url
-        self.streaming = streaming
-        self.kwargs = kwargs
         
         # 验证模型支持
         if model not in self.SUPPORTED_MODELS:
             logger.warning(f"模型 {model} 不在支持列表中，但仍会尝试使用")
         
         # 设置默认参数
-        default_params = {
-            "temperature": 0.1,
-            "max_tokens": self.SUPPORTED_MODELS.get(model, {}).get("max_tokens", 4096),
+        self.llm_params = {
             "timeout": 60,
             "max_retries": 3,
-            "streaming": streaming
         }
-        default_params.update(kwargs)
-        self.llm_params = default_params
+        self.llm_params.update(kwargs)
         
         logger.info(f"初始化OpenAI LLM: {model}")
     
-    def create_llm(self) -> BaseChatModel:
-        """创建LangChain ChatOpenAI实例"""
+    async def _initialize_llm(self) -> BaseChatModel:
+        """初始化具体的LLM实例"""
         try:
             llm_params = {
                 "model": self.model,
                 "openai_api_key": self.api_key,
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+                "streaming": self.streaming,
                 **self.llm_params
             }
             
@@ -91,6 +105,29 @@ class OpenAILLM:
         except Exception as e:
             logger.error(f"创建OpenAI LLM失败: {str(e)}")
             raise
+    
+    def _validate_config(self) -> bool:
+        """验证配置参数"""
+        return self.validate_api_key(self.api_key)
+    
+    def create_llm(self) -> BaseChatModel:
+        """创建LangChain ChatOpenAI实例（兼容旧接口）"""
+        import asyncio
+        
+        # 如果在异步环境中，需要手动初始化
+        try:
+            loop = asyncio.get_running_loop()
+            # 在异步环境中，返回延迟初始化的实例
+            return self.llm  
+        except RuntimeError:
+            # 在同步环境中，使用事件循环初始化
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.initialize())
+                return self.llm
+            finally:
+                loop.close()
     
     def get_model_info(self) -> Dict[str, Any]:
         """获取模型信息"""
@@ -127,30 +164,7 @@ class OpenAILLM:
         
         return True
     
-    async def astream(self, prompt: str) -> AsyncGenerator[str, None]:
-        """
-        异步流式调用模型
-        
-        Args:
-            prompt: 输入提示
-            
-        Yields:
-            生成的文本片段
-        """
-        try:
-            # 创建LLM实例（如果还没有）
-            llm = self.create_llm()
-            
-            # 确保消息格式正确
-            message = HumanMessage(content=prompt) if isinstance(prompt, str) else prompt
-            
-            async for chunk in llm.astream([message]):
-                if hasattr(chunk, 'content') and chunk.content:
-                    yield chunk.content
-                    
-        except Exception as e:
-            logger.error(f"OpenAI流式调用失败: {e}")
-            yield f"流式调用错误: {str(e)}"
+    # 流式调用现在继承自基类BaseLLM.astream()
 
 
 def build_openai_chat(
@@ -162,7 +176,7 @@ def build_openai_chat(
     **kwargs
 ) -> BaseChatModel:
     """
-    构建OpenAI聊天模型
+    构建OpenAI聊天模型（兼容旧接口）
     
     Args:
         api_key: OpenAI API密钥
@@ -185,6 +199,41 @@ def build_openai_chat(
     )
     
     return llm_wrapper.create_llm()
+
+
+async def create_openai_llm_async(
+    api_key: str,
+    model: str = "gpt-4o-mini", 
+    temperature: float = 0.1,
+    base_url: str = None,
+    streaming: bool = False,
+    **kwargs
+) -> OpenAILLM:
+    """
+    异步创建OpenAI LLM实例
+    
+    Args:
+        api_key: OpenAI API密钥
+        model: 模型名称
+        temperature: 温度参数
+        base_url: 自定义API端点URL (可选)
+        streaming: 是否启用流式输出
+        **kwargs: 其他参数
+    
+    Returns:
+        初始化完成的OpenAILLM实例
+    """
+    llm_wrapper = OpenAILLM(
+        api_key=api_key,
+        model=model,
+        temperature=temperature,
+        base_url=base_url,
+        streaming=streaming,
+        **kwargs
+    )
+    
+    await llm_wrapper.initialize()
+    return llm_wrapper
 
 
 # 便捷函数

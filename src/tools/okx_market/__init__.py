@@ -26,7 +26,8 @@ from .langchain_tools import (
     create_price_alert,
     check_price_alerts,
     get_market_summary,
-    search_crypto_symbols
+    search_crypto_symbols,
+    get_available_okx_tools
 )
 
 __version__ = "1.0.0"
@@ -43,5 +44,6 @@ __all__ = [
     "create_price_alert",
     "check_price_alerts",
     "get_market_summary",
-    "search_crypto_symbols"
+    "search_crypto_symbols",
+    "get_available_okx_tools"
 ]

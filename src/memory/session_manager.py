@@ -57,7 +57,7 @@ class SessionManager:
     
     def get_or_create_default_session(self) -> str:
         """
-        获取或创建默认会话
+        获取或创建默认会话（总是恢复最近会话）
         
         Returns:
             会话ID
@@ -72,6 +72,54 @@ class SessionManager:
                 # 创建新会话
                 self.current_session_id = self.create_new_session()
             
+        
+        return self.current_session_id
+    
+    def prompt_for_session_choice(self) -> str:
+        """
+        询问用户是创建新会话还是恢复最近会话
+        
+        Returns:
+            会话ID
+        """
+        if self.current_session_id:
+            return self.current_session_id
+            
+        # 检查是否有最近会话
+        recent_session = self.get_most_recent_session()
+        
+        if recent_session:
+            # 显示最近会话信息
+            session_id = recent_session["session_id"]
+            msg_count = recent_session.get("message_count", 0)
+            created_time = recent_session.get("created_at", "")[:19] if recent_session.get("created_at") else "未知"
+            
+            console.print(f"[yellow]发现最近的会话:[/]")
+            console.print(f"[dim]  会话ID: {session_id}[/]")
+            console.print(f"[dim]  消息数: {msg_count} 条[/]")
+            console.print(f"[dim]  创建时间: {created_time}[/]")
+            
+            # 询问用户选择
+            try:
+                choice = console.input("\n[cyan]选择操作: [1]恢复最近会话 [2]创建新会话 (默认:1): [/]").strip()
+                if choice == "2":
+                    self.current_session_id = self.create_new_session()
+                    console.print("[green]已创建新的对话会话[/]")
+                else:
+                    self.current_session_id = session_id
+                    console.print(f"[green]已恢复最近会话: {session_id}[/]")
+                    # 显示会话摘要
+                    summary = self.get_current_session_summary()
+                    if summary != "暂无对话历史":
+                        console.print(f"[dim]会话摘要: {summary}[/]")
+            except (KeyboardInterrupt, EOFError):
+                # 用户取消，默认恢复最近会话
+                self.current_session_id = session_id
+                console.print(f"[dim]默认恢复最近会话: {session_id}[/]")
+        else:
+            # 没有历史会话，创建新会话
+            self.current_session_id = self.create_new_session()
+            console.print("[green]首次启动，已创建新会话[/]")
         
         return self.current_session_id
     

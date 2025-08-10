@@ -34,11 +34,14 @@ class LLMManager:
                     "max_tokens": 8192,
                     "recommended": True
                 },
-                "glm-4": {
-                    "name": "GLM-4",
-                    "description": "智谱AI基础模型",
-                    "max_tokens": 8192,
-                    "recommended": False
+                "glm-4.5": {
+                    "name": "GLM-4.5",
+                    "description": "智谱AI新一代MoE架构模型，支持128K上下文，专精代码推理和工具调用",
+                    "max_tokens": 96000,  # GLM-4.5支持高达96K输出token
+                    "context_window": 128000,  # 128K上下文窗口
+                    "recommended": True,
+                    "features": ["thinking_mode", "tool_calling", "code_generation", "long_context"],
+                    "architecture": "mixture_of_experts"
                 }
             },
             "default_model": "glm-4-plus",
