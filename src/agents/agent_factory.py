@@ -95,11 +95,18 @@ class AgentFactory:
                 )
             
             elif provider == LLMProvider.OPENAI:
+                # GPT-5模型特殊处理：使用固定temperature=1.0
+                if model.startswith("gpt-5"):
+                    logger.info(f"GPT-5模型({model})使用默认temperature=1.0")
+                    actual_temperature = 1.0
+                else:
+                    actual_temperature = temperature
+                
                 agent = await build_openai_agent(
                     api_key=api_key,
                     model=model,
                     verbose=verbose,
-                    temperature=temperature,
+                    temperature=actual_temperature,
                     enable_memory=enable_memory,
                     global_memory_manager=global_memory_manager,
                     **kwargs

@@ -51,6 +51,26 @@ class LLMManager:
         LLMProvider.OPENAI: {
             "name": "OpenAI",
             "models": {
+                "gpt-5": {
+                    "name": "GPT-5",
+                    "description": "新一代语言模型，推理和创造能力显著提升",
+                    "max_tokens": 8192,
+                    "recommended": True,
+                    "features": ["advanced_reasoning", "enhanced_creativity", "improved_tool_calling"],
+                    "architecture": "next_generation",
+                    "default_temperature": 1.0,
+                    "temperature_fixed": True
+                },
+                "gpt-5-mini": {
+                    "name": "GPT-5-mini",
+                    "description": "成本优化版本，速度快成本低",
+                    "max_tokens": 32768,
+                    "recommended": True,
+                    "features": ["fast_inference", "cost_optimized", "tool_calling"],
+                    "architecture": "optimized",
+                    "default_temperature": 1.0,
+                    "temperature_fixed": True
+                },
                 "gpt-4o": {
                     "name": "GPT-4o",
                     "description": "OpenAI最新GPT-4优化版本，性能和成本平衡",

@@ -189,98 +189,30 @@ class OpenAIAgent:
     async def _create_agent(self):
         """创建Agent和AgentExecutor"""
         
-        # 创建简化的中文优化提示词模板（避免编码问题）
-        system_prompt = """你是一个专业的智能AI助手，采用ReAct（推理-行动）框架进行逻辑推理和问题解决。你具备多领域专业知识，能够通过系统化的思考过程和工具使用为用户提供准确、全面的帮助。
+        # 根据模型选择优化的系统提示词
+        if self.model.startswith("gpt-5"):
+            # GPT-5系列模型的增强提示词
+            system_prompt = """你是一个专业的智能AI助手，具备显著增强的推理能力和创造性思维。
+
+## 核心能力特点
+作为GPT-5模型，你具备以下增强能力：
+- **高级推理**: 多步骤逻辑推理和抽象概念理解
+- **增强创造**: 创新性问题解决和创意生成
+- **精准工具调用**: 更智能的工具选择和参数优化
+- **深度理解**: 复杂上下文和隐含意图的准确把握
+
+## 工作原则
+你能够使用各种专业工具来回答用户问题。凭借GPT-5的先进能力，你可以更智能地预测用户需求，制定更优化的解决方案。
+
+当前时间：{current_time}"""
+        else:
+            # 标准的系统提示词
+            system_prompt = """你是一个专业的智能AI助手，采用ReAct（推理-行动）框架进行逻辑推理和问题解决。你具备多领域专业知识，能够通过系统化的思考过程和工具使用为用户提供准确、全面的帮助。
 
 ## 工作原则
 你能够使用各种专业工具来回答用户问题。当需要获取信息、进行计算或执行特定任务时，你会自动选择和调用合适的工具。
 
-### 思维过程标准
-1. **问题解构**: 将复杂问题分解为可管理的子问题
-2. **上下文整合**: 充分利用聊天历史中的相关信息
-3. **策略规划**: 预先思考工具使用序列和可能的替代方案
-4. **结果验证**: 评估工具输出的合理性和完整性
-5. **用户导向**: 确保最终答案直接回应用户的核心需求
-
-### 工具使用规范
-- **精确选择**: 根据问题类型选择最合适的工具
-- **格式标准**: Action Input 必须是字符串格式，避免换行符和特殊字符
-- **渐进式推理**: 每次只执行一个动作，基于观察结果决定下一步
-- **数据驱动**: 必须基于工具返回的实际结果回答，严禁编造或推测信息
-- **协同作战**: 必要时组合多个工具以获得完整解决方案
-
-## 专业工具使用指南
-
-###  智能搜索工具矩阵
-**优先级策略**: Tavily搜索 > 高级搜索 > 备用搜索
-- **`tavily_search`**: 高质量通用搜索，适合90%的信息查询需求
-- **`tavily_search_advanced`**: 深度专业搜索，用于复杂学术或技术问题
-- **`tavily_search_news`**: 实时新闻搜索，获取最新时事和动态信息
-- **`tavily_search_with_domains`**: 定向搜索，查询特定权威网站内容
-- **`web_search_tool`**: DuckDuckGo备用搜索，Tavily不可用时的替代方案
-- **`web_search_detailed`**: 详细搜索结果，需要更多细节时使用
-- **`get_webpage_content`**: 精确页面抓取，获取特定网页完整内容
-
-### 🧮 数学计算工具
-- **`add_numbers`**: 基础数字加法，格式："数字1 + 数字2"或"数字1和数字2相加"
-- **`calculate_math`**: 复杂数学表达式，支持四则运算、函数计算等
-
-###  高德地图服务工具集
-**地点发现**:
-- **`amap_search_place`**: 通用地点搜索，输入："关键词"（如"星巴克"）
-- **`amap_search_nearby`**: 周边搜索，格式："关键词,经度,纬度,半径米"
-- **`amap_search_in_city`**: 城市定向搜索，格式："关键词,城市名"
-
-**智能导航**:
-- **`amap_route_driving`**: 驾车导航，格式："起点,终点"
-- **`amap_route_walking`**: 步行导航，格式："起点,终点"
-- **`amap_route_transit`**: 公共交通，格式："起点,终点,策略代码,城市"
-  - 策略：0=最快，1=最经济，2=最少换乘，3=最少步行，5=不乘地铁
-- **`amap_route_subway`**: 地铁专线，格式："起点,终点,城市"
-- **`amap_route_bus`**: 公交专线，格式："起点,终点,城市"
-
-###  OKX加密货币分析工具
-**实时行情**:
-- **`get_crypto_price`**: 单币种价格，输入："符号"（BTC/BTC-USDT）
-- **`get_market_data`**: 批量行情，格式："符号1,符号2,符号3"
-
-**技术分析**:
-- **`get_kline_data`**: K线数据，格式："符号 时间周期 数量"（如"BTC 1H 20"）
-- **`analyze_price_trend`**: 趋势分析，格式："符号 时间周期 周期数"
-
-**风险管理**:
-- **`create_price_alert`**: 创建预警，格式："符号 类型 阈值 消息"
-- **`check_price_alerts`**: 检查预警状态（无参数）
-
-**市场洞察**:
-- **`get_market_summary`**: 市场概览（无参数）
-- **`search_crypto_symbols`**: 交易对搜索，输入："关键词"
-
-## 高级执行策略
-
-###  问题解决框架
-1. **需求识别**: 精准识别用户的核心需求和隐含期望
-2. **资源盘点**: 评估可用工具和最优执行路径
-3. **方案设计**: 制定主方案和备用方案
-4. **执行监控**: 实时评估工具执行效果
-5. **质量保证**: 验证结果准确性和完整性
-6. **价值交付**: 以用户友好的方式呈现最终答案
-
-###  质量控制与风险管理
-- **数据真实性**: 杜绝任何形式的数据编造或猜测
-- **信息时效性**: 优先使用最新、最权威的信息源
-- **错误恢复**: 工具失败时主动尝试替代方案
-- **透明度**: 保持推理过程的可见性和可理解性
-- **边界认知**: 诚实说明能力限制，避免过度承诺
-
-###  用户体验优化
-- **个性化服务**: 根据用户问题复杂度调整回答详细程度
-- **结构化呈现**: 使用清晰的格式和逻辑组织信息
-- **操作指导**: 提供可行的后续操作建议
-- **多维度价值**: 在回答核心问题的同时提供相关有用信息
-
-当前时间：{current_time}
-"""
+当前时间：{current_time}"""
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt.format(current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))),
@@ -301,13 +233,23 @@ class OpenAIAgent:
         is_windows = sys.platform.startswith('win')
         verbose_setting = False if is_windows else self.verbose
         
+        # 针对GPT-5模型的特殊优化配置
+        if self.model.startswith("gpt-5"):
+            # GPT-5具备更强的推理能力，可以处理更复杂的任务
+            max_iterations = 15  # 增加最大迭代次数
+            max_execution_time = 600  # 增加执行时间到10分钟
+            logger.info(f"GPT-5优化配置: max_iterations={max_iterations}, max_execution_time={max_execution_time}")
+        else:
+            max_iterations = 10
+            max_execution_time = 300  # 5分钟超时
+        
         self._agent_executor = AgentExecutor(
             agent=self._agent,
             tools=self._tools,
             verbose=verbose_setting,
             handle_parsing_errors=True,
-            max_iterations=10,
-            max_execution_time=300,  # 5分钟超时
+            max_iterations=max_iterations,
+            max_execution_time=max_execution_time,
         )
         
         # 如果启用记忆，包装AgentExecutor
@@ -414,7 +356,7 @@ class OpenAIAgent:
         """获取Agent信息"""
         llm_info = OpenAILLM(self.api_key, self.model).get_model_info()
         
-        return {
+        info = {
             "provider": "openai",
             "model": self.model,
             "temperature": self.temperature,
@@ -424,6 +366,24 @@ class OpenAIAgent:
             "tools": [tool.name for tool in self._tools] if self._tools else [],
             "llm_info": llm_info
         }
+        
+        # GPT-5特殊信息
+        if self.model.startswith("gpt-5"):
+            info.update({
+                "model_generation": "GPT-5",
+                "enhanced_features": [
+                    "高级推理能力",
+                    "增强创造性思维", 
+                    "精准工具调用",
+                    "深度上下文理解",
+                    "优化任务执行"
+                ],
+                "max_iterations": 15 if self.model.startswith("gpt-5") else 10,
+                "max_execution_time": 600 if self.model.startswith("gpt-5") else 300,
+                "architecture": "next_generation" if self.model == "gpt-5" else "optimized"
+            })
+        
+        return info
     
     def get_llm(self):
         """获取底层LLM实例用于流式输出"""

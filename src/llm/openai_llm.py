@@ -2,7 +2,7 @@
 OpenAI LLM Integration
 
 提供OpenAI GPT模型的LangChain兼容包装器
-支持GPT-4o和GPT-4o-mini模型
+支持GPT-5、GPT-5-mini、GPT-4o和GPT-4o-mini模型
 """
 
 import logging
@@ -19,6 +19,16 @@ class OpenAILLM:
     
     # 支持的模型配置
     SUPPORTED_MODELS = {
+        "gpt-5": {
+            "model_name": "gpt-5",
+            "max_tokens": 8192,
+            "description": "GPT-5 - 新一代语言模型，推理和创造能力显著提升"
+        },
+        "gpt-5-mini": {
+            "model_name": "gpt-5-mini",
+            "max_tokens": 32768,
+            "description": "GPT-5-mini - 成本优化版本，速度快成本低"
+        },
         "gpt-4o": {
             "model_name": "gpt-4o",
             "max_tokens": 4096,
@@ -89,11 +99,17 @@ class OpenAILLM:
             llm_params = {
                 "model": self.model,
                 "openai_api_key": self.api_key,
-                "temperature": self.temperature,
                 "max_tokens": self.max_tokens,
                 "streaming": self.streaming,
                 **self.llm_params
             }
+            
+            # GPT-5模型特殊处理：只支持默认temperature
+            if self.model.startswith("gpt-5"):
+                logger.info(f"GPT-5模型使用默认temperature=1.0（不支持自定义temperature）")
+                # 不设置temperature参数，使用默认值1.0
+            else:
+                llm_params["temperature"] = self.temperature
             
             # 如果提供了自定义base_url，则添加到参数中
             if self.base_url:
@@ -128,11 +144,17 @@ class OpenAILLM:
             llm_params = {
                 "model": self.model,
                 "openai_api_key": self.api_key,
-                "temperature": self.temperature,
                 "max_tokens": self.max_tokens,
                 "streaming": self.streaming,
                 **self.llm_params
             }
+            
+            # GPT-5模型特殊处理：只支持默认temperature
+            if self.model.startswith("gpt-5"):
+                logger.info(f"GPT-5模型使用默认temperature=1.0（不支持自定义temperature）")
+                # 不设置temperature参数，使用默认值1.0
+            else:
+                llm_params["temperature"] = self.temperature
             
             # 如果提供了自定义base_url，则添加到参数中
             if self.base_url:
@@ -259,6 +281,16 @@ async def create_openai_llm_async(
 
 
 # 便捷函数
+def create_gpt5(api_key: str, **kwargs) -> BaseChatModel:
+    """创建GPT-5模型"""
+    return build_openai_chat(api_key, model="gpt-5", **kwargs)
+
+
+def create_gpt5_mini(api_key: str, **kwargs) -> BaseChatModel:
+    """创建GPT-5-mini模型"""
+    return build_openai_chat(api_key, model="gpt-5-mini", **kwargs)
+
+
 def create_gpt4o(api_key: str, **kwargs) -> BaseChatModel:
     """创建GPT-4o模型"""
     return build_openai_chat(api_key, model="gpt-4o", **kwargs)
