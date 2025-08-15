@@ -20,6 +20,7 @@ from ..tools.search_tools import SEARCH_TOOLS
 from ..tools.tavily_search_tool import get_available_tavily_tools
 from ..tools.amap_search import get_available_amap_tools
 from ..tools.okx_market import get_available_okx_tools
+from ..tools.notion import get_notion_tools
 from ..memory.global_memory import GlobalMemoryManager
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
@@ -61,6 +62,20 @@ Final Answer: 完整、准确、结构化的专业答案
 - amap_search_place: 地点搜索，输入关键词
 - amap_route_driving: 驾车路线，格式"起点,终点"
 - get_crypto_price: 加密货币价格，输入符号如"BTC"
+
+Notion工具说明：
+- notion_get_database_info: 获取数据库信息，输入数据库ID
+- notion_query_database: 查询数据库记录，输入数据库ID
+- notion_get_database_summary: 获取数据库摘要，输入数据库ID
+- notion_get_page_info: 获取页面信息，输入页面ID
+- notion_get_page_content: 获取页面内容，输入页面ID
+- notion_get_page_summary: 获取页面摘要，输入页面ID
+- notion_search_page_content: 搜索页面内容，输入页面ID和搜索词
+- notion_search: 全局搜索Notion内容，输入搜索查询
+- notion_search_databases: 搜索数据库，输入搜索查询
+- notion_search_pages: 搜索页面，输入搜索查询
+
+注意：Notion ID格式为32位十六进制字符，可从页面URL中获取
 
 现在开始：
 
@@ -270,6 +285,68 @@ class ZhipuAgent:
             logger.info(f"✅ 已加载OKX加密货币工具: {len(okx_tools)} 个")
         else:
             logger.warning("⚠️ OKX加密货币工具加载失败")
+        
+        # 添加 Notion 工具 (使用新的 Direct API 实现)
+        try:
+            from ..tools.notion import get_notion_tools, is_auth_configured
+            
+            if is_auth_configured():
+                # 使用新的 Direct API 工具
+                notion_tools = get_notion_tools()
+                if notion_tools:
+                    self.tools.extend(notion_tools)
+                    logger.info(f"✅ 已加载 Notion 工具: {len(notion_tools)} 个")
+                    
+                    # 记录具体的工具名称
+                    tool_names = [tool.name for tool in notion_tools]
+                    logger.info(f"   工具列表: {tool_names}")
+                else:
+                    logger.warning("⚠️ Notion 工具创建失败")
+                    self._add_notion_placeholder_tools()
+            else:
+                logger.warning("⚠️ Notion 工具未配置，需要设置 NOTION_TOKEN")
+                self._add_notion_placeholder_tools()
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Notion 工具加载失败: {e}")
+            # 备用方案：使用简单的占位符工具
+            try:
+                self._add_notion_placeholder_tools()
+            except Exception as e2:
+                logger.error(f"❌ 连备用 Notion 工具都加载失败: {e2}")
+        
+        logger.info(f"📋 总共收集到 {len(self.tools)} 个工具")
+    
+    def _add_notion_placeholder_tools(self):
+        """添加 Notion 占位符工具"""
+        from langchain_core.tools import tool
+        
+        @tool
+        def notion_info() -> str:
+            """
+            获取 Notion 集成信息
+            
+            Returns:
+                Notion 集成状态和配置指南
+            """
+            return """
+            🔧 Notion 集成状态：未完全配置
+            
+            当前可用的集成方式：
+            1. **Direct API** (推荐)：需要 Integration Token
+            2. **MCP 服务器**：需要 OAuth 认证
+            
+            配置步骤：
+            1. 访问 https://www.notion.so/my-integrations
+            2. 创建新的 Integration
+            3. 复制 Integration Token 到 .env 文件
+            4. 重启应用以加载 Notion 工具
+            
+            注意：MCP 服务器需要 OAuth 流程，暂不支持 Integration Token。
+            """
+        
+        self.tools.append(notion_info)
+        logger.info("✅ 已添加 Notion 信息工具")
         
         logger.info(f"📋 总共收集到 {len(self.tools)} 个工具")
     
@@ -497,6 +574,37 @@ class ZhipuAgent:
             info["memory_info"] = self.chat_memory.get_memory_stats()
         
         return info
+    
+    async def _initialize_notion_mcp(self):
+        """异步初始化 Notion MCP 连接"""
+        try:
+            from ..tools.notion import initialize_notion_mcp
+            
+            logger.info("🚀 开始初始化 Notion MCP 连接...")
+            success = await initialize_notion_mcp()
+            
+            if success:
+                logger.info("✅ Notion MCP 连接初始化成功")
+            else:
+                logger.warning("⚠️ Notion MCP 连接初始化失败，工具将使用基本模式")
+                
+        except Exception as e:
+            logger.error(f"❌ Notion MCP 初始化异常: {e}")
+    
+    async def ensure_notion_ready(self):
+        """确保 Notion 工具已就绪"""
+        try:
+            from ..tools.notion import ensure_tools_initialized, is_auth_configured
+            
+            if not is_auth_configured():
+                return False
+            
+            tools = await ensure_tools_initialized()
+            return len(tools) > 0
+            
+        except Exception as e:
+            logger.error(f"检查 Notion 就绪状态失败: {e}")
+            return False
     
     def get_llm(self):
         """获取底层LLM实例用于流式输出"""

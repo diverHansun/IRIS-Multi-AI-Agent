@@ -52,20 +52,18 @@ class OpenAILLM:
             callback_manager: 回调管理器
             **kwargs: 其他LangChain ChatOpenAI参数
         """
-        # 初始化基类
-        super().__init__(
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            streaming=streaming,
-            callback_manager=callback_manager,
-            **kwargs
-        )
+        # 设置实例属性
+        self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        self.streaming = streaming
+        self.callback_manager = callback_manager
         
         # 设置提供商信息
         self.provider_name = "OpenAI"
         self.api_key = api_key
         self.base_url = base_url
+        self.llm = None  # 添加 llm 属性
         
         # 验证模型支持
         if model not in self.SUPPORTED_MODELS:
@@ -79,6 +77,11 @@ class OpenAILLM:
         self.llm_params.update(kwargs)
         
         logger.info(f"初始化OpenAI LLM: {model}")
+    
+    async def initialize(self):
+        """初始化LLM实例"""
+        if self.llm is None:
+            self.llm = await self._initialize_llm()
     
     async def _initialize_llm(self) -> BaseChatModel:
         """初始化具体的LLM实例"""
@@ -114,11 +117,30 @@ class OpenAILLM:
         """创建LangChain ChatOpenAI实例（兼容旧接口）"""
         import asyncio
         
+        # 如果LLM已经初始化，直接返回
+        if self.llm is not None:
+            return self.llm
+        
         # 如果在异步环境中，需要手动初始化
         try:
             loop = asyncio.get_running_loop()
-            # 在异步环境中，返回延迟初始化的实例
-            return self.llm  
+            # 在异步环境中，直接同步创建LLM（避免在异步中调用异步）
+            llm_params = {
+                "model": self.model,
+                "openai_api_key": self.api_key,
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+                "streaming": self.streaming,
+                **self.llm_params
+            }
+            
+            # 如果提供了自定义base_url，则添加到参数中
+            if self.base_url:
+                llm_params["base_url"] = self.base_url
+                logger.info(f"使用自定义OpenAI API端点: {self.base_url}")
+            
+            self.llm = ChatOpenAI(**llm_params)
+            return self.llm
         except RuntimeError:
             # 在同步环境中，使用事件循环初始化
             loop = asyncio.new_event_loop()

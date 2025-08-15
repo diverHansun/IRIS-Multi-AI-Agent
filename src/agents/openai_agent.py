@@ -20,6 +20,7 @@ from ..tools.math_tools import add_numbers, calculate_math
 from ..tools.search_tools import SEARCH_TOOLS
 from ..tools.tavily_search_tool import get_available_tavily_tools
 from ..tools.amap_search import get_available_amap_tools
+from ..tools.notion import get_notion_tools
 
 # 尝试导入OKX工具（可选）
 try:
@@ -171,6 +172,17 @@ class OpenAIAgent:
             ]
             self._tools.extend(okx_tools)
             logger.info("OKX crypto tools loaded")
+        
+        # 添加 Notion 工具
+        try:
+            notion_tools = get_notion_tools()
+            if notion_tools:
+                self._tools.extend(notion_tools)
+                logger.info(f"Notion tools loaded: {len(notion_tools)} tools")
+            else:
+                logger.warning("Notion tools not configured, need NOTION_TOKEN")
+        except Exception as e:
+            logger.warning(f"Failed to load Notion tools: {e}")
         
         logger.info(f"Total {len(self._tools)} tools loaded")
     
