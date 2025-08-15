@@ -22,27 +22,37 @@ class OpenAILLM:
         "gpt-5": {
             "model_name": "gpt-5",
             "max_tokens": 8192,
-            "description": "GPT-5 - 新一代语言模型，推理和创造能力显著提升"
+            "context_window": 8192,
+            "description": "GPT-5 - 新一代语言模型，推理和创造能力显著提升",
+            "features": ["advanced_reasoning", "multimodal", "thinking_mode"]
         },
         "gpt-5-mini": {
             "model_name": "gpt-5-mini",
             "max_tokens": 32768,
-            "description": "GPT-5-mini - 成本优化版本，速度快成本低"
+            "context_window": 32768,
+            "description": "GPT-5-mini - 成本优化版本，速度快成本低",
+            "features": ["fast_inference", "multimodal", "thinking_mode", "long_context"]
         },
         "gpt-4o": {
             "model_name": "gpt-4o",
             "max_tokens": 4096,
-            "description": "GPT-4o - 最新的GPT-4优化版本，性能和成本平衡"
+            "context_window": 131072,
+            "description": "GPT-4o - 最新的GPT-4优化版本，性能和成本平衡",
+            "features": ["multimodal", "long_context", "cost_optimized"]
         },
         "gpt-4o-mini": {
             "model_name": "gpt-4o-mini",
             "max_tokens": 16384,
-            "description": "GPT-4o-mini - 轻量级版本，速度快成本低"
+            "context_window": 131072,
+            "description": "GPT-4o-mini - 轻量级版本，速度快成本低",
+            "features": ["multimodal", "long_context", "fast_inference", "cost_optimized"]
         },
         "gpt-4-turbo": {
             "model_name": "gpt-4-turbo",
             "max_tokens": 4096,
-            "description": "GPT-4 Turbo - 高性能版本"
+            "context_window": 4096,
+            "description": "GPT-4 Turbo - 高性能版本",
+            "features": ["high_performance", "stable"]
         }
     }
     

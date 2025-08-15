@@ -641,7 +641,8 @@ class ZhipuAgent:
                 "model_features": [
                     "通用对话",
                     "推理分析",
-                    "工具调用"
+                    "工具调用",
+                    "成本优化"
                 ]
             })
         

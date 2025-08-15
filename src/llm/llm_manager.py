@@ -32,6 +32,7 @@ class LLMManager:
                     "name": "GLM-4-Plus",
                     "description": "智谱AI最新旗舰模型，综合能力强",
                     "max_tokens": 8192,
+                    "context_window": 32000,
                     "recommended": True
                 },
                 "glm-4.5": {
@@ -55,8 +56,9 @@ class LLMManager:
                     "name": "GPT-5",
                     "description": "新一代语言模型，推理和创造能力显著提升",
                     "max_tokens": 8192,
+                    "context_window": 8192,
                     "recommended": True,
-                    "features": ["advanced_reasoning", "enhanced_creativity", "improved_tool_calling"],
+                    "features": ["advanced_reasoning", "enhanced_creativity", "improved_tool_calling", "multimodal"],
                     "architecture": "next_generation",
                     "default_temperature": 1.0,
                     "temperature_fixed": True
@@ -65,8 +67,9 @@ class LLMManager:
                     "name": "GPT-5-mini",
                     "description": "成本优化版本，速度快成本低",
                     "max_tokens": 32768,
+                    "context_window": 32768,
                     "recommended": True,
-                    "features": ["fast_inference", "cost_optimized", "tool_calling"],
+                    "features": ["fast_inference", "cost_optimized", "tool_calling", "multimodal"],
                     "architecture": "optimized",
                     "default_temperature": 1.0,
                     "temperature_fixed": True
@@ -75,13 +78,17 @@ class LLMManager:
                     "name": "GPT-4o",
                     "description": "OpenAI最新GPT-4优化版本，性能和成本平衡",
                     "max_tokens": 4096,
-                    "recommended": True
+                    "context_window": 131072,
+                    "recommended": True,
+                    "features": ["multimodal", "long_context", "cost_optimized"]
                 },
                 "gpt-4o-mini": {
                     "name": "GPT-4o-mini",
                     "description": "轻量级版本，速度快成本低",
                     "max_tokens": 16384,
-                    "recommended": True
+                    "context_window": 131072,
+                    "recommended": True,
+                    "features": ["multimodal", "long_context", "fast_inference", "cost_optimized"]
                 },
                 "gpt-4-turbo": {
                     "name": "GPT-4-turbo",

@@ -130,14 +130,14 @@ class ZhipuAILLM:
                 "context_window": 32000,
                 "max_output": 8192,
                 "architecture": "transformer",
-                "features": ["chat", "reasoning", "tool_calling"]
+                "features": ["chat", "reasoning", "tool_calling", "cost_optimized"]
             },
             "glm-4.5": {
                 "context_window": 128000,
                 "max_output": 96000, 
                 "architecture": "mixture_of_experts",
                 "features": ["thinking_mode", "long_context", "code_generation", 
-                           "tool_calling", "web_browsing", "complex_reasoning"]
+                           "tool_calling", "web_browsing", "complex_reasoning", "advanced_reasoning"]
             }
         }
         

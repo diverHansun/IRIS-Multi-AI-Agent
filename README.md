@@ -3,7 +3,7 @@
 
 ## 功能特性
 
-- **多LLM支持**: 智谱AI GLM-4.5系列、OpenAI GPT-4o系列，支持动态切换
+- **多LLM支持**: 智谱AI GLM-4.5/GLM-4-Plus、OpenAI GPT-5/GPT-5-mini/GPT-4o系列，支持动态切换
 - **智能对话**: 基于ReAct推理框架的自然语言交互
 - **全局记忆系统**: 基于LangChain 2025最佳实践的统一记忆管理
 - **工具调用**: 支持数学计算、网络搜索、地图导航、加密货币分析、Notion知识管理等多种工具
@@ -75,8 +75,8 @@ NOTION_TOKEN=your_notion_integration_token_here
 # OKX_PASSPHRASE=your_okx_passphrase_here
 
 # LLM配置
-DEFAULT_LLM_PROVIDER=zhipu
-DEFAULT_LLM_MODEL=glm-4-plus
+DEFAULT_LLM_PROVIDER=zhipu OR openai
+DEFAULT_LLM_MODEL=glm-4-plus OR gpt-4o
 ```
 
 ### 3. 运行程序
@@ -92,13 +92,108 @@ python main.py --help
 ## 支持的LLM模型
 
 ### 智谱AI (推荐)
+- **GLM-4.5**: 新一代MoE架构模型，支持128K上下文，专精代码推理和工具调用 (推荐)
+  - 支持思考模式，复杂推理能力更强
+  - 96K输出token，128K上下文窗口
+  - 专精代码生成和工具调用
 - **GLM-4-Plus**: 最新旗舰模型，综合能力强 (推荐)
-- **GLM-4**: 基础模型
+  - 8K输出token，综合性能优秀
+  - 适合通用对话和任务处理
 
 ### OpenAI
+- **GPT-5**: 新一代语言模型，推理和创造能力显著提升 (推荐)
+  - 8K输出token，先进推理能力
+  - 增强创造性和工具调用
+- **GPT-5-mini**: 成本优化版本，速度快成本低 (推荐)
+  - 32K输出token，快速推理
+  - 成本效益优秀
 - **GPT-4o**: 最新GPT-4优化版本，性能和成本平衡 (推荐)
+  - 4K输出token，平衡性能
 - **GPT-4o-mini**: 轻量级版本，速度快成本低 (推荐)
+  - 16K输出token，快速响应
 - **GPT-4-turbo**: 高性能版本
+  - 4K输出token，稳定可靠
+
+### 模型特性对比
+
+| 特性 | GLM-4.5 | GLM-4-Plus | GPT-5 | GPT-5-mini | GPT-4o | GPT-4o-mini |
+|------|---------|------------|-------|------------|--------|-------------|
+| 输出Token | 96K | 8K | 8K | 32K | 4K | 16K |
+| 上下文窗口 | 128K | 32K | 8K | 32K | 128K | 128K |
+| 思考模式 | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| 逻辑推理 | 专精 | 优秀 | 优秀 | 优秀 | 良好 | 良好 |
+| 工具调用 | 专精 | 优秀 | 优秀 | 优秀 | 良好 | 良好 |
+| 代码生成 | 专精 | 优秀 | 优秀 | 优秀 | 良好 | 良好 |
+| 成本效益 | 中等 | 优秀 | 中等 | 优秀 | 优秀 | 优秀 |
+
+
+### 模型特性详细说明
+
+#### GLM-4.5 (智谱AI最新旗舰)
+- **上下文窗口**: 128K tokens - 支持超长文档处理
+- **输出Token**: 96K tokens - 适合长文本生成
+- **思考模式**: ✅ 自动启用，提供深度推理能力
+- **架构**: 混合专家模型(MoE) - 更高效的参数利用
+- **专精领域**: 代码生成、复杂推理、工具调用
+- **适用场景**: 复杂编程任务、长文档分析、深度推理
+
+#### GLM-4-Plus (智谱AI综合旗舰)
+- **上下文窗口**: 32K tokens - 平衡性能和成本
+- **输出Token**: 8K tokens - 适合一般对话和任务
+- **架构**: Transformer - 经典架构，稳定可靠
+- **适用场景**: 日常对话、创意写作、一般任务处理
+
+#### GPT-5 (OpenAI最新旗舰)
+- **上下文窗口**: 8K tokens - 专注推理质量
+- **输出Token**: 8K tokens - 平衡输出长度
+- **思考模式**: ✅ 支持深度推理
+- **多模态**: ✅ 支持图像、音频等多模态输入
+- **架构**: 新一代架构 - 推理和创造能力显著提升
+- **适用场景**: 复杂推理、创意写作、多模态任务
+
+#### GPT-5-mini (OpenAI成本优化版)
+- **上下文窗口**: 32K tokens - 大上下文支持
+- **输出Token**: 32K tokens - 长文本生成能力
+- **思考模式**: ✅ 保持推理能力
+- **多模态**: ✅ 支持多模态输入
+- **成本效益**: 优秀 - 速度快成本低
+- **适用场景**: 快速响应、长文本生成、成本敏感场景
+
+#### GPT-4o (OpenAI优化版)
+- **上下文窗口**: 128K tokens - 超长上下文支持
+- **输出Token**: 4K tokens - 适合精确回答
+- **多模态**: ✅ 支持多模态输入
+- **成本效益**: 优秀 - 性能和成本平衡
+- **适用场景**: 长文档分析、多模态任务、平衡性能需求
+
+#### GPT-4o-mini (OpenAI轻量版)
+- **上下文窗口**: 128K tokens - 超长上下文支持
+- **输出Token**: 16K tokens - 中等长度输出
+- **多模态**: ✅ 支持多模态输入
+- **成本效益**: 优秀 - 速度快成本低
+- **适用场景**: 快速响应、长文档处理、成本敏感场景
+
+### 模型选择建议
+
+#### 复杂推理和编程任务
+- **首选**: GLM-4.5 (思考模式 + 代码专精)
+- **备选**: GPT-5 (新一代推理能力)
+
+#### 长文档处理
+- **首选**: GLM-4.5 (128K上下文 + 96K输出)
+- **备选**: GPT-4o/GPT-4o-mini (128K上下文)
+
+#### 多模态任务
+- **首选**: GPT-5/GPT-5-mini (多模态支持)
+- **备选**: GPT-4o/GPT-4o-mini (多模态支持)
+
+#### 日常对话和一般任务
+- **首选**: GLM-4-Plus (综合性能优秀)
+- **备选**: GPT-4o-mini (成本效益好)
+
+#### 成本敏感场景
+- **首选**: GPT-4o-mini (128K上下文 + 优秀成本效益)
+- **备选**: GLM-4-Plus (32K上下文 + 优秀成本效益)
 
 ## 项目结构
 
@@ -179,6 +274,42 @@ AI Agent > 已切换到 OpenAI GPT-4o-mini
 
 你 > switch zhipu glm-4-plus  
 AI Agent > 已切换到 智谱AI GLM-4-Plus
+
+你 > switch zhipu glm-4.5
+AI Agent > 已切换到 智谱AI GLM-4.5 (思考模式已启用)
+```
+
+### LLM模型使用指南
+
+#### 智谱AI模型选择建议
+- **GLM-4.5**: 适合复杂推理、代码生成、长文档处理
+  - 支持128K上下文，可处理超长文档
+  - 思考模式提供更好的推理能力
+  - 专精代码生成和工具调用
+- **GLM-4-Plus**: 适合日常对话、创意写作、一般任务
+  - 综合性能优秀，响应速度快
+  - 成本效益好，适合频繁使用
+
+#### OpenAI模型选择建议
+- **GPT-5**: 适合复杂推理、创意写作、高级任务
+  - 最新一代模型，推理能力最强
+  - 适合需要深度思考的场景
+- **GPT-5-mini**: 适合快速响应、日常对话、成本敏感场景
+  - 32K输出token，适合长文本生成
+  - 成本效益优秀
+- **GPT-4o**: 适合平衡性能和成本的场景
+- **GPT-4o-mini**: 适合快速响应和成本敏感场景
+
+#### 模型切换最佳实践
+```bash
+# 查看所有可用模型
+llms
+
+# 根据任务类型切换模型
+switch zhipu glm-4.5    # 复杂推理任务
+switch zhipu glm-4-plus # 日常对话任务
+switch openai gpt-5     # 创意写作任务
+switch openai gpt-5-mini # 快速响应任务
 ```
 
 ### 全局记忆系统示例
@@ -400,11 +531,27 @@ Final Answer: 数据库包含以下记录...
 创建 `.env` 文件进行配置参见.env.example：
 
 ### LLM配置
-- `ZHIPU_API_KEY`: 智谱AI API密钥
-- `OPENAI_API_KEY`: OpenAI API密钥
-- `OPENAI_BASE_URL`: OpenAI API基础URL(可选)
-- `DEFAULT_LLM_PROVIDER`: 默认LLM提供商(`zhipu`/`openai`)
-- `DEFAULT_LLM_MODEL`: 默认模型名称
+- `ZHIPU_API_KEY`: 智谱AI API密钥 (必需，用于GLM-4.5和GLM-4-Plus)
+- `OPENAI_API_KEY`: OpenAI API密钥 (必需，用于GPT-5、GPT-5-mini、GPT-4o等)
+- `OPENAI_BASE_URL`: OpenAI API基础URL(可选，用于自定义API端点)
+- `DEFAULT_LLM_PROVIDER`: 默认LLM提供商(`zhipu`/`openai`)，默认为`zhipu`
+- `DEFAULT_LLM_MODEL`: 默认模型名称，如`glm-4-plus`、`gpt-4o-mini`等
+
+#### LLM配置示例
+```bash
+# 智谱AI配置
+ZHIPU_API_KEY=your_zhipu_api_key_here
+DEFAULT_LLM_PROVIDER=zhipu
+DEFAULT_LLM_MODEL=glm-4-plus
+
+# OpenAI配置
+OPENAI_API_KEY=your_openai_api_key_here
+DEFAULT_LLM_PROVIDER=openai
+DEFAULT_LLM_MODEL=gpt-4o-mini
+
+# 自定义OpenAI端点(可选)
+OPENAI_BASE_URL=https://api.openai.com/v1
+```
 
 ### 工具配置
 - `TAVILY_API_KEY`: Tavily搜索API密钥(推荐)
@@ -605,6 +752,33 @@ agent = await agent_factory.create_agent(
 5. **搜索失败**: 检查网络连接和API密钥配置
 6. **LLM切换失败**: 确保目标LLM的API密钥已正确配置
 
+### LLM相关问题
+
+1. **智谱AI连接失败**:
+   - 检查 `ZHIPU_API_KEY` 是否正确设置
+   - 确认网络能够访问智谱AI API
+   - 检查API密钥是否有足够额度
+
+2. **OpenAI连接失败**:
+   - 检查 `OPENAI_API_KEY` 是否正确设置
+   - 确认网络能够访问OpenAI API
+   - 如果使用代理，检查代理设置
+
+3. **模型切换失败**:
+   - 使用 `llms` 命令查看可用模型
+   - 确认目标模型的API密钥已配置
+   - 检查模型名称是否正确
+
+4. **GLM-4.5思考模式问题**:
+   - GLM-4.5会自动启用思考模式
+   - 如果遇到超时，可以尝试切换到GLM-4-Plus
+   - 检查API密钥是否有GLM-4.5的使用权限
+
+5. **GPT-5模型不可用**:
+   - 确认API密钥有GPT-5的访问权限
+   - 某些地区可能暂时无法访问GPT-5
+   - 可以尝试使用GPT-5-mini作为替代
+
 ### 调试方法
 
 1. 检查日志输出信息
@@ -625,6 +799,8 @@ agent = await agent_factory.create_agent(
 4. 发起Pull Request
 
 ## 更新日志
+
+
 
 ### v2.4.0 (2025-08-15)
 - **Notion集成**: 完整的Notion知识管理功能
