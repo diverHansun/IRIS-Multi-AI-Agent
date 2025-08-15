@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # 高德地图 API 配置
     amap_api_key: str = os.getenv("AMAP_API_KEY") or ""
     
+    # Notion API 配置
+    notion_token: str = os.getenv("NOTION_TOKEN") or ""
+    
     # 默认LLM配置
     default_llm_provider: str = os.getenv("DEFAULT_LLM_PROVIDER") or "zhipu"
     default_llm_model: str = os.getenv("DEFAULT_LLM_MODEL") or ""
@@ -93,6 +96,13 @@ if not settings.amap_api_key:
     print("HINT: Please set your Amap API key in .env file for map search functionality")
 else:
     print(f"SUCCESS: Amap API key configured: {settings.amap_api_key[:10]}...{settings.amap_api_key[-10:]}") 
+
+# 检查 Notion API 密钥
+if not settings.notion_token:
+    print("WARNING: NOTION_TOKEN not found")
+    print("HINT: Please set your Notion integration token in .env file for Notion functionality")
+else:
+    print(f"SUCCESS: Notion token configured: {settings.notion_token[:10]}...{settings.notion_token[-10:]}")
 
 # 显示LLM配置信息
 available_llms = []

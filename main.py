@@ -406,6 +406,9 @@ async def cli_async():
                 if llm_mode:
                     # LLM模式：直接与LLM交互，支持流式输出和记忆功能
                     try:
+                        # 导入必要的消息类型
+                        from langchain_core.messages import HumanMessage, AIMessage
+                        
                         # 获取Agent的LLM信息
                         info = agent.get_info()
                         provider = info.get('provider', 'unknown')
@@ -422,7 +425,6 @@ async def cli_async():
                                 context_messages = history.messages[-10:] if history.messages else []
                                 
                                 # 构建包含历史的提示
-                                from langchain_core.messages import HumanMessage, AIMessage
                                 full_prompt = query
                                 if context_messages:
                                     context_text = "\n".join([f"{'用户' if isinstance(msg, HumanMessage) else 'AI'}: {msg.content}" for msg in context_messages[-6:]])

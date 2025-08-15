@@ -1,15 +1,16 @@
 # Multi-AI-Agent 
-基于LangChain和多LLM的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎、高德地图和OKX加密货币分析功能。
+基于LangChain和多LLM的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎、高德地图、OKX加密货币和Notion知识管理功能。
 
 ## 功能特性
 
 - **多LLM支持**: 智谱AI GLM-4.5系列、OpenAI GPT-4o系列，支持动态切换
 - **智能对话**: 基于ReAct推理框架的自然语言交互
 - **全局记忆系统**: 基于LangChain 2025最佳实践的统一记忆管理
-- **工具调用**: 支持数学计算、网络搜索、地图导航、加密货币分析等多种工具
+- **工具调用**: 支持数学计算、网络搜索、地图导航、加密货币分析、Notion知识管理等多种工具
 - **多搜索引擎**: 集成Tavily搜索API + DuckDuckGo备用搜索
 - **高德地图集成**: 支持地点搜索、附近查询、驾车导航、步行导航、公共交通规划
 - **OKX加密货币**: 实时行情、K线分析、价格预警、市场洞察
+- **Notion集成**: 智能搜索、页面管理、数据库操作，支持Direct API访问
 - **中文优化**: 针对中文场景优化的提示词和交互体验
 - **异步支持**: 支持同步和异步调用模式
 - **多用户支持**: 支持会话隔离和持久化存储
@@ -47,6 +48,7 @@ pip install -r requirements.txt
 2. **OpenAI** - [OpenAI API](https://platform.openai.com/) (可选)
 3. **Tavily搜索** - [Tavily](https://tavily.com/) (推荐)
 4. **高德地图** - [高德地图开放平台](https://lbs.amap.com/dev/key/app) (推荐)
+5. **Notion** - [Notion API](https://developers.notion.com/) (可选)
 
 复制 `.env.example` 为 `.env`：
 
@@ -63,6 +65,9 @@ OPENAI_API_KEY=your_openai_api_key_here
 # 推荐 - 搜索和地图功能
 TAVILY_API_KEY=your_tavily_api_key_here
 AMAP_API_KEY=your_amap_api_key_here
+
+# 可选 - Notion知识管理
+NOTION_TOKEN=your_notion_integration_token_here
 
 # 可选 - 加密货币功能
 # OKX_API_KEY=your_okx_api_key_here
@@ -121,6 +126,13 @@ ZHIPU_Agent_Demo/
 │   │   ├── search_tools.py          # DuckDuckGo搜索工具
 │   │   ├── tavily_search_tool.py    # Tavily搜索工具
 │   │   ├── amap_search.py           # 高德地图工具
+│   │   ├── notion/                  # Notion知识管理工具
+│   │   │   ├── client.py            # Notion API客户端
+│   │   │   ├── search_tools.py      # 智能搜索工具
+│   │   │   ├── page_tools.py        # 页面管理工具
+│   │   │   ├── database_tools.py    # 数据库操作工具
+│   │   │   ├── langchain_tools.py   # LangChain工具集成
+│   │   │   └── ...
 │   │   ├── okx_market/              # OKX加密货币工具
 │   │   │   ├── client.py            # OKX客户端
 │   │   │   ├── langchain_tools.py   # LangChain工具集成
@@ -289,6 +301,32 @@ Action Input: BTC 1H 24
 Final Answer: 根据24小时K线数据分析...
 ```
 
+### Notion知识管理
+
+#### 智能搜索
+```
+你 > 在Notion中搜索2025/6/19的页面
+AI Agent > Action: notion_search
+Action Input: 2025/6/19
+Final Answer: 找到页面"2025/6/19"，这是一个工作日志页面...
+```
+
+#### 页面内容获取
+```
+你 > 获取页面ID为xxx的完整内容
+AI Agent > Action: notion_get_page_content
+Action Input: xxx
+Final Answer: 页面包含以下内容块...
+```
+
+#### 数据库查询
+```
+你 > 查询数据库中最近的10条记录
+AI Agent > Action: notion_query_database
+Action Input: database_id
+Final Answer: 数据库包含以下记录...
+```
+
 ## 可用工具
 
 ### 数学计算工具
@@ -320,6 +358,24 @@ Final Answer: 根据24小时K线数据分析...
   - 支持多种策略：最快路线(0)、最经济(1)、最少换乘(2)、最少步行(3)、不乘地铁(5)
 - **amap_route_subway**: 地铁优先路线规划，使用最少换乘策略
 - **amap_route_bus**: 公交专线规划，只使用公交车不包含地铁
+
+### Notion知识管理工具
+
+#### 搜索功能
+- **notion_search**: 智能全局搜索，支持精确匹配和相关性排序
+- **notion_search_databases**: 专门搜索数据库
+- **notion_search_pages**: 专门搜索页面
+
+#### 页面管理
+- **notion_get_page_info**: 获取页面基本信息
+- **notion_get_page_content**: 获取页面详细内容
+- **notion_get_page_summary**: 获取页面摘要
+- **notion_search_page_content**: 在页面内容中搜索关键词
+
+#### 数据库操作
+- **notion_get_database_info**: 获取数据库信息和架构
+- **notion_query_database**: 查询数据库记录
+- **notion_get_database_summary**: 获取数据库摘要
 
 ### OKX加密货币工具
 
@@ -353,6 +409,7 @@ Final Answer: 根据24小时K线数据分析...
 ### 工具配置
 - `TAVILY_API_KEY`: Tavily搜索API密钥(推荐)
 - `AMAP_API_KEY`: 高德地图API密钥(推荐)
+- `NOTION_TOKEN`: Notion集成Token(可选)
 - `OKX_API_KEY`: OKX API密钥(可选)
 - `OKX_SECRET_KEY`: OKX Secret密钥(可选)  
 - `OKX_PASSPHRASE`: OKX Passphrase(可选)
@@ -377,6 +434,25 @@ Final Answer: 根据24小时K线数据分析...
 1. 优先使用Tavily搜索(如果配置了API密钥)
 2. Tavily不可用时自动降级到DuckDuckGo搜索
 3. 支持多轮搜索和结果筛选
+
+## Notion集成说明
+
+### 配置要求
+- **API Token**: 需要创建Notion Integration获取API密钥
+- **页面访问权限**: Integration需要被添加到要访问的页面或数据库
+- **配置方式**: 在`.env`文件中设置`NOTION_TOKEN`
+
+### 智能搜索特性
+- **相关性排序**: 自动按相关性重新排序搜索结果
+- **多格式支持**: 支持多种日期格式匹配(2025/6/19、2025-6-19、2025年6月19日)
+- **精确匹配优先**: 完全匹配的结果总是排在最前面
+- **容错处理**: 搜索失败时自动降级到标准搜索
+
+### 功能架构
+- **Direct API**: 直接调用Notion REST API，性能稳定
+- **同步包装**: 异步API的同步包装，兼容LangChain工具系统
+- **错误处理**: 完善的错误处理和重试机制
+- **批量操作**: 支持批量数据获取和处理
 
 ## 开发说明
 
@@ -435,8 +511,9 @@ AgentFactory (Agent工厂)
 2. **Tavily搜索**: 高质量AI搜索引擎(推荐)
 3. **DuckDuckGo搜索**: 免费备用搜索引擎
 4. **高德地图**: 完整的地图和导航服务
-5. **OKX加密货币**: 实时行情和技术分析
-6. **MCP工具**: 基于MCP协议的扩展工具
+5. **Notion集成**: 知识管理和智能搜索(Direct API)
+6. **OKX加密货币**: 实时行情和技术分析
+7. **MCP工具**: 基于MCP协议的扩展工具
 
 ### 添加新工具
 
@@ -548,6 +625,25 @@ agent = await agent_factory.create_agent(
 4. 发起Pull Request
 
 ## 更新日志
+
+### v2.4.0 (2025-08-15)
+- **Notion集成**: 完整的Notion知识管理功能
+  - 智能搜索算法：解决相关性排序问题，精确匹配目标内容
+  - 页面管理：支持页面信息获取、内容提取、搜索功能
+  - 数据库操作：支持数据库查询、记录获取、架构分析
+  - Direct API集成：使用原生Notion API，性能稳定可靠
+- **智能搜索增强**：
+  - 多维度评分算法：精确匹配、子串匹配、字符串相似度、日期格式匹配
+  - 备选查询生成：自动生成多种格式的搜索查询提升覆盖率
+  - 结果去重排序：基于相关性重新排列搜索结果
+- **OpenAI Agent优化**：
+  - 解决页面内容获取问题：修复无法获取完整页面内容的bug
+  - 工具调用改进：使用隐式工具调用，提升用户体验
+  - 多步骤任务支持：自动完成复杂的工具调用序列
+- **代码清理和优化**：
+  - 移除临时测试文件，保持项目结构清洁
+  - 完善错误处理和异常管理
+  - 统一同步异步接口，提升代码一致性
 
 ### v2.3.0 (2025-08-08)
 - **全局记忆系统**: 重构为统一的全局记忆管理架构
