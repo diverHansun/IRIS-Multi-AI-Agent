@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     openai_api_key: str = os.getenv("OPENAI_API_KEY") or ""
     openai_base_url: str = os.getenv("OPENAI_BASE_URL") or ""
     
+    # Ollama API 配置
+    ollama_base_url: str = os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
+    ollama_timeout: int = int(os.getenv("OLLAMA_TIMEOUT", "60"))
+    ollama_keep_alive: str = os.getenv("OLLAMA_KEEP_ALIVE") or "5m"
+    default_ollama_model: str = os.getenv("DEFAULT_OLLAMA_MODEL") or "gpt-oss:20b"
+    
     # Tavily Search API 配置
     tavily_api_key: str = os.getenv("TAVILY_API_KEY") or ""
     
@@ -110,6 +116,8 @@ if settings.zhipu_api_key:
     available_llms.append("zhipu")
 if settings.openai_api_key:
     available_llms.append("openai")
+# Ollama 不需要API密钥，始终可用
+available_llms.append("ollama")
 
 if available_llms:
     print(f"SUCCESS: Available LLM providers: {', '.join(available_llms)}")

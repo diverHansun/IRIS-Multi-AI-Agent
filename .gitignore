@@ -103,7 +103,6 @@ celerybeat.pid
 .env.local
 .env.development
 .env.production
-.env.example
 .venv
 env/
 venv/
@@ -144,6 +143,10 @@ cython_debug/
 # Claude
 .claude/
 CLAUDE.md
+
+#Codex
+Codex.md
+
 # OS
 .DS_Store
 Thumbs.db

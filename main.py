@@ -35,7 +35,7 @@ def print_welcome():
 多LLM智能Agent Demo
 
 支持的功能：
-• 多LLM支持 (智谱AI GLM-4-plus/GLM-4.5 OpenAI GPT-4o/4o-mini)
+• 多LLM支持 (智谱AI GLM-4-plus/GLM-4.5 OpenAI GPT-4o/4o-mini Ollama本地模型)
 • 智能对话和复杂推理
 • 数学计算、网络搜索、地图导航、加密货币行情
 • 会话记忆和多轮对话
