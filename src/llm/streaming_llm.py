@@ -216,6 +216,135 @@ class OpenAIStreamingLLM(StreamingLLM):
             logger.error(f"OpenAI流式生成失败: {e}")
             yield f"流式生成错误: {str(e)}"
 
+class OllamaStreamingLLM(StreamingLLM):
+    """Ollama流式LLM实现"""
+    
+    def __init__(self, llm: BaseChatModel):
+        """
+        初始化Ollama流式LLM
+        
+        Args:
+            llm: LangChain ChatModel实例
+        """
+        self.llm = llm
+    
+    async def stream_generate(
+        self, 
+        prompt: str, 
+        on_token: Optional[Callable[[str], None]] = None
+    ) -> AsyncGenerator[str, None]:
+        """实现Ollama的流式生成"""
+        try:
+            # 调试输出
+            logger.info(f"[DEBUG] OllamaStreamingLLM开始流式生成")
+            logger.info(f"[DEBUG] 提示长度: {len(prompt)} 字符")
+            logger.info(f"[DEBUG] 提示预览: {prompt[:200]}...")
+            logger.info(f"[DEBUG] LLM类型: {type(self.llm)}")
+            
+            # 创建流式回调处理器
+            callback_handler = StreamingCallbackHandler(on_token)
+            
+            # 使用流式接口 - 添加异步锁防止并发问题
+            logger.info(f"[DEBUG] 开始调用self.llm.astream()")
+            chunk_count = 0
+            
+            try:
+                async for chunk in self.llm.astream(
+                    [HumanMessage(content=prompt)],
+                    config={"callbacks": [callback_handler]}
+                ):
+                    if hasattr(chunk, 'content') and chunk.content:
+                        chunk_count += 1
+                        logger.debug(f"[DEBUG] 收到chunk #{chunk_count}: {chunk.content[:50]}...")
+                        yield chunk.content
+                
+                logger.info(f"[DEBUG] 流式生成完成，共 {chunk_count} 个chunks")
+                
+            except Exception as astream_e:
+                logger.error(f"[DEBUG] astream调用异常: {type(astream_e).__name__}: {astream_e}")
+                
+                # 详细分析502错误并使用HTTP fallback
+                if hasattr(astream_e, 'status_code') and astream_e.status_code == 502:
+                    logger.error(f"[DEBUG] 502错误，启用HTTP fallback")
+                    logger.error(f"[DEBUG]   LangChain异常: {type(astream_e).__name__}: {astream_e}")
+                    
+                    # 使用直接HTTP客户端作为fallback
+                    try:
+                        from .ollama_http_client import OllamaHttpClient
+                        
+                        base_url = getattr(self.llm, 'base_url', 'http://localhost:11434')
+                        model = getattr(self.llm, 'model', 'unknown')
+                        temperature = getattr(self.llm, 'temperature', 0.1)
+                        
+                        logger.error(f"[DEBUG] 使用HTTP fallback: {base_url}, 模型: {model}")
+                        
+                        http_client = OllamaHttpClient(base_url=base_url, timeout=300)
+                        
+                        chunk_count = 0
+                        async for chunk in http_client.stream_chat(model, prompt, temperature):
+                            chunk_count += 1
+                            logger.debug(f"[DEBUG] HTTP fallback chunk #{chunk_count}: {chunk[:30]}...")
+                            yield chunk
+                        
+                        logger.info(f"[DEBUG] HTTP fallback成功，共 {chunk_count} chunks")
+                        return
+                        
+                    except Exception as http_e:
+                        logger.error(f"[DEBUG] HTTP fallback也失败: {http_e}")
+                        # 继续原有的fallback逻辑
+                
+                # 如果是并发问题，尝试使用同步方法作为fallback
+                if "asynchronous generator is already running" in str(astream_e):
+                    logger.warning(f"[DEBUG] 检测到异步生成器并发问题，尝试同步调用作为fallback")
+                    
+                    # 使用invoke作为fallback
+                    try:
+                        result = await self.llm.ainvoke([HumanMessage(content=prompt)])
+                        if hasattr(result, 'content') and result.content:
+                            # 将完整结果分块返回以模拟流式
+                            content = result.content
+                            chunk_size = max(1, len(content) // 10)  # 分成约10个块
+                            for i in range(0, len(content), chunk_size):
+                                chunk = content[i:i+chunk_size]
+                                logger.debug(f"[DEBUG] Fallback chunk: {chunk[:30]}...")
+                                yield chunk
+                            return
+                        else:
+                            yield "Fallback response completed"
+                            return
+                    except Exception as fallback_e:
+                        logger.error(f"[DEBUG] Fallback也失败: {fallback_e}")
+                
+                raise astream_e
+                    
+        except Exception as e:
+            logger.error(f"[DEBUG] Ollama流式生成异常: {type(e).__name__}: {e}")
+            if hasattr(e, 'status_code'):
+                logger.error(f"[DEBUG] 状态码: {e.status_code}")
+            if hasattr(e, 'response'):
+                logger.error(f"[DEBUG] 响应内容: {e.response}")
+            if hasattr(e, 'request'):
+                logger.error(f"[DEBUG] 请求信息: {e.request}")
+            
+            # 添加更多调试信息
+            logger.error(f"[DEBUG] 异常属性: {dir(e)}")
+            logger.error(f"[DEBUG] LLM配置检查:")
+            logger.error(f"[DEBUG]   model: {getattr(self.llm, 'model', 'Unknown')}")
+            logger.error(f"[DEBUG]   base_url: {getattr(self.llm, 'base_url', 'Unknown')}")
+            logger.error(f"[DEBUG]   timeout: {getattr(self.llm, 'timeout', 'Unknown')}")
+            
+            # 测试直接连接
+            logger.error(f"[DEBUG] 测试直接Ollama连接...")
+            try:
+                import requests
+                base_url = getattr(self.llm, 'base_url', 'http://localhost:11434')
+                response = requests.get(f"{base_url}/api/tags", timeout=10)
+                logger.error(f"[DEBUG] 直接连接状态: {response.status_code}")
+            except Exception as conn_e:
+                logger.error(f"[DEBUG] 直接连接失败: {conn_e}")
+            
+            yield f"流式生成错误: {str(e)}"
+
 class StreamingManager:
     """流式输出管理器"""
     
@@ -228,7 +357,7 @@ class StreamingManager:
         注册流式LLM
         
         Args:
-            provider: 提供商名称 (zhipu, openai)
+            provider: 提供商名称 (zhipu, openai, ollama)
             llm: LangChain ChatModel实例
         """
         try:
@@ -236,6 +365,8 @@ class StreamingManager:
                 self.streaming_llms[provider] = ZhipuStreamingLLM(llm)
             elif provider.lower() == "openai":
                 self.streaming_llms[provider] = OpenAIStreamingLLM(llm)
+            elif provider.lower() == "ollama":
+                self.streaming_llms[provider] = OllamaStreamingLLM(llm)
             else:
                 logger.warning(f"不支持的流式LLM提供商: {provider}")
                 
@@ -294,6 +425,11 @@ class StreamingManager:
             logger.error(error_msg)
             full_response = error_msg
             
+            # 如果是Unicode编码错误，不要误报为网络错误
+            if "gbk" in str(e) and "can't encode" in str(e):
+                logger.warning("[DEBUG] 检测到Unicode编码问题，这不是网络502错误")
+                full_response = "响应成功，但显示时遇到编码问题"
+            
         finally:
             # 停止显示
             if display:
@@ -303,20 +439,35 @@ class StreamingManager:
                 elapsed = time.time() - start_time
                 chars_per_second = len(full_response) / elapsed if elapsed > 0 else 0
                 
-                # 显示最终结果和性能指标
-                console.print(Panel(
-                    full_response,
-                    title=f"[bold green]{display_title} (完成)[/]",
-                    border_style="green"
-                ))
+                # 显示最终结果和性能指标 - 安全处理Unicode
+                try:
+                    console.print(Panel(
+                        full_response,
+                        title=f"[bold green]{display_title} (完成)[/]",
+                        border_style="green"
+                    ))
+                except UnicodeEncodeError:
+                    # 如果有Unicode问题，使用简化显示
+                    print(f"\n=== {display_title} (完成) ===")
+                    # 尝试安全编码
+                    try:
+                        safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
+                        print(safe_response)
+                    except:
+                        print("[响应内容包含特殊字符，无法完整显示]")
+                    print("=" * 50)
                 
                 if chunk_count > 0:
-                    console.print(
-                        f"[dim]⚡ 性能: {elapsed:.2f}s | "
-                        f"{len(full_response)} 字符 | "
-                        f"{chars_per_second:.1f} 字符/秒 | "
-                        f"{chunk_count} 数据块[/]"
-                    )
+                    try:
+                        console.print(
+                            f"[dim]⚡ 性能: {elapsed:.2f}s | "
+                            f"{len(full_response)} 字符 | "
+                            f"{chars_per_second:.1f} 字符/秒 | "
+                            f"{chunk_count} 数据块[/]"
+                        )
+                    except UnicodeEncodeError:
+                        # 安全的性能显示
+                        print(f"性能: {elapsed:.2f}s | {len(full_response)} 字符 | {chars_per_second:.1f} 字符/秒 | {chunk_count} 数据块")
         
         return {
             "response": full_response,

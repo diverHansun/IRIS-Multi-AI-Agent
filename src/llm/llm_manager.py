@@ -19,6 +19,7 @@ class LLMProvider(Enum):
     """LLM提供商枚举"""
     ZHIPU = "zhipu"
     OPENAI = "openai"
+    OLLAMA = "ollama"
 
 class LLMManager:
     """LLM管理器"""
@@ -100,6 +101,46 @@ class LLMManager:
             "default_model": "gpt-4o-mini",
             "api_key_env": "OPENAI_API_KEY",
             "class": OpenAILLM
+        },
+        LLMProvider.OLLAMA: {
+            "name": "Ollama本地模型",
+            "models": {
+                "gpt-oss:20b": {
+                    "name": "GPT-OSS-20B",
+                    "description": "开源GPT模型，20B参数，强大的通用对话能力",
+                    "max_tokens": 8192,
+                    "context_window": 32768,
+                    "recommended": True,
+                    "features": ["chat", "reasoning", "large_model"]
+                },
+                "qwen3:8b": {
+                    "name": "Qwen3-8B",
+                    "description": "阿里巴巴通义千问3.0模型，中文优化，综合能力强",
+                    "max_tokens": 32768,
+                    "context_window": 32768,
+                    "recommended": True,
+                    "features": ["chinese_optimized", "chat", "reasoning"]
+                },
+                "gemma3:latest": {
+                    "name": "Gemma3-Latest",
+                    "description": "Google Gemma3模型最新版本，高效轻量",
+                    "max_tokens": 8192,
+                    "context_window": 32768,
+                    "recommended": True,
+                    "features": ["efficient", "chat", "reasoning"]
+                },
+                "deepseek-r1:1.5b": {
+                    "name": "DeepSeek-R1-1.5B",
+                    "description": "DeepSeek推理模型，专注逻辑推理和数学计算",
+                    "max_tokens": 4096,
+                    "context_window": 16384,
+                    "recommended": False,
+                    "features": ["reasoning", "mathematics", "lightweight"]
+                }
+            },
+            "default_model": "gpt-oss:20b",
+            "api_key_env": None,  # Ollama不需要API密钥
+            "class": None  # 稍后导入避免循环依赖
         }
     }
     
@@ -129,7 +170,11 @@ class LLMManager:
         providers = []
         
         for provider, config in self.SUPPORTED_LLMS.items():
-            has_api_key = provider in self._api_keys
+            # Ollama不需要API密钥，始终可用
+            if provider == LLMProvider.OLLAMA:
+                has_api_key = True
+            else:
+                has_api_key = provider in self._api_keys
             
             provider_info = {
                 "provider": provider.value,
@@ -156,12 +201,18 @@ class LLMManager:
             raise ValueError(f"不支持的LLM提供商: {provider}")
         
         config = self.SUPPORTED_LLMS[provider]
+        # Ollama不需要API密钥，始终可用
+        if provider == LLMProvider.OLLAMA:
+            available = True
+        else:
+            available = provider in self._api_keys
+        
         return {
             "provider": provider.value,
             "name": config["name"],
             "models": config["models"],
             "default_model": config["default_model"],
-            "available": provider in self._api_keys
+            "available": available
         }
     
     def validate_model(self, provider: Union[str, LLMProvider], model: str) -> bool:
@@ -201,11 +252,12 @@ class LLMManager:
         
         config = self.SUPPORTED_LLMS[provider]
         
-        # 确定API密钥
-        if not api_key:
-            api_key = self._api_keys.get(provider)
+        # 确定API密钥（Ollama不需要API密钥）
+        if provider != LLMProvider.OLLAMA:
             if not api_key:
-                raise ValueError(f"未找到{config['name']}的API密钥，请设置环境变量 {config['api_key_env']}")
+                api_key = self._api_keys.get(provider)
+                if not api_key:
+                    raise ValueError(f"未找到{config['name']}的API密钥，请设置环境变量 {config['api_key_env']}")
         
         # 确定模型
         if not model:
@@ -226,6 +278,15 @@ class LLMManager:
             base_url = settings.openai_base_url or kwargs.get('base_url')
             return build_openai_chat(api_key=api_key, model=model, base_url=base_url, **kwargs)
         
+        elif provider == LLMProvider.OLLAMA:
+            # 动态导入Ollama LLM类
+            try:
+                from .ollama_llm import OllamaLLM
+                llm_wrapper = OllamaLLM(model=model, **kwargs)
+                return llm_wrapper.create_llm()
+            except ImportError as e:
+                raise ImportError(f"无法导入Ollama LLM: {e}")
+        
         else:
             raise ValueError(f"不支持的LLM提供商: {provider}")
     
@@ -244,6 +305,12 @@ class LLMManager:
         
         model_config = config["models"][model]
         
+        # Ollama不需要API密钥，始终可用
+        if provider == LLMProvider.OLLAMA:
+            available = True
+        else:
+            available = provider in self._api_keys
+        
         return {
             "provider": provider.value,
             "provider_name": config["name"],
@@ -252,7 +319,7 @@ class LLMManager:
             "description": model_config["description"],
             "max_tokens": model_config["max_tokens"],
             "recommended": model_config.get("recommended", False),
-            "available": provider in self._api_keys
+            "available": available
         }
     
     def set_api_key(self, provider: Union[str, LLMProvider], api_key: str):
@@ -279,7 +346,9 @@ class LLMManager:
         recommended = []
         
         for provider, config in self.SUPPORTED_LLMS.items():
-            if provider in self._api_keys:  # 只返回有API密钥的
+            # Ollama不需要API密钥，始终可用；其他需要API密钥
+            provider_available = (provider == LLMProvider.OLLAMA) or (provider in self._api_keys)
+            if provider_available:
                 for model, model_config in config["models"].items():
                     if model_config.get("recommended", False):
                         recommended.append({

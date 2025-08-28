@@ -12,6 +12,7 @@ from enum import Enum
 
 from .zhipu_agent import build_zhipu_agent, ZhipuAgent
 from .openai_agent import build_openai_agent, OpenAIAgent
+from .ollama_agent import build_ollama_agent, OllamaAgent
 from ..llm.llm_manager import LLMManager, LLMProvider
 from ..config import settings
 
@@ -36,7 +37,7 @@ class AgentFactory:
         use_cache: bool = True,
         global_memory_manager = None,
         **kwargs
-    ) -> Union[ZhipuAgent, OpenAIAgent]:
+    ) -> Union[ZhipuAgent, OpenAIAgent, OllamaAgent]:
         """
         创建Agent实例
         
@@ -69,8 +70,8 @@ class AgentFactory:
             logger.info(f"使用缓存的Agent: {provider.value}/{model}")
             return self._cached_agents[cache_key]
         
-        # 获取API密钥
-        if not api_key:
+        # 获取API密钥（Ollama不需要API密钥）
+        if provider != LLMProvider.OLLAMA and not api_key:
             if provider == LLMProvider.ZHIPU:
                 api_key = settings.zhipu_api_key
             elif provider == LLMProvider.OPENAI:
@@ -110,6 +111,24 @@ class AgentFactory:
                     enable_memory=enable_memory,
                     global_memory_manager=global_memory_manager,
                     **kwargs
+                )
+            
+            elif provider == LLMProvider.OLLAMA:
+                # Ollama模型参数处理 - 针对Agent模式优化
+                base_url = kwargs.get('base_url', settings.ollama_base_url)
+                
+                # Agent模式强制使用低温度，除非用户显式指定
+                agent_temperature = 0.0 if temperature == 0.1 else temperature
+                
+                agent = await build_ollama_agent(
+                    model=model,
+                    base_url=base_url,
+                    verbose=verbose,
+                    temperature=agent_temperature,  # 使用优化的温度
+                    enable_memory=enable_memory,
+                    global_memory_manager=global_memory_manager,
+                    disable_thinking_mode=kwargs.get('disable_thinking_mode', True),  # 默认关闭思考模式
+                    **{k: v for k, v in kwargs.items() if k != 'disable_thinking_mode'}
                 )
             
             else:
@@ -204,7 +223,7 @@ async def create_agent(
     verbose: bool = False,
     temperature: float = 0.1,
     **kwargs
-) -> Union[ZhipuAgent, OpenAIAgent]:
+) -> Union[ZhipuAgent, OpenAIAgent, OllamaAgent]:
     """创建Agent的便捷函数"""
     return await agent_factory.create_agent(
         provider=provider,
@@ -220,7 +239,7 @@ def get_available_configurations() -> Dict[str, Any]:
     return agent_factory.get_available_configurations()
 
 
-async def create_default_agent(**kwargs) -> Union[ZhipuAgent, OpenAIAgent]:
+async def create_default_agent(**kwargs) -> Union[ZhipuAgent, OpenAIAgent, OllamaAgent]:
     """创建默认Agent"""
     configs = get_available_configurations()
     default_config = configs.get("default_config")
@@ -244,3 +263,15 @@ async def create_zhipu_agent(model: str = "glm-4-plus", **kwargs) -> ZhipuAgent:
 async def create_openai_agent(model: str = "gpt-4o-mini", **kwargs) -> OpenAIAgent:
     """快速创建OpenAI Agent"""
     return await create_agent(provider="openai", model=model, **kwargs)
+
+
+async def create_ollama_agent(model: str = "gpt-oss:20b", **kwargs) -> OllamaAgent:
+    """快速创建Ollama Agent"""
+    # 为Agent模式设置默认优化参数
+    defaults = {
+        "temperature": 0.0,  # Agent模式使用低温度
+        "disable_thinking_mode": True,  # 关闭思考模式
+    }
+    # 用户传递的参数覆盖默认值
+    defaults.update(kwargs)
+    return await create_agent(provider="ollama", model=model, **defaults)

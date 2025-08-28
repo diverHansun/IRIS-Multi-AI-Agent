@@ -101,6 +101,18 @@ class GlobalMemoryManager:
         
         return self._session_histories[session_id]
     
+    def get_message_history(self, session_id: str) -> BaseChatMessageHistory:
+        """
+        获取消息历史（兼容性别名）
+        
+        Args:
+            session_id: 会话ID
+            
+        Returns:
+            聊天消息历史实例
+        """
+        return self.get_session_history(session_id)
+    
     def add_conversation(self, session_id: str, user_message: str, ai_response: str, 
                         current_llm_info: Optional[Dict[str, Any]] = None) -> bool:
         """
