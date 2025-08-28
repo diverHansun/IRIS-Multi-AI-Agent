@@ -220,15 +220,17 @@ python main.py --help
 ## 项目结构
 
 ```
-ZHIPU_Agent_Demo/
+Multi-AI-Agent/
 ├── src/
 │   ├── agents/              # Agent实现
 │   │   ├── zhipu_agent.py          # 智谱AI Agent
-│   │   ├── openai_agent.py         # OpenAI Agent  
+│   │   ├── openai_agent.py         # OpenAI Agent
+│   │   ├── ollama_agent.py         # Ollama本地Agent
 │   │   └── agent_factory.py        # Agent工厂
 │   ├── llm/                # 语言模型封装
 │   │   ├── zhipu_llm.py            # 智谱AI LLM
 │   │   ├── openai_llm.py           # OpenAI LLM
+│   │   ├── ollama_llm.py           # Ollama本地LLM
 │   │   ├── streaming_llm.py        # 流式输出LLM
 │   │   └── llm_manager.py          # LLM管理器
 │   ├── memory/             # 全局记忆系统
@@ -244,24 +246,23 @@ ZHIPU_Agent_Demo/
 │   │   ├── tavily_search_tool.py    # Tavily搜索工具
 │   │   ├── amap_search.py           # 高德地图工具
 │   │   ├── notion/                  # Notion知识管理工具
-│   │   │   ├── client.py            # Notion API客户端
-│   │   │   ├── search_tools.py      # 智能搜索工具
-│   │   │   ├── page_tools.py        # 页面管理工具
-│   │   │   ├── database_tools.py    # 数据库操作工具
-│   │   │   ├── langchain_tools.py   # LangChain工具集成
-│   │   │   └── ...
 │   │   ├── okx_market/              # OKX加密货币工具
-│   │   │   ├── client.py            # OKX客户端
-│   │   │   ├── langchain_tools.py   # LangChain工具集成
-│   │   │   └── ...
-│   │   ├── mcp_client.py            # MCP客户端(备用)
-│   │   └── mcp_search_server.py     # MCP服务器(备用)
+│   │   └── ...
 │   └── config.py           # 配置管理
+├── tests/                  # 测试框架
+│   ├── unit/               # 单元测试
+│   ├── integration/        # 集成测试
+│   ├── conftest.py         # pytest配置
+│   └── README.md           # 测试指南
+├── tutorials/              # 教程文档
+│   ├── software_testing_guide.md   # 软件测试入门教程
+│   ├── langchain_tutorial.md       # LangChain框架教程
+│   └── README.md           # 教程索引
 ├── main.py                 # 主程序入口
+├── run_tests.py            # 测试运行脚本
 ├── requirements.txt        # 依赖列表
 ├── .env.example           # 环境变量示例
 ├── .gitignore             # Git忽略文件
-├── langchain_tutorial.md  # LangChain教程
 └── README.md              # 项目说明
 ```
 
