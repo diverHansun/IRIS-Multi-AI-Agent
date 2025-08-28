@@ -29,7 +29,7 @@ class OllamaLLM:
             "description": "开源GPT模型，20B参数，支持工具调用",
             "supports_tools": True,
             "parameters": {
-                "temperature": 0.0,  # Agent模式使用更低温度
+                "temperature": 0.1,  # Agent模式使用更低温度
                 "top_p": 0.9,
                 "top_k": 40,
                 "num_ctx": 32768
@@ -40,7 +40,7 @@ class OllamaLLM:
             "description": "通义千问3.0模型，中文优化，支持工具调用",
             "supports_tools": True,
             "parameters": {
-                "temperature": 0.0,  # Agent模式使用更低温度
+                "temperature": 0.1,  # Agent模式使用更低温度
                 "top_p": 0.8,
                 "top_k": 40,
                 "num_ctx": 32768
@@ -51,7 +51,7 @@ class OllamaLLM:
             "description": "Google Gemma3模型最新版本，支持工具调用",
             "supports_tools": True,
             "parameters": {
-                "temperature": 0.0,  # Agent模式使用更低温度
+                "temperature": 0.1,  # Agent模式使用更低温度
                 "top_p": 0.9,
                 "top_k": 40,
                 "num_ctx": 16384
@@ -62,7 +62,7 @@ class OllamaLLM:
             "description": "DeepSeek推理模型，专注逻辑推理，支持工具调用",
             "supports_tools": True,
             "parameters": {
-                "temperature": 0.0,  # Agent模式使用更低温度
+                "temperature": 0.1,  # Agent模式使用更低温度
                 "top_p": 0.9,
                 "top_k": 50,
                 "num_ctx": 16384
@@ -220,64 +220,21 @@ class OllamaLLM:
             # 创建ChatOllama实例
             logger.info(f"[DEBUG] 创建ChatOllama实例，request_timeout={float(self.timeout)}")
             
-            # 为本地Ollama服务创建禁用代理的HTTP客户端配置
-            # 解决代理环境下可能出现的502 Bad Gateway错误
-            try:
-                import httpx
-                # 创建禁用代理的HTTP客户端（仅对localhost/127.0.0.1禁用）
-                # 使用trust_env=False禁用环境变量中的代理设置
-                http_client = httpx.Client(
-                    timeout=httpx.Timeout(float(self.timeout)),
-                    trust_env=False  # 忽略环境变量中的代理设置
-                )
-                async_http_client = httpx.AsyncClient(
-                    timeout=httpx.Timeout(float(self.timeout)),
-                    trust_env=False  # 忽略环境变量中的代理设置
-                )
-                logger.info("[DEBUG] 已创建禁用代理的HTTP客户端，避免502错误")
-                
-                self._llm = ChatOllama(
-                    model=self.model,
-                    base_url=self.base_url,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    num_ctx=self.num_ctx,
-                    keep_alive=self.keep_alive,
-                    timeout=self.timeout,
-                    request_timeout=float(self.timeout),
-                    http_client=http_client,
-                    http_async_client=async_http_client,
-                    **self.extra_kwargs
-                )
-            except ImportError:
-                logger.warning("[DEBUG] httpx不可用，使用默认HTTP客户端")
-                self._llm = ChatOllama(
-                    model=self.model,
-                    base_url=self.base_url,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    num_ctx=self.num_ctx,
-                    keep_alive=self.keep_alive,
-                    timeout=self.timeout,
-                    request_timeout=float(self.timeout),
-                    **self.extra_kwargs
-                )
-            except Exception as e:
-                logger.warning(f"[DEBUG] HTTP客户端配置失败，使用默认设置: {e}")
-                self._llm = ChatOllama(
-                    model=self.model,
-                    base_url=self.base_url,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    num_ctx=self.num_ctx,
-                    keep_alive=self.keep_alive,
-                    timeout=self.timeout,
-                    request_timeout=float(self.timeout),
-                    **self.extra_kwargs
-                )
+            # 创建ChatOllama实例
+            # 注意: 不再强制禁用代理，依靠用户的代理配置（如Clash规则代理）处理网络路由
+            self._llm = ChatOllama(
+                model=self.model,
+                base_url=self.base_url,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                top_k=self.top_k,
+                num_ctx=self.num_ctx,
+                keep_alive=self.keep_alive,
+                timeout=self.timeout,
+                request_timeout=float(self.timeout),
+                **self.extra_kwargs
+            )
+            logger.info("[DEBUG] ✓ 创建ChatOllama实例成功")
             
             self._is_initialized = True
             logger.info(f"Ollama LLM 初始化成功: {self.model}")
@@ -328,62 +285,21 @@ class OllamaLLM:
                 except Exception as e:
                     logger.warning(f"同步健康检查失败，继续创建: {e}")
             
-            # 创建ChatOllama实例（同步版本也禁用代理）
-            try:
-                import httpx
-                # 创建禁用代理的HTTP客户端
-                http_client = httpx.Client(
-                    timeout=httpx.Timeout(float(self.timeout)),
-                    trust_env=False  # 忽略环境变量中的代理设置
-                )
-                async_http_client = httpx.AsyncClient(
-                    timeout=httpx.Timeout(float(self.timeout)),
-                    trust_env=False  # 忽略环境变量中的代理设置
-                )
-                logger.info("[DEBUG] 同步创建：已配置禁用代理的HTTP客户端")
-                
-                self._llm = ChatOllama(
-                    model=self.model,
-                    base_url=self.base_url,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    num_ctx=self.num_ctx,
-                    keep_alive=self.keep_alive,
-                    timeout=self.timeout,
-                    request_timeout=float(self.timeout),
-                    http_client=http_client,
-                    http_async_client=async_http_client,
-                    **self.extra_kwargs
-                )
-            except ImportError:
-                logger.warning("[DEBUG] httpx不可用，使用默认HTTP客户端")
-                self._llm = ChatOllama(
-                    model=self.model,
-                    base_url=self.base_url,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    num_ctx=self.num_ctx,
-                    keep_alive=self.keep_alive,
-                    timeout=self.timeout,
-                    request_timeout=float(self.timeout),
-                    **self.extra_kwargs
-                )
-            except Exception as e:
-                logger.warning(f"[DEBUG] 同步创建HTTP客户端配置失败，使用默认设置: {e}")
-                self._llm = ChatOllama(
-                    model=self.model,
-                    base_url=self.base_url,
-                    temperature=self.temperature,
-                    top_p=self.top_p,
-                    top_k=self.top_k,
-                    num_ctx=self.num_ctx,
-                    keep_alive=self.keep_alive,
-                    timeout=self.timeout,
-                    request_timeout=float(self.timeout),
-                    **self.extra_kwargs
-                )
+            # 创建ChatOllama实例
+            # 注意: 不再强制禁用代理，依靠用户的代理配置处理网络路由
+            self._llm = ChatOllama(
+                model=self.model,
+                base_url=self.base_url,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                top_k=self.top_k,
+                num_ctx=self.num_ctx,
+                keep_alive=self.keep_alive,
+                timeout=self.timeout,
+                request_timeout=float(self.timeout),
+                **self.extra_kwargs
+            )
+            logger.info("[DEBUG] ✓ 同步创建ChatOllama实例成功")
             
             self._is_initialized = True
             logger.info(f"Ollama LLM 创建完成: {self.model}")

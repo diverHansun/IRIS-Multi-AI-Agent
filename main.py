@@ -77,6 +77,12 @@ def print_help():
 加密货币：
 "获取比特币的当前价格"、"分析比特币价格趋势"
 
+Notion知识管理：
+"在Notion中搜索项目文档"、"获取Notion最近的工作记录"
+
+多LLM切换示例：
+"switch zhipu glm-4-plus"、"switch openai gpt-4o"、"switch ollama gpt-oss:20b"
+
 工作模式：
 • LLM模式: 快速对话，支持流式输出 (默认)
 • Agent模式: 完整功能，工具调用，会话记忆

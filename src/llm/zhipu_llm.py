@@ -68,11 +68,7 @@ class ZhipuAILLM:
         # 设置环境变量（备用）
         os.environ["ZHIPU_API_KEY"] = api_key
         
-        # 清除代理设置以避免连接问题
-        os.environ.pop('HTTP_PROXY', None)
-        os.environ.pop('HTTPS_PROXY', None)
-        os.environ.pop('http_proxy', None)
-        os.environ.pop('https_proxy', None)
+        # 注意: 不再强制删除代理设置，由用户的代理配置决定网络路由
         
         # 为GLM-4.5准备特殊参数
         llm_kwargs = kwargs.copy()

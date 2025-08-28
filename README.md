@@ -3,7 +3,7 @@
 
 ## 功能特性
 
-- **多LLM支持**: 智谱AI GLM-4.5/GLM-4-Plus、OpenAI GPT-5/GPT-5-mini/GPT-4o系列，支持动态切换
+- **多LLM支持**: 智谱AI GLM-4.5/GLM-4-Plus、OpenAI GPT-5/GPT-5-mini/GPT-4o系列、Ollama本地模型，支持动态切换
 - **智能对话**: 基于ReAct推理框架的自然语言交互
 - **全局记忆系统**: 基于LangChain 2025最佳实践的统一记忆管理
 - **工具调用**: 支持数学计算、网络搜索、地图导航、加密货币分析、Notion知识管理等多种工具
@@ -46,9 +46,10 @@ pip install -r requirements.txt
 
 1. **智谱AI** - [智谱AI开放平台](https://open.bigmodel.cn/) (必需)
 2. **OpenAI** - [OpenAI API](https://platform.openai.com/) (可选)
-3. **Tavily搜索** - [Tavily](https://tavily.com/) (推荐)
-4. **高德地图** - [高德地图开放平台](https://lbs.amap.com/dev/key/app) (推荐)
-5. **Notion** - [Notion API](https://developers.notion.com/) (可选)
+3. **Ollama本地模型** - [Ollama](https://ollama.com/) (可选，支持本地离线运行)
+4. **Tavily搜索** - [Tavily](https://tavily.com/) (推荐)
+5. **高德地图** - [高德地图开放平台](https://lbs.amap.com/dev/key/app) (推荐)
+6. **Notion** - [Notion API](https://developers.notion.com/) (可选)
 
 复制 `.env.example` 为 `.env`：
 
@@ -61,6 +62,11 @@ cp .env.example .env
 # 必需 - 至少配置一个LLM
 ZHIPU_API_KEY=your_zhipu_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
+
+# Ollama本地模型配置(可选)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=gpt-oss:20b
+# 建议使用规则代理模式以获得最佳网络兼容性
 
 # 推荐 - 搜索和地图功能
 TAVILY_API_KEY=your_tavily_api_key_here
@@ -75,7 +81,7 @@ NOTION_TOKEN=your_notion_integration_token_here
 # OKX_PASSPHRASE=your_okx_passphrase_here
 
 # LLM配置
-DEFAULT_LLM_PROVIDER=zhipu OR openai
+DEFAULT_LLM_PROVIDER=zhipu OR openai OR ollama
 DEFAULT_LLM_MODEL=glm-4-plus OR gpt-4o
 ```
 
@@ -113,6 +119,22 @@ python main.py --help
   - 16K输出token，快速响应
 - **GPT-4-turbo**: 高性能版本
   - 4K输出token，稳定可靠
+
+### Ollama本地模型
+- **gpt-oss:20b**: 开源GPT模型，20B参数，支持工具调用 (推荐)
+  - 32K上下文窗口，本地离线运行
+  - 支持工具调用和复杂推理
+- **qwen3:8b**: 通义千问3.0模型，中文优化 (推荐)
+  - 32K上下文窗口，中文能力优秀
+  - 支持工具调用，本地部署
+- **gemma3:latest**: Google Gemma3模型最新版本
+  - 16K上下文窗口，性能稳定
+  - 支持工具调用
+- **deepseek-r1:1.5b**: DeepSeek推理模型
+  - 16K上下文窗口，专注逻辑推理
+  - 轻量级模型，快速响应
+
+**Ollama网络配置建议**: 使用规则代理模式可以实现最佳网络兼容性，本地Ollama服务走直连，外部API服务（如搜索、地图等）通过代理访问，确保所有功能正常工作。
 
 ### 模型特性对比
 
@@ -740,6 +762,7 @@ agent = await agent_factory.create_agent(
 6. **记忆存储**: 会话数据自动保存到`data/sessions`文件夹
 7. **数据安全**: `data/`文件夹已添加到`.gitignore`，不会上传个人会话数据
 8. **模型选择**: 根据需求选择合适的LLM模型和配置
+9. **Ollama网络配置**: 建议使用规则代理模式，可同时支持本地Ollama服务和外部API访问
 
 ## 故障排除
 
@@ -800,7 +823,25 @@ agent = await agent_factory.create_agent(
 
 ## 更新日志
 
-
+### v2.5.0 (2025-08-28)
+- **Ollama本地LLM支持**: 新增完整的Ollama本地模型集成
+  - 支持gpt-oss:20b、qwen3:8b、gemma3:latest、deepseek-r1:1.5b等主流开源模型
+  - 智能模型自动切换：系统启动时自动检测可用模型并切换
+  - 工具调用支持：所有支持的模型都具备工具调用能力
+  - 健康检查机制：自动检测Ollama服务状态和模型可用性
+- **网络代理处理优化**: 彻底重构代理处理机制
+  - 移除粗暴的全局代理删除逻辑，避免影响其他服务
+  - 支持规则代理配置（如Clash规则模式），智能路由本地和外部服务
+  - 保持外部API服务的代理访问能力（OKX、Tavily、Notion等）
+  - 提升网络兼容性，适配多种网络环境
+- **Agent工厂增强**: 
+  - 新增create_ollama_agent函数，支持本地模型Agent创建
+  - 统一的Agent创建接口，支持zhipu、openai、ollama三种提供商
+  - 自动配置推荐参数，提升本地模型性能
+- **配置管理优化**:
+  - 新增OLLAMA_BASE_URL、OLLAMA_MODEL等配置选项
+  - 支持本地模型的自定义超时、保活等参数配置
+  - 向后兼容现有配置，无需修改已有部署
 
 ### v2.4.0 (2025-08-15)
 - **Notion集成**: 完整的Notion知识管理功能
