@@ -166,6 +166,7 @@ secrets.json
 *.pem
 *.p12
 *.pfx
+env.example
 
 # 临时文件
 *.tmp
