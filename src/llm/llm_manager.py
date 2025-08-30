@@ -223,6 +223,10 @@ class LLMManager:
         if provider not in self.SUPPORTED_LLMS:
             return False
         
+        # Ollama支持动态模型，不进行严格验证
+        if provider == LLMProvider.OLLAMA:
+            return True
+        
         return model in self.SUPPORTED_LLMS[provider]["models"]
     
     def create_llm(

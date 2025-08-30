@@ -24,6 +24,7 @@ from src.agents.zhipu_agent import build_zhipu_agent, build_simple_zhipu_chat
 from src.agents.agent_factory import agent_factory, create_default_agent, get_available_configurations
 from src.llm.llm_manager import llm_manager
 from src.llm.streaming_llm import streaming_manager, stream_llm_response
+from src.llm.ollama_utils import list_ollama_models, get_model_display_info
 from src.config import settings
 from src.memory import GlobalMemoryManager, SessionManager
 
@@ -100,8 +101,8 @@ Notion知识管理：
     """
     console.print(Panel(help_text, title="帮助信息", border_style="green"))
 
-def print_available_llms():
-    """显示可用的LLM列表"""
+async def print_available_llms():
+    """显示可用的LLM列表（包含动态Ollama模型发现）"""
     try:
         configs = get_available_configurations()
         
@@ -116,18 +117,53 @@ def print_available_llms():
             llm_text += f"- {provider['name']} ({provider['provider']})\n"
             llm_text += f"  默认模型: {provider['default_model']}\n"
             
-            if "models_detail" in provider:
-                llm_text += "  支持的模型:\n"
-                for model, info in provider["models_detail"].items():
-                    recommended = " [推荐]" if info.get("recommended", False) else ""
-                    llm_text += f"    * {model}{recommended}: {info['description']}\n"
+            # Ollama特殊处理：显示本机可用模型和动态默认模型
+            if provider['provider'] == 'ollama':
+                try:
+                    local_models = await list_ollama_models()
+                    if local_models:
+                        # 更新默认模型为本机第一个可用模型
+                        llm_text = llm_text.replace(
+                            f"  默认模型: {provider['default_model']}\n",
+                            f"  默认模型: {local_models[0]} (Ollama list中首个模型)\n"
+                        )
+                        llm_text += f"  可用模型: {', '.join(local_models)}\n"
+                    else:
+                        # 如果没有模型，显示无可用模型
+                        llm_text = llm_text.replace(
+                            f"  默认模型: {provider['default_model']}\n",
+                            f"  默认模型: 无 (请先安装模型)\n"
+                        )
+                        llm_text += "  可用模型: 无\n"
+                        llm_text += "  提示: 请在终端执行 'ollama pull <model>' 安装模型\n"
+                except Exception as e:
+                    llm_text += f"  本机模型检测失败: {str(e)}\n"
+            else:
+                # 其他提供商显示静态支持的模型列表
+                if "models_detail" in provider:
+                    llm_text += "  支持的模型:\n"
+                    for model, info in provider["models_detail"].items():
+                        recommended = " [推荐]" if info.get("recommended", False) else ""
+                        llm_text += f"    * {model}{recommended}: {info['description']}\n"
             
             llm_text += "\n"
         
         if configs["recommended_configs"]:
             llm_text += "推荐配置:\n"
+            # 获取本机Ollama模型用于过滤推荐配置
+            try:
+                local_models = await list_ollama_models()
+            except:
+                local_models = []
+            
             for rec in configs["recommended_configs"]:
-                llm_text += f"  * {rec['provider_name']} {rec['model']}: {rec['description']}\n"
+                # 如果是Ollama推荐配置，只显示本机实际存在的模型
+                if rec['provider_name'] == 'Ollama本地模型':
+                    if rec['model'] in local_models:
+                        llm_text += f"  * {rec['provider_name']} {rec['model']}: {rec['description']}\n"
+                else:
+                    # 其他提供商的推荐配置正常显示
+                    llm_text += f"  * {rec['provider_name']} {rec['model']}: {rec['description']}\n"
         
         llm_text += f"\n启动默认LLM: {configs.get('default_config', {}).get('provider', 'N/A')} / {configs.get('default_config', {}).get('model', 'N/A')}"
         
@@ -285,7 +321,7 @@ async def cli_async():
                     continue
 
                 if query.strip().lower() in {"llms", "llm", "模型列表"}:
-                    print_available_llms()
+                    await print_available_llms()
                     continue
 
                 if query.strip().lower().startswith("switch "):
@@ -298,6 +334,29 @@ async def cli_async():
 
                     provider = parts[1]
                     model = parts[2] if len(parts) > 2 else None
+
+                    # Ollama特殊处理：动态模型选择和验证
+                    if provider.lower() == 'ollama':
+                        try:
+                            local_models = await list_ollama_models()
+                            
+                            if not model:  # 未指定模型，自动选择
+                                if not local_models:
+                                    console.print("[yellow]未检测到可用的 Ollama 模型。[/]")
+                                    console.print("[dim]请在终端执行: ollama pull <model> 安装模型[/]")
+                                    continue
+                                model = local_models[0]  # 选择第一个模型
+                                console.print(f"[cyan]自动选择模型: {model}[/]")
+                            else:  # 指定了模型，验证是否存在
+                                if model not in local_models:
+                                    console.print(f"[red]模型不存在/未下载: {model}[/]")
+                                    console.print(f"[dim]请在终端执行: ollama pull {model}[/]")
+                                    if local_models:
+                                        console.print(f"[dim]可用模型: {', '.join(local_models)}[/]")
+                                    continue
+                        except Exception as e:
+                            console.print(f"[red]检查Ollama模型时出错: {str(e)}[/]")
+                            continue
 
                     # 异步切换LLM（复用同一事件循环）
                     with console.status(f"[yellow]正在切换到 {provider} {model or '(默认模型)'}...[/]"):
