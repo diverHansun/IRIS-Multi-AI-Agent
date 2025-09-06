@@ -6,6 +6,7 @@
 
 - **[软件测试入门教程](software_testing_guide.md)** - 从零开始学习软件测试的概念、方法和最佳实践
 - **[LangChain框架教程](langchain_tutorial.md)** - LangChain框架的使用指南和实践教程
+- **[MCP 工具使用指南](mcp_guide.md)** - Model Context Protocol 工具的配置和使用教程
 
 ## 学习路径建议
 
