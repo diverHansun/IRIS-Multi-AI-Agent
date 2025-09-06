@@ -1,0 +1,22 @@
+enabled = true
+auto_start = true
+prefer_mcp = true
+namespace_strategy = "prefix"
+default_prefix = "mcp_"
+
+
+[servers.notionApi]
+transport = "stdio"
+command = "path/to/notion-mcp-server"
+args = []
+rename_prefix = "notion:"
+
+[servers.notionApi.env]
+NOTION_TOKEN = "$NOTION_TOKEN"
+
+# Example configuration for Filesystem MCP
+# [servers.filesystem]
+# transport = "stdio"
+# command = "path/to/filesystem-mcp-server"
+# args = []
+# rename_prefix = "fs:"

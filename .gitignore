@@ -207,6 +207,8 @@ data/cache/
 # MCP 相关
 mcp_*.log
 mcp_debug/
+config/mcp.toml
+config/mcp.json
 
 # 记忆存储文件夹
 .memory/ 
