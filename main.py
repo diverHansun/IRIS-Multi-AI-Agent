@@ -27,6 +27,11 @@ from src.llm.streaming_llm import streaming_manager, stream_llm_response
 from src.llm.ollama_utils import list_ollama_models, get_model_display_info
 from src.config import settings
 from src.memory import GlobalMemoryManager, SessionManager
+try:
+    # Optional MCP manager
+    from src.MCP import GlobalMCPManager
+except Exception:
+    GlobalMCPManager = None
 
 console = Console()
 
@@ -58,6 +63,11 @@ clear - 清除当前会话记忆
 new - 创建新会话
 sessions - 查看历史会话列表
 restore <session_id> - 恢复指定会话
+\nMCP 管理:\n
+mcp status [-v]        - 查看MCP状态/服务器/工具数量\n
+mcp tools [--json]     - 列出MCP工具（前缀 mcp_）\n
+mcp reload             - 重新加载config/mcp.toml\n
+提示: MCP 工具在Agent中以 mcp_ 前缀出现，调用时参数需为JSON对象
     """
     console.print(Panel(welcome_text, title="欢迎使用", border_style="cyan"))
 
@@ -99,6 +109,11 @@ Notion知识管理：
 基本命令：
 输入命令名查看具体说明 (如: 输入'llms'查看模型列表)
     """
+    # 追加 MCP 指令说明
+    help_text += "\nMCP 使用与指令：\n"
+    help_text += "- 管理：mcp status [-v] | mcp tools [--json] | mcp reload\n"
+    help_text += "- 在 Agent 中：工具名前缀为 mcp_（如 mcp_API-post-search）；Action Input 必须是单行 JSON（如 {\\\"query\\\":\\\"关键字\\\"}）。\n"
+    help_text += "  示例：调用 mcp_API-post-search，参数 {\\\"query\\\":\\\"Roadmap\\\"}; 调用 mcp_API-retrieve-a-page，参数 {\\\"page_id\\\":\\\"<页面ID>\\\"}\n"
     console.print(Panel(help_text, title="帮助信息", border_style="green"))
 
 async def print_available_llms():
@@ -322,6 +337,64 @@ async def cli_async():
 
                 if query.strip().lower() in {"llms", "llm", "模型列表"}:
                     await print_available_llms()
+                    continue
+
+                # MCP commands
+                if query.strip().lower().startswith("mcp "):
+                    parts = query.strip().split()
+                    sub = parts[1].lower() if len(parts) > 1 else ""
+                    if sub in {"status", "tools", "reload"}:
+                        if GlobalMCPManager is None:
+                            console.print("[yellow]MCP 管理器不可用（缺少依赖或未集成）[/]")
+                            continue
+                        # ensure initialized (respect config)
+                        try:
+                            await GlobalMCPManager.initialize()
+                        except Exception as e:
+                            console.print(f"[yellow]MCP 初始化失败: {e}[/]")
+                    if sub == "status":
+                        verbose = any(a in ["-v", "--verbose"] for a in parts[2:])
+                        status = GlobalMCPManager.get_status(verbose=verbose)
+                        import json
+                        if verbose:
+                            console.print(Panel(json.dumps(status, ensure_ascii=False, indent=2), title="MCP Status", border_style="magenta"))
+                        else:
+                            servers = status.get("servers", [])
+                            lines = [
+                                f"启用: {status.get('enabled')}  已初始化: {status.get('initialized')}  工具数: {status.get('tools_total')}",
+                                f"配置: {status.get('config_path') or 'N/A'}  最近重载: {status.get('last_reload') or 'N/A'}",
+                            ]
+                            for s in servers:
+                                lines.append(f"- {s.get('name')}: {s.get('status')} (tools: {s.get('tools_count')})")
+                            if status.get("last_error"):
+                                lines.append(f"错误: {status['last_error']}")
+                            console.print(Panel("\n".join(lines), title="MCP 状态", border_style="magenta"))
+                        continue
+                    if sub == "tools":
+                        json_flag = any(a == "--json" for a in parts[2:])
+                        tools = GlobalMCPManager.get_tools() if GlobalMCPManager else []
+                        if json_flag:
+                            data = [{"name": t.name, "description": getattr(t, "description", "") or ""} for t in tools]
+                            import json
+                            console.print(json.dumps(data, ensure_ascii=False, indent=2))
+                        else:
+                            if tools:
+                                lines = [f"共 {len(tools)} 个 MCP 工具:"]
+                                for t in tools[:100]:
+                                    desc = getattr(t, "description", "") or ""
+                                    lines.append(f"- {t.name}: {desc[:120]}")
+                                if len(tools) > 100:
+                                    lines.append(f"... 其余 {len(tools) - 100} 个未显示")
+                                console.print(Panel("\n".join(lines), title="MCP 工具", border_style="magenta"))
+                            else:
+                                console.print("[yellow]当前没有可用的 MCP 工具（可能未启用或初始化失败）[/]")
+                        continue
+                    if sub == "reload":
+                        result = await GlobalMCPManager.reload_config()
+                        import json
+                        console.print(Panel(json.dumps(result, ensure_ascii=False, indent=2), title="MCP 重新加载", border_style="magenta"))
+                        continue
+                    console.print("[yellow]用法: mcp status [-v] | mcp tools [--json] | mcp reload[/]")
                     continue
 
                 if query.strip().lower().startswith("switch "):

@@ -5,14 +5,22 @@
 简化版本，移除复杂的多类型Agent系统。
 """
 
+import json
 import logging
 import asyncio
-from typing import List, Optional, Dict, Any, Callable
+import re
+from typing import List, Optional, Dict, Any, Callable, Union
+
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import BaseTool
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.exceptions import OutputParserException
 import threading
 import time
+
+# 导入自定义的 JSON ReAct 输出解析器
+from ..patch.json_react_parser import JSONReActSingleInputOutputParser
 
 from ..llm.zhipu_llm import create_zhipu_llm
 from ..tools.math_tools import add_numbers, calculate_math
@@ -27,7 +35,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 logger = logging.getLogger(__name__)
 
 # GLM-4.5优化的ReAct提示模板（兼容LangChain标准解析器）
-REACT_PROMPT_GLM45 = """你是Hansun的AI助手，采用ReAct框架进行推理和精确工具调用。
+REACT_PROMPT_GLM45 = """你是AI助手，采用ReAct框架进行推理和精确工具调用。
 
 可用工具:
 {tools}
@@ -51,7 +59,7 @@ Final Answer: 完整、准确、结构化的专业答案
 
 核心要求：
 1. Action必须严格从工具清单选择: {tool_names}
-2. Action Input必须是字符串格式，避免换行符
+2. Action Input必须是符合工具参数要求的JSON格式，避免换行符
 3. 充分利用深度思考能力进行多层推理
 4. 必须基于工具真实结果，禁止编造信息
 
@@ -62,6 +70,17 @@ Final Answer: 完整、准确、结构化的专业答案
 - amap_search_place: 地点搜索，输入关键词
 - amap_route_driving: 驾车路线，格式"起点,终点"
 - get_crypto_price: 加密货币价格，输入符号如"BTC"
+
+Filesystem工具说明：
+- fs:read_text_file: 读取文本文件内容，输入参数为{{"path": "文件路径"}}
+- fs:write_file: 写入文件，输入参数为{{"path": "文件路径", "content": "文件内容"}}
+- fs:list_directory: 列出目录内容，输入参数为{{"path": "目录路径"}}
+- fs:create_directory: 创建目录，输入参数为{{"path": "目录路径"}}
+- fs:search_files: 搜索文件，输入参数为{{"path": "搜索路径", "pattern": "搜索模式"}}
+- fs:get_file_info: 获取文件信息，输入参数为{{"path": "文件路径"}}
+- fs:move_file: 移动文件，输入参数为{{"source": "源路径", "destination": "目标路径"}}
+- fs:edit_file: 编辑文件，输入参数为{{"path": "文件路径", "edits": [{{"oldText": "原文本", "newText": "新文本"}}]}}
+- fs:read_multiple_files: 读取多个文件，输入参数为{{"paths": ["文件路径1", "文件路径2"]}}
 
 Notion工具说明：
 - notion_get_database_info: 获取数据库信息，输入数据库ID
@@ -75,7 +94,10 @@ Notion工具说明：
 - notion_search_databases: 搜索数据库，输入搜索查询
 - notion_search_pages: 搜索页面，输入搜索查询
 
-注意：Notion ID格式为32位十六进制字符，可从页面URL中获取
+注意：
+1. Notion ID格式为32位十六进制字符，可从页面URL中获取
+2. Filesystem工具只能访问指定的允许目录及其子目录
+3. 所有工具调用的参数都必须是有效的JSON格式
 
 现在开始：
 
@@ -96,7 +118,7 @@ REACT_PROMPT_ZH = """你是一个专业的智能AI助手，采用ReAct（推理-
 Question: 用户的问题
 Thought: 分析问题，制定解决策略
 Action: 选择工具名称（必须从工具清单中选择）
-Action Input: 工具的输入参数
+Action Input: 工具的输入参数（必须是有效的JSON格式）
 Observation: 工具执行结果
 ... (根据需要重复 Thought/Action/Action Input/Observation)
 Thought: 基于观察结果得出结论
@@ -104,7 +126,7 @@ Final Answer: 最终答案
 
 核心要求：
 1. Action必须严格从工具清单选择: {tool_names}
-2. Action Input必须是字符串格式，避免换行符
+2. Action Input必须是符合工具参数要求的JSON格式，避免换行符
 3. 必须基于工具返回的真实结果回答，禁止编造信息
 4. 每次只执行一个Action，基于Observation决定下一步
 
@@ -115,6 +137,17 @@ Final Answer: 最终答案
 - amap_search_place: 地点搜索，输入关键词
 - amap_route_driving: 驾车路线，格式"起点,终点"
 - get_crypto_price: 加密货币价格，输入符号如"BTC"
+
+Filesystem工具说明：
+- fs:read_text_file: 读取文本文件内容，输入参数为{{"path": "文件路径"}}
+- fs:write_file: 写入文件，输入参数为{{"path": "文件路径", "content": "文件内容"}}
+- fs:list_directory: 列出目录内容，输入参数为{{"path": "目录路径"}}
+- fs:create_directory: 创建目录，输入参数为{{"path": "目录路径"}}
+- fs:search_files: 搜索文件，输入参数为{{"path": "搜索路径", "pattern": "搜索模式"}}
+- fs:get_file_info: 获取文件信息，输入参数为{{"path": "文件路径"}}
+- fs:move_file: 移动文件，输入参数为{{"source": "源路径", "destination": "目标路径"}}
+- fs:edit_file: 编辑文件，输入参数为{{"path": "文件路径", "edits": [{{"oldText": "原文本", "newText": "新文本"}}]}}
+- fs:read_multiple_files: 读取多个文件，输入参数为{{"paths": ["文件路径1", "文件路径2"]}}
 
 现在开始：
 
@@ -234,6 +267,19 @@ class ZhipuAgent:
         try:
             # 1. 收集工具
             self._collect_tools()
+
+            # 1.1 聚合全局 MCP 工具（如 Notion MCP、Filesystem 等）
+            try:
+                from ..MCP import GlobalMCPManager
+                await GlobalMCPManager.initialize()
+                mcp_tools = GlobalMCPManager.get_tools()
+                if mcp_tools:
+                    self.tools.extend(mcp_tools)
+                    logger.info(f"MCP 工具已加载: {len(mcp_tools)}")
+                else:
+                    logger.info("MCP 工具为空或未启用")
+            except Exception as mcp_e:
+                logger.warning(f"跳过 MCP 工具（未安装/未启用/加载失败）: {mcp_e}")
             
             # 2. 创建Agent
             self._build_agent()
@@ -368,8 +414,11 @@ class ZhipuAgent:
             # 创建提示模板
             prompt = PromptTemplate.from_template(prompt_template)
             
+            # 创建自定义输出解析器
+            output_parser = JSONReActSingleInputOutputParser()
+            
             # 创建ReAct Agent（self.llm直接就是LangChain模型）
-            agent = create_react_agent(self.llm, self.tools, prompt)
+            agent = create_react_agent(self.llm, self.tools, prompt, output_parser=output_parser)
             
             # 为GLM-4.5优化Agent执行器配置
             executor_config = {

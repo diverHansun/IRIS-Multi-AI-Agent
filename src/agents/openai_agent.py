@@ -6,7 +6,7 @@ OpenAI Agent Implementation
 """
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Iterable
 from datetime import datetime
 
 from langchain.agents import create_openai_tools_agent, AgentExecutor
@@ -34,6 +34,19 @@ except ImportError:
     OKX_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+
+def _format_exception(e: Exception) -> str:
+    """Render rich details for ExceptionGroup/TaskGroup to aid debugging."""
+    try:
+        if hasattr(e, "exceptions") and isinstance(getattr(e, "exceptions"), Iterable):
+            parts = [f"{e.__class__.__name__}: {e}"]
+            for idx, se in enumerate(getattr(e, "exceptions")):
+                parts.append(f"  [{idx}] {se.__class__.__name__}: {se}")
+            return "\n".join(parts)
+    except Exception:
+        pass
+    return f"{e.__class__.__name__}: {e}"
 
 class OpenAIAgent:
     """OpenAI Agent类"""
@@ -185,6 +198,16 @@ class OpenAIAgent:
             logger.warning(f"Failed to load Notion tools: {e}")
         
         logger.info(f"Total {len(self._tools)} tools loaded")
+        # Append global MCP tools if available
+        try:
+            from ..MCP import GlobalMCPManager
+            await GlobalMCPManager.initialize()
+            mcp_tools = GlobalMCPManager.get_tools()
+            if mcp_tools:
+                self._tools.extend(mcp_tools)
+                logger.info(f"MCP tools loaded: {len(mcp_tools)} tools")
+        except Exception:
+            pass
     
     async def _create_agent(self):
         """创建Agent和AgentExecutor"""
@@ -299,13 +322,14 @@ class OpenAIAgent:
             }
             
         except Exception as e:
+            msg = _format_exception(e)
             try:
-                logger.error(f"Agent invoke failed: {str(e)}")
+                logger.error(f"Agent invoke failed: {msg}")
             except UnicodeEncodeError:
-                logger.error(f"Agent调用失败: {str(e)}".encode('utf-8', errors='ignore').decode('utf-8'))
+                logger.error(f"Agent调用失败: {msg}".encode('utf-8', errors='ignore').decode('utf-8'))
             return {
                 "success": False,
-                "error": str(e),
+                "error": msg,
                 "output": "",
                 "tool_calls": 0,
                 "session_id": session_id
@@ -340,13 +364,14 @@ class OpenAIAgent:
             }
             
         except Exception as e:
+            msg = _format_exception(e)
             try:
-                logger.error(f"Agent async invoke failed: {str(e)}")
+                logger.error(f"Agent async invoke failed: {msg}")
             except UnicodeEncodeError:
-                logger.error(f"Agent异步调用失败: {str(e)}".encode('utf-8', errors='ignore').decode('utf-8'))
+                logger.error(f"Agent异步调用失败: {msg}".encode('utf-8', errors='ignore').decode('utf-8'))
             return {
                 "success": False,
-                "error": str(e),
+                "error": msg,
                 "output": "",
                 "tool_calls": 0,
                 "session_id": session_id

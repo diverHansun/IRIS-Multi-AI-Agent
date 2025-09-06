@@ -11,6 +11,8 @@
 - **高德地图集成**: 支持地点搜索、附近查询、驾车导航、步行导航、公共交通规划
 - **OKX加密货币**: 实时行情、K线分析、价格预警、市场洞察
 - **Notion集成**: 智能搜索、页面管理、数据库操作，支持Direct API访问
+- **MCP工具支持**: 支持Model Context Protocol扩展工具，包括文件系统访问、网页内容获取等
+- **JSON ReAct补丁**: 自定义解析器解决MCP工具JSON格式输入问题
 - **中文优化**: 针对中文场景优化的提示词和交互体验
 - **异步支持**: 支持同步和异步调用模式
 - **多用户支持**: 支持会话隔离和持久化存储
@@ -684,6 +686,9 @@ AgentFactory (Agent工厂)
 5. **Notion集成**: 知识管理和智能搜索(Direct API)
 6. **OKX加密货币**: 实时行情和技术分析
 7. **MCP工具**: 基于MCP协议的扩展工具
+   - **Fetch MCP**: 用于从URL获取网页内容
+   - **Filesystem MCP**: 用于读取本地文件系统
+   - **Notion MCP**: 用于与Notion页面和数据库交互
 
 ### 添加新工具
 
@@ -700,6 +705,94 @@ def your_new_tool(param: str) -> str:
     # 实现逻辑
     return result
 ```
+
+### MCP 工具集成
+
+项目支持基于 Model Context Protocol (MCP) 的扩展工具，允许通过标准化协议集成各种服务。
+
+#### 支持的 MCP 服务器
+- **Fetch MCP**: 用于从 URL 获取网页内容
+- **Filesystem MCP**: 用于读取本地文件系统
+- **Notion MCP**: 用于与 Notion 页面和数据库交互
+
+#### 安装 MCP 服务器
+
+要使用 MCP 工具，首先需要安装相应的 MCP 服务器。有两种安装方式：
+
+1. **全局安装（推荐）**：
+   ```bash
+   # 安装 Fetch MCP 服务器
+   npm install -g @modelcontextprotocol/server-fetch
+   
+   # 安装 Filesystem MCP 服务器
+   npm install -g @modelcontextprotocol/server-filesystem
+   
+   # 安装 Notion MCP 服务器
+   npm install -g notion-mcp
+   ```
+
+2. **使用 npx（无需预先安装）**：
+   配置文件中使用 `npx -y` 命令直接运行，无需预先安装。
+
+#### 配置 MCP 服务器
+
+MCP 服务器通过 `config/mcp.toml` 文件进行配置。示例配置：
+
+```toml
+enabled = true
+auto_start = true
+prefer_mcp = true
+namespace_strategy = "prefix"
+default_prefix = "mcp_"
+
+# Fetch MCP 配置
+[servers.fetch]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-fetch"]
+rename_prefix = "fetch:"
+
+# Filesystem MCP 配置
+[servers.filesystem]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "--root", "./data"]
+rename_prefix = "fs:"
+
+# Notion MCP 配置
+[servers.notion]
+transport = "stdio"
+command = "npx"
+args = ["-y", "notion-mcp"]
+rename_prefix = "notion:"
+
+[servers.notion.env]
+NOTION_CLIENT_ID = "$NOTION_CLIENT_ID"
+NOTION_CLIENT_SECRET = "$NOTION_CLIENT_SECRET"
+NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
+```
+
+#### 使用 MCP 工具
+
+在 Agent 模式下，MCP 工具会自动加载并可通过以下命令管理：
+
+- `mcp status [-v]` - 查看 MCP 状态和工具信息
+- `mcp tools [--json]` - 列出所有可用的 MCP 工具
+- `mcp reload` - 重新加载 MCP 配置
+
+MCP 工具在 Agent 中以 `mcp_` 前缀出现，调用时参数需为 JSON 对象。
+例如：
+- 调用 `mcp_fetch-fetch` 工具获取网页内容
+- 调用 `mcp_fs-read-file` 工具读取本地文件
+
+#### JSON ReAct 补丁
+
+为解决 MCP 工具调用中的 JSON 格式问题，项目实现了自定义的 `JSONReActSingleInputOutputParser` 解析器：
+
+- 位置：`src/patch/json_react_parser.py`
+- 功能：自动解析 JSON 格式的工具输入参数
+- 解决问题：处理带 `args_schema` 的工具调用时的字符串输入限制
+- 复用性：可在其他需要 JSON 工具输入的项目中使用
 
 ### 自定义Agent
 
@@ -823,6 +916,18 @@ agent = await agent_factory.create_agent(
 4. 发起Pull Request
 
 ## 更新日志
+
+### v2.6.0 (2025-09-06)
+- **MCP工具支持**: 完整集成Model Context Protocol扩展工具
+  - 支持Filesystem MCP：本地文件系统访问
+  - 支持Fetch MCP：网页内容获取
+  - 支持Notion MCP：Notion页面和数据库交互
+  - 完善的MCP配置管理和服务自动启动
+- **JSON ReAct补丁**: 解决MCP工具JSON格式输入问题
+  - 实现自定义的`JSONReActSingleInputOutputParser`解析器
+  - 自动解析JSON格式的工具输入参数
+  - 支持字典和数组格式的工具调用
+  - 模块化设计，便于在其他项目中复用
 
 ### v2.5.0 (2025-08-28)
 - **Ollama本地LLM支持**: 新增完整的Ollama本地模型集成

@@ -37,7 +37,7 @@ def main():
     
     parser.add_argument(
         '--type', 
-        choices=['all', 'unit', 'integration', 'ollama'],
+        choices=['all', 'unit', 'integration', 'ollama', 'mcp'],
         default='all',
         help='测试类型 (默认: all)'
     )
@@ -74,6 +74,10 @@ def main():
     elif args.type == 'ollama':
         cmd = base_cmd + ['tests/integration/test_ollama_integration.py']
         print("运行Ollama专项测试...")
+        
+    elif args.type == 'mcp':
+        cmd = ['python', 'tests/test_fetch_mcp.py']
+        print("运行MCP服务器测试...")
         
     elif args.fast:
         cmd = base_cmd + ['tests/unit/', '-v']

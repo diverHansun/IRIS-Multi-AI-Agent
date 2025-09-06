@@ -4,19 +4,31 @@ prefer_mcp = true
 namespace_strategy = "prefix"
 default_prefix = "mcp_"
 
-
-[servers.notionApi]
+# Example configuration for Fetch MCP
+# Fetch MCP allows making HTTP requests to fetch content from URLs
+[servers.fetch]
 transport = "stdio"
-command = "path/to/notion-mcp-server"
-args = []
-rename_prefix = "notion:"
-
-[servers.notionApi.env]
-NOTION_TOKEN = "$NOTION_TOKEN"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-fetch"]
+rename_prefix = "fetch:"
 
 # Example configuration for Filesystem MCP
+# Filesystem MCP allows reading files from the local filesystem
 # [servers.filesystem]
 # transport = "stdio"
-# command = "path/to/filesystem-mcp-server"
-# args = []
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "--root", "./data"]
 # rename_prefix = "fs:"
+
+# Example configuration for Notion MCP
+# Notion MCP allows interacting with Notion pages and databases
+# [servers.notion]
+# transport = "stdio"
+# command = "npx"
+# args = ["-y", "notion-mcp"]
+# rename_prefix = "notion:"
+# 
+# [servers.notion.env]
+# NOTION_CLIENT_ID = "$NOTION_CLIENT_ID"
+# NOTION_CLIENT_SECRET = "$NOTION_CLIENT_SECRET"
+# NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
