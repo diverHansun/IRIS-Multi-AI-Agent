@@ -4,31 +4,46 @@ prefer_mcp = true
 namespace_strategy = "prefix"
 default_prefix = "mcp_"
 
-# Example configuration for Fetch MCP
-# Fetch MCP allows making HTTP requests to fetch content from URLs
-[servers.fetch]
-transport = "stdio"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-fetch"]
-rename_prefix = "fetch:"
-
 # Example configuration for Filesystem MCP
 # Filesystem MCP allows reading files from the local filesystem
-# [servers.filesystem]
-# transport = "stdio"
-# command = "npx"
-# args = ["-y", "@modelcontextprotocol/server-filesystem", "--root", "./data"]
-# rename_prefix = "fs:"
+[servers.filesystem]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "./data"]
+rename_prefix = "fs:"
 
 # Example configuration for Notion MCP
 # Notion MCP allows interacting with Notion pages and databases
-# [servers.notion]
+[servers.notion]
+transport = "stdio"
+command = "npx"
+args = ["-y", "notion-mcp"]
+rename_prefix = "notion:"
+
+[servers.notion.env]
+NOTION_CLIENT_ID = "$NOTION_CLIENT_ID"
+NOTION_CLIENT_SECRET = "$NOTION_CLIENT_SECRET"
+NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
+
+# Example configuration for Context7 MCP
+# Context7 MCP provides web search and browsing capabilities
+[servers.context7]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@upstash/context7-mcp", "--transport", "stdio"]
+rename_prefix = "ctx7:"
+
+[servers.context7.env]
+CONTEXT7_MCP_URL = "https://mcp.context7.com/mcp"
+CONTEXT7_API_KEY = "$CONTEXT7_API_KEY"
+
+# Example configuration for Postgres MCP
+# Postgres MCP allows database access
+# [servers.postgres]
 # transport = "stdio"
 # command = "npx"
-# args = ["-y", "notion-mcp"]
-# rename_prefix = "notion:"
-# 
-# [servers.notion.env]
-# NOTION_CLIENT_ID = "$NOTION_CLIENT_ID"
-# NOTION_CLIENT_SECRET = "$NOTION_CLIENT_SECRET"
-# NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
+# args = ["-y", "@modelcontextprotocol/server-postgres", "--connection-string", "$DATABASE_URL"]
+# rename_prefix = "db:"
+
+# [servers.postgres.env]
+# DATABASE_URL = "$DATABASE_URL"

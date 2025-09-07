@@ -92,6 +92,8 @@ class AgentFactory:
                     temperature=temperature,
                     enable_memory=enable_memory,
                     global_memory_manager=global_memory_manager,
+                    # 基于提供商选择模板：ZHIPU 对应 GLM 模板族
+                    prompt_provider="glm",
                     **kwargs
                 )
             

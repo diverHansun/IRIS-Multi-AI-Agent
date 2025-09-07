@@ -19,8 +19,10 @@ from langchain_core.exceptions import OutputParserException
 import threading
 import time
 
-# 导入自定义的 JSON ReAct 输出解析器
-from ..patch.json_react_parser import JSONReActSingleInputOutputParser
+# 导入自定义的 JSON ReAct 输出解析器（迁移至 parsers）
+from ..parsers.json_react_output_parser import JSONReActSingleInputOutputParser
+from ..prompts.registry import PromptRegistry
+from ..prompts.tooling import serialize_tools
 
 from ..llm.zhipu_llm import create_zhipu_llm
 from ..tools.math_tools import add_numbers, calculate_math
@@ -162,11 +164,12 @@ class ZhipuAgent:
                  model: str = "glm-4-plus",
                  temperature: float = 0.1,
                  verbose: bool = False,
-                 max_iterations: int = 10,
+                 max_iterations: int = 8,
                  enable_memory: bool = True,
                  memory_config: Optional[Dict[str, Any]] = None,
                  global_memory_manager = None,
-                 execution_timeout: Optional[float] = None):
+                 execution_timeout: Optional[float] = None,
+                 prompt_provider: Optional[str] = None):
         """
         初始化智谱AI Agent
         
@@ -187,6 +190,7 @@ class ZhipuAgent:
         self.enable_memory = enable_memory
         self.global_memory_manager = global_memory_manager
         self.execution_timeout = execution_timeout
+        self.prompt_provider = prompt_provider
         
         # 组件
         self.llm = None
@@ -281,8 +285,8 @@ class ZhipuAgent:
             except Exception as mcp_e:
                 logger.warning(f"跳过 MCP 工具（未安装/未启用/加载失败）: {mcp_e}")
             
-            # 2. 创建Agent
-            self._build_agent()
+            # 2. 创建Agent（使用外置模板与自定义解析器）
+            self._build_agent_with_external_prompt()
             
             # 3. 创建带记忆的Agent（如果启用记忆）
             if self.enable_memory and self.chat_memory:
@@ -834,3 +838,40 @@ async def test_zhipu_agent():
 if __name__ == "__main__":
     # 运行测试
     asyncio.run(test_zhipu_agent())
+else:
+    # 为向后兼容的方式，提供基于外置模板的Agent构建方法（类外定义后绑定）
+    def _build_agent_with_external_prompt(self):
+        """使用外置系统提示模板与 JSON 输出解析器构建 Agent。"""
+        if not self.llm:
+            raise ValueError("LLM未正确初始化，无法构建Agent")
+
+        provider_key = self.prompt_provider or ("glm" if "glm" in (self.model or "").lower() else None)
+        try:
+            template_text = PromptRegistry.get_prompt(
+                agent_type="react_json",
+                provider=provider_key,
+                locale="zh_CN",
+            )
+        except Exception as e:
+            logger.warning(f"加载外置模板失败，使用默认中文模板。原因: {e}")
+            template_text = PromptRegistry.get_prompt(agent_type="react_json", provider=None, locale="zh_CN")
+
+        tools_block = serialize_tools(self.tools)
+        rendered = PromptRegistry.render(template_text, tools_block=tools_block)
+        prompt = PromptTemplate.from_template(rendered)
+
+        output_parser = JSONReActSingleInputOutputParser()
+        agent = create_react_agent(self.llm, self.tools, prompt, output_parser=output_parser)
+        executor_config = {
+            "agent": agent,
+            "tools": self.tools,
+            "verbose": self.verbose,
+            "handle_parsing_errors": True,
+            "max_iterations": self.max_iterations,
+            "early_stopping_method": "force",
+            "return_intermediate_steps": True,
+        }
+        self.agent_executor = AgentExecutor(**executor_config)
+
+    # 绑定到类（保持原代码最小侵入）
+    ZhipuAgent._build_agent_with_external_prompt = _build_agent_with_external_prompt

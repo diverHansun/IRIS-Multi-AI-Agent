@@ -11,7 +11,7 @@ from .config import settings
 from .agents.zhipu_agent import build_zhipu_agent, build_simple_zhipu_chat
 
 # 导出 patch 模块中的解析器
-from .patch.json_react_parser import JSONReActSingleInputOutputParser
+from .parsers.json_react_output_parser import JSONReActSingleInputOutputParser
 
 __all__ = [
     "settings",
