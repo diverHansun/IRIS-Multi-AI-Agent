@@ -86,6 +86,21 @@ class AgentFactory:
         
         try:
             if provider == LLMProvider.ZHIPU:
+                # glm-4.5 使用原生 Function Calling Agent，其余保持 ReAct
+                if model == "glm-4.5":
+                    from .zhipu_fcall_agent import build_zhipu_fcall_agent
+                    agent = await build_zhipu_fcall_agent(
+                        model=model,
+                        verbose=verbose,
+                        temperature=temperature,
+                        enable_memory=enable_memory,
+                        global_memory_manager=global_memory_manager,
+                        **kwargs
+                    )
+                    if use_cache:
+                        self._cached_agents[cache_key] = agent
+                    logger.info(f"成功创建{provider.value} Agent: {model}")
+                    return agent
                 agent = await build_zhipu_agent(
                     model=model,
                     verbose=verbose,
