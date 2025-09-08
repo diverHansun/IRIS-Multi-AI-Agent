@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from ..llm.zhipu_llm import create_zhipu_llm
 from ..memory.global_memory import GlobalMemoryManager
-from ..agents.tool_adapter import convert_tool_to_function, execute_tool_with_arguments, execute_tool_with_arguments_async
+from ..agents.functioncalling_adapter import convert_tool_to_function, execute_tool_with_arguments, execute_tool_with_arguments_async
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ class ZhipuFunctionCallingAgent:
         """初始化工具"""
         try:
             # 导入工具适配器中的工具获取函数
-            from .tool_adapter import get_all_available_tools
+            from .functioncalling_adapter import get_all_available_tools
             
             # 获取所有可用工具
             self.tools = get_all_available_tools()

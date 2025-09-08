@@ -81,6 +81,9 @@ def execute_tool_with_arguments(tool: BaseTool, arguments: Dict[str, Any]) -> An
         # 添加详细的日志记录
         logger.debug(f"准备执行工具: {tool.name}")
         logger.debug(f"工具参数: {arguments}")
+        logger.debug(f"工具是否有args_schema: {hasattr(tool, 'args_schema')}")
+        if hasattr(tool, 'args_schema'):
+            logger.debug(f"args_schema类型: {type(tool.args_schema)}")
         
         # 特别处理字符串参数
         if isinstance(arguments, str):
@@ -98,36 +101,49 @@ def execute_tool_with_arguments(tool: BaseTool, arguments: Dict[str, Any]) -> An
         
         if is_base_tool:
             # 对于BaseTool实例，使用tool_input参数
-            # 如果arguments是dict且只有一个键，且工具只有一个必需参数，则直接传递该值
-            if isinstance(arguments, dict) and len(arguments) == 1 and tool.args_schema:
-                # 检查args_schema是否为字典（MCP工具的情况）
-                if isinstance(tool.args_schema, dict):
-                    schema = tool.args_schema
-                # 检查args_schema是否有schema()方法（标准LangChain工具的情况）
-                elif hasattr(tool.args_schema, "schema") and callable(getattr(tool.args_schema, "schema")):
-                    schema = tool.args_schema.schema()
+            # 检查args_schema是否为字典（MCP工具的情况）
+            if isinstance(tool.args_schema, dict):
+                schema = tool.args_schema
+            # 检查args_schema是否有schema()方法（标准LangChain工具的情况）
+            elif hasattr(tool.args_schema, "schema") and callable(getattr(tool.args_schema, "schema")):
+                schema = tool.args_schema.schema()
+            else:
+                schema = {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": True
+                }
+            
+            logger.debug(f"Schema: {schema}")
+            required_params = schema.get('required', [])
+            logger.debug(f"必需参数: {required_params}")
+            
+            # 特别处理MCP工具 - 当使用JSON schema时，必须传递字典参数
+            if isinstance(schema, dict) and schema.get('type') == 'object':
+                # 确保传递给MCP工具的参数是字典格式
+                if not isinstance(arguments, dict):
+                    # 如果参数不是字典，尝试转换
+                    if len(required_params) == 1:
+                        # 如果只有一个必需参数，创建包含该参数的字典
+                        arguments = {required_params[0]: arguments}
+                        logger.debug(f"转换参数为字典: {arguments}")
+                    else:
+                        # 多个必需参数，无法自动转换
+                        logger.warning(f"无法自动转换参数，必需参数: {required_params}")
+                        arguments = {}
                 else:
-                    schema = {
-                        "type": "object",
-                        "properties": {},
-                        "additionalProperties": True
-                    }
-                
-                required_params = schema.get('required', [])
-                logger.debug(f"必需参数: {required_params}")
-                
-                if len(required_params) == 1 and list(arguments.keys())[0] == required_params[0]:
+                    # 参数已经是字典，检查是否需要特殊处理
+                    logger.debug(f"参数已经是字典: {arguments}")
+            elif isinstance(arguments, dict) and len(arguments) == 1 and len(required_params) == 1:
+                # 对于只有一个参数的工具，如果参数是字典且只有一个键，且该键匹配必需参数
+                if list(arguments.keys())[0] == required_params[0]:
                     # 直接传递参数值
                     logger.debug(f"直接传递参数值: {list(arguments.values())[0]}")
-                    result = tool.run(list(arguments.values())[0])
-                else:
-                    # 传递完整参数字典
-                    logger.debug(f"传递完整参数字典: {arguments}")
-                    result = tool.run(arguments)
-            else:
-                # 传递参数
-                logger.debug(f"传递参数: {arguments}")
-                result = tool.run(arguments)
+                    return tool.run(list(arguments.values())[0])
+            
+            # 传递完整参数字典
+            logger.debug(f"传递完整参数字典: {arguments}")
+            return tool.run(arguments)
         else:
             # 对于使用@tool装饰器的函数，使用原始逻辑
             # 若 arguments 是 dict 且仅 1 个键，直接将其值传入 tool.run/async_run
@@ -150,24 +166,15 @@ def execute_tool_with_arguments(tool: BaseTool, arguments: Dict[str, Any]) -> An
             if hasattr(tool, 'func') and callable(tool.func):
                 logger.debug("调用 tool.func")
                 if asyncio.iscoroutinefunction(tool.func):
-                    result = asyncio.run(tool.func(**arguments)) if isinstance(arguments, dict) else asyncio.run(tool.func(arguments))
+                    return asyncio.run(tool.func(**arguments)) if isinstance(arguments, dict) else asyncio.run(tool.func(arguments))
                 else:
-                    result = tool.func(**arguments) if isinstance(arguments, dict) else tool.func(arguments)
+                    return tool.func(**arguments) if isinstance(arguments, dict) else tool.func(arguments)
+            
+            # 否则调用 tool.run/tool.arun
+            if asyncio.iscoroutinefunction(getattr(tool, '_run', None)):
+                return asyncio.run(tool._run(**arguments)) if isinstance(arguments, dict) else asyncio.run(tool._run(arguments))
             else:
-                # 否则调用 tool.run/tool.arun
-                logger.debug("调用 tool.run/tool._run")
-                if asyncio.iscoroutinefunction(getattr(tool, '_run', None)):
-                    result = asyncio.run(tool._run(**arguments)) if isinstance(arguments, dict) else asyncio.run(tool._run(arguments))
-                else:
-                    result = tool.run(**arguments) if isinstance(arguments, dict) else tool.run(arguments)
-        
-        # 验证结果
-        if result is None:
-            logger.warning(f"工具 {tool.name} 返回空结果")
-        else:
-            logger.debug(f"工具执行成功，结果: {result}")
-        
-        return result
+                return tool.run(**arguments) if isinstance(arguments, dict) else tool.run(arguments)
         
     except Exception as e:
         logger.error(f"执行工具 {tool.name} 时出错: {e}", exc_info=True)
