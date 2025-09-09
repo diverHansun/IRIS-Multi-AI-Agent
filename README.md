@@ -214,11 +214,30 @@ Multi-AI-Agent/
 │   ├── session/            # 会话存储系统
 │   │   ├── session_storage.py       # JSON文件存储
 │   │   └── message_filter.py        # 消息过滤器
-│   ├── tools/              # 工具实现
-│   │   ├── math_tools.py            # 数学计算工具
-│   │   ├── search_tools.py          # DuckDuckGo搜索工具
-│   │   ├── tavily_search_tool.py    # Tavily搜索工具
-│   │   ├── amap_search.py           # 高德地图工具
+│   ├── tools/                    # 工具模块
+│   │   ├── __init__.py          # 工具模块初始化
+│   │   ├── amap/                # 高德地图工具
+│   │   │   ├── __init__.py      # 包初始化文件
+│   │   │   ├── client.py        # API客户端
+│   │   │   ├── search.py        # 搜索功能
+│   │   │   ├── route.py         # 路线规划功能
+│   │   │   ├── geocode.py       # 地理编码功能
+│   │   │   ├── formatter.py     # 结果格式化
+│   │   │   ├── validator.py     # 坐标验证
+│   │   │   ├── constants.py     # 常量定义
+│   │   │   ├── exceptions.py    # 异常定义
+│   │   │   ├── provider.py      # 服务提供者
+│   │   │   ├── test.py          # 测试模块
+│   │   │   └── README.md        # 使用说明
+│   │   ├── calculate/           # 数学计算工具
+│   │   │   ├── __init__.py      # 包初始化文件
+│   │   │   └── math_tools.py    # 数学工具实现
+│   │   ├── search/              # 搜索工具
+│   │   │   ├── __init__.py      # 包初始化文件
+│   │   │   ├── search_tools.py  # 网络搜索工具
+│   │   │   └── tavily_search_tool.py  # Tavily搜索工具
+│   │   ├── notion/              # Notion知识管理工具
+│   │   └── okx_market/          # OKX加密货币工具
 │   │   ├── notion/                  # Notion知识管理工具
 │   │   ├── okx_market/              # OKX加密货币工具
 │   │   └── ...
@@ -447,3 +466,10 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 - **文档完善**: 新增记忆系统集成文档
 - **代码清理**: 移除冗余的memory_manager模块
 - **代理修复**: 解决网络代理导致的连接问题
+
+### v1.0.0 (2025-07-16)
+- 集成Tavily搜索API
+- 优化ReAct提示词模板
+- 增强网页内容获取功能
+- 修复DuckDuckGo搜索URL解析问题
+- 完善错误处理和日志记录

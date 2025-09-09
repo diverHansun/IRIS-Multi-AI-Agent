@@ -25,10 +25,10 @@ from ..prompts.registry import PromptRegistry
 from ..prompts.tooling import serialize_tools
 
 from ..llm.zhipu_llm import create_zhipu_llm
-from ..tools.math_tools import add_numbers, calculate_math
-from ..tools.search_tools import SEARCH_TOOLS
-from ..tools.tavily_search_tool import get_available_tavily_tools
-from ..tools.amap_search import get_available_amap_tools
+from ..tools.calculate.math_tools import add_numbers, calculate_math
+from ..tools.search.search_tools import SEARCH_TOOLS
+from ..tools.search.tavily_search_tool import get_available_tavily_tools
+from ..tools.amap import get_available_amap_tools
 from ..tools.okx_market import get_available_okx_tools
 from ..tools.notion import get_notion_tools
 from ..memory.global_memory import GlobalMemoryManager

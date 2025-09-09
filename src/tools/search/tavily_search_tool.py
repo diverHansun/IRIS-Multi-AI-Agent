@@ -7,53 +7,100 @@ Tavily Search API 工具模块
 
 import json
 import logging
+import sys
+import os
 from typing import Annotated, Dict, List, Any, Optional
 from langchain_core.tools import tool
-from langchain_community.tools.tavily_search import TavilySearchResults
 
-from ..config import settings
+# 添加项目根目录到Python路径
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# 安全导入TavilySearch，优先使用新的langchain-tavily包
+TavilySearch = None
+try:
+    from langchain_tavily import TavilySearch
+except ImportError:
+    try:
+        from langchain_community.tools.tavily_search import TavilySearchResults
+        TavilySearch = TavilySearchResults
+        print("使用旧的 langchain-community 包")
+    except ImportError as e:
+        print(f"警告: 无法导入Tavily搜索工具: {e}")
+
+# 安全导入项目配置
+try:
+    from src.config import settings
+except ImportError:
+    try:
+        from config import settings
+    except ImportError:
+        # 如果无法导入配置，创建一个简单的配置对象
+        class Settings:
+            tavily_api_key = None
+        settings = Settings()
 
 logger = logging.getLogger(__name__)
 
 
 class TavilySearchProvider:
     """Tavily 搜索服务提供者"""
-    
+
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or settings.tavily_api_key
-        self.is_available = bool(self.api_key)
-        
-        if not self.is_available:
+        self.api_key = api_key or getattr(settings, 'tavily_api_key', None)
+        self.is_available = bool(self.api_key) and TavilySearch is not None
+
+        if not self.api_key:
             logger.warning("Tavily API key not found. Tavily search functionality will be disabled.")
-    
-    def create_search_tool(self, **kwargs) -> TavilySearchResults:
+        if TavilySearch is None:
+            logger.warning("TavilySearch not available. Tavily search functionality will be disabled.")
+
+    def create_search_tool(self, **kwargs) -> TavilySearch:
         """创建 Tavily 搜索工具实例"""
         if not self.is_available:
-            raise ValueError("Tavily API key not configured")
-        
-        return TavilySearchResults(
-            tavily_api_key=self.api_key,
-            **kwargs
-        )
-    
+            raise ValueError("Tavily API key not configured or TavilySearch not available")
+
+        try:
+            # 检查使用的是新版本还是旧版本
+            if TavilySearch.__module__ == 'langchain_tavily.tavily_search':
+                # 新版本使用 tavily_api_key 参数
+                return TavilySearch(
+                    tavily_api_key=self.api_key,
+                    **kwargs
+                )
+            else:
+                # 旧版本使用 tavily_api_key 参数
+                return TavilySearch(
+                    tavily_api_key=self.api_key,
+                    **kwargs
+                )
+        except Exception as e:
+            logger.error(f"创建 Tavily 搜索工具实例失败: {e}")
+            raise
+
     def format_search_results(self, results: List[Dict], query: str) -> str:
         """格式化搜索结果为中文显示"""
         if not results:
             return f"抱歉，没有找到关于 '{query}' 的搜索结果。"
-        
-        formatted_results = [f"🔍 Tavily搜索结果: {query}\n📊 共找到 {len(results)} 个结果\n"]
-        
-        for i, result in enumerate(results, 1):
-            formatted_result = f"""
+
+        try:
+            formatted_results = [f"🔍 Tavily搜索结果: {query}\n📊 共找到 {len(results)} 个结果\n"]
+
+            for i, result in enumerate(results, 1):
+                formatted_result = f"""
 📌 第 {i} 个结果:
 📰 标题: {result.get('title', '无标题')}
 🔗 链接: {result.get('url', '无链接')}
 📝 内容: {result.get('content', '无内容')[:300]}{'...' if len(result.get('content', '')) > 300 else ''}
 ⭐ 相关度: {result.get('score', 0):.2f}
 """
-            formatted_results.append(formatted_result.strip())
-        
-        return "\n\n".join(formatted_results)
+                formatted_results.append(formatted_result.strip())
+
+            return "\n\n".join(formatted_results)
+        except Exception as e:
+            logger.error(f"格式化搜索结果失败: {e}")
+            return f"❌ 格式化搜索结果时发生错误: {str(e)}"
 
 
 # 全局搜索提供者实例

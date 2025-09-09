@@ -16,10 +16,10 @@ from langchain_core.language_models import BaseChatModel
 
 from ..llm.openai_llm import build_openai_chat, OpenAILLM
 from ..memory.global_memory import GlobalMemoryManager
-from ..tools.math_tools import add_numbers, calculate_math
-from ..tools.search_tools import SEARCH_TOOLS
-from ..tools.tavily_search_tool import get_available_tavily_tools
-from ..tools.amap_search import get_available_amap_tools
+from ..tools.calculate.math_tools import add_numbers, calculate_math
+from ..tools.search.search_tools import SEARCH_TOOLS
+from ..tools.search.tavily_search_tool import get_available_tavily_tools
+from ..tools.amap import get_available_amap_tools
 from ..tools.notion import get_notion_tools
 
 # 尝试导入OKX工具（可选）
