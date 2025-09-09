@@ -131,6 +131,11 @@ def amap_search_place(query: Annotated[str, "搜索关键词，如'星巴克'、
     """
     try:
         service = _get_search_service()
+        
+        # 确保query是字符串类型
+        if not isinstance(query, str):
+            return "ERROR: 搜索关键词必须是字符串类型"
+        
         logger.info(f"执行高德地图地点搜索: {query}")
         
         data = service.search_places(keywords=query)
@@ -157,6 +162,10 @@ def amap_search_nearby(
     """
     try:
         service = _get_search_service()
+        
+        # 确保search_params是字符串类型
+        if not isinstance(search_params, str):
+            return "ERROR: 搜索参数必须是字符串类型"
         
         # 解析参数
         parts = search_params.strip().split(',')
@@ -207,6 +216,10 @@ def amap_search_in_city(
     """
     try:
         service = _get_search_service()
+        
+        # 确保search_params是字符串类型
+        if not isinstance(search_params, str):
+            return "ERROR: 搜索参数必须是字符串类型"
         
         # 解析参数
         parts = search_params.strip().split(',')

@@ -77,7 +77,19 @@ class AmapRouteService:
         
         # 地址转坐标
         try:
+            # 检查地址是否为空或无效
+            if not location or not isinstance(location, str) or location.strip() == "":
+                raise ValueError(f"地址为空或无效: {location}")
+            
             data = self.geocode_service.geocode_address(location, city)
+            
+            # 检查API响应状态
+            status = data.get('status', '0')
+            if status != '1':
+                infocode = data.get('infocode', 'N/A')
+                info = data.get('info', '未知错误')
+                raise ValueError(f"高德地图API错误: {info} (状态码: {infocode})")
+            
             geocodes = data.get('geocodes', [])
             if not geocodes:
                 raise ValueError(f"无法找到地址 '{location}' 的坐标")
@@ -203,6 +215,10 @@ def amap_route_driving(
     try:
         service = _get_route_service()
         
+        # 确保route_params是字符串类型
+        if not isinstance(route_params, str):
+            return "ERROR: 路线参数必须是字符串类型"
+        
         # 解析参数 - 支持坐标和地址两种格式
         parts = route_params.strip().split(',')
         
@@ -243,7 +259,15 @@ def amap_route_driving(
             destination_coord = service._convert_to_coordinates(destination)
             logger.info(f"坐标转换: {origin} -> {origin_coord}, {destination} -> {destination_coord}")
         except Exception as e:
-            return f"ERROR: 地址解析失败: {str(e)}"
+            error_msg = str(e)
+            if "ENGINE_RESPONSE_DATA_ERROR" in error_msg:
+                return f"ERROR: 无法解析地址信息，请检查地址是否正确完整。可能的问题：地址不完整、地址不存在、或高德地图数据库中无此地址记录。请尝试使用更具体的地址或附近的知名地标。"
+            elif "INVALID_USER_KEY" in error_msg:
+                return "ERROR: API密钥无效，请检查配置。"
+            elif "DAILY_QUERY_OVER_LIMIT" in error_msg:
+                return "ERROR: API调用次数超限，请稍后再试。"
+            else:
+                return f"ERROR: 地址解析失败: {error_msg}"
         
         data = service.plan_route(
             origin=origin_coord,
@@ -275,6 +299,10 @@ def amap_route_walking(
     try:
         service = _get_route_service()
         
+        # 确保route_params是字符串类型
+        if not isinstance(route_params, str):
+            return "ERROR: 路线参数必须是字符串类型"
+        
         # 解析参数 - 支持坐标和地址两种格式
         parts = route_params.strip().split(',')
         
@@ -299,7 +327,15 @@ def amap_route_walking(
             destination_coord = service._convert_to_coordinates(destination)
             logger.info(f"坐标转换: {origin} -> {origin_coord}, {destination} -> {destination_coord}")
         except Exception as e:
-            return f"ERROR: 地址解析失败: {str(e)}"
+            error_msg = str(e)
+            if "ENGINE_RESPONSE_DATA_ERROR" in error_msg:
+                return f"ERROR: 无法解析地址信息，请检查地址是否正确完整。可能的问题：地址不完整、地址不存在、或高德地图数据库中无此地址记录。请尝试使用更具体的地址或附近的知名地标。"
+            elif "INVALID_USER_KEY" in error_msg:
+                return "ERROR: API密钥无效，请检查配置。"
+            elif "DAILY_QUERY_OVER_LIMIT" in error_msg:
+                return "ERROR: API调用次数超限，请稍后再试。"
+            else:
+                return f"ERROR: 地址解析失败: {error_msg}"
         
         data = service.plan_walking_route(origin=origin_coord, destination=destination_coord)
         return format_route_results(data, f"{origin}({origin_coord})", f"{destination}({destination_coord})", "步行")
@@ -325,6 +361,10 @@ def amap_route_transit(
     """
     try:
         service = _get_route_service()
+        
+        # 确保route_params是字符串类型
+        if not isinstance(route_params, str):
+            return "ERROR: 路线参数必须是字符串类型"
         
         # 解析参数
         parts = route_params.strip().split(',')
@@ -353,7 +393,15 @@ def amap_route_transit(
             destination_coord = service._convert_to_coordinates(destination, city)
             logger.info(f"坐标转换: {origin} -> {origin_coord}, {destination} -> {destination_coord}")
         except Exception as e:
-            return f"ERROR: 地址解析失败: {str(e)}"
+            error_msg = str(e)
+            if "ENGINE_RESPONSE_DATA_ERROR" in error_msg:
+                return f"ERROR: 无法解析地址信息，请检查地址是否正确完整。可能的问题：地址不完整、地址不存在、或高德地图数据库中无此地址记录。请尝试使用更具体的地址或附近的知名地标。"
+            elif "INVALID_USER_KEY" in error_msg:
+                return "ERROR: API密钥无效，请检查配置。"
+            elif "DAILY_QUERY_OVER_LIMIT" in error_msg:
+                return "ERROR: API调用次数超限，请稍后再试。"
+            else:
+                return f"ERROR: 地址解析失败: {error_msg}"
         
         data = service.plan_transit_route(
             origin=origin_coord,
