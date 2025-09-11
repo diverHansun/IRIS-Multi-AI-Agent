@@ -182,6 +182,18 @@ class SessionStorage:
             with open(session_file, 'r', encoding='utf-8') as f:
                 session_data = json.load(f)
             
+            # 如果会话在索引中不存在，自动添加到索引（恢复机制）
+            if session_id not in self.sessions_index:
+                logger.info(f"发现孤立会话文件，正在恢复会话索引: {session_id}")
+                self.sessions_index[session_id] = {
+                    "session_id": session_id,
+                    "message_count": session_data.get("message_count", len(session_data.get("messages", []))),
+                    "created_at": session_data.get("created_at", datetime.now().isoformat()),
+                    "updated_at": session_data.get("updated_at", datetime.now().isoformat()),
+                    "file_path": str(session_file)
+                }
+                self._save_sessions_index()
+            
             # 转换消息数据
             messages = []
             for msg_dict in session_data.get("messages", []):
@@ -300,3 +312,75 @@ class SessionStorage:
         except Exception as e:
             logger.error(f"清理过期会话失败: {e}")
             return 0
+    
+    def check_session_consistency(self) -> Dict[str, List[str]]:
+        """
+        检查会话索引和文件系统的一致性
+        
+        Returns:
+            包含孤立索引条目和孤立文件的字典
+        """
+        try:
+            # 获取所有会话文件
+            session_files = list(self.storage_dir.glob("*.json"))
+            session_file_ids = {f.stem for f in session_files if f.name != "sessions_index.json"}
+            
+            # 获取索引中的会话ID
+            indexed_session_ids = set(self.sessions_index.keys())
+            
+            # 找出孤立的索引条目（索引中有但文件系统中没有）
+            orphaned_index_entries = list(indexed_session_ids - session_file_ids)
+            
+            # 找出孤立的文件（文件系统中有但索引中没有）
+            orphaned_files = list(session_file_ids - indexed_session_ids)
+            
+            return {
+                "orphaned_index_entries": orphaned_index_entries,
+                "orphaned_files": orphaned_files
+            }
+        except Exception as e:
+            logger.error(f"检查会话一致性失败: {e}")
+            return {
+                "orphaned_index_entries": [],
+                "orphaned_files": []
+            }
+    
+    def cleanup_orphaned_sessions(self) -> Dict[str, int]:
+        """
+        清理孤立会话文件和索引条目
+        
+        Returns:
+            清理统计信息
+        """
+        try:
+            consistency = self.check_session_consistency()
+            cleaned_count = {
+                "orphaned_index_entries": 0,
+                "orphaned_files": 0
+            }
+            
+            # 清理孤立的索引条目
+            for session_id in consistency["orphaned_index_entries"]:
+                if session_id in self.sessions_index:
+                    del self.sessions_index[session_id]
+                    cleaned_count["orphaned_index_entries"] += 1
+            
+            # 清理孤立的会话文件
+            for session_id in consistency["orphaned_files"]:
+                session_file = self.storage_dir / f"{session_id}.json"
+                if session_file.exists():
+                    session_file.unlink()
+                    cleaned_count["orphaned_files"] += 1
+            
+            # 如果有任何清理操作，保存索引
+            if sum(cleaned_count.values()) > 0:
+                self._save_sessions_index()
+                logger.info(f"清理了 {cleaned_count['orphaned_index_entries']} 个孤立索引条目和 {cleaned_count['orphaned_files']} 个孤立文件")
+            
+            return cleaned_count
+        except Exception as e:
+            logger.error(f"清理孤立会话失败: {e}")
+            return {
+                "orphaned_index_entries": 0,
+                "orphaned_files": 0
+            }

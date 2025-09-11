@@ -63,6 +63,8 @@ clear - 清除当前会话记忆
 new - 创建新会话
 sessions - 查看历史会话列表
 restore <session_id> - 恢复指定会话
+delete_session <session_id> - 删除指定会话及其文件
+cleanup - 清理会话（删除孤立文件和索引）
 \nMCP 管理:\n
 mcp status [-v]        - 查看MCP状态/服务器/工具数量\n
 mcp tools [--json]     - 列出MCP工具（前缀 mcp_）\n
@@ -108,6 +110,14 @@ Notion知识管理：
 
 基本命令：
 输入命令名查看具体说明 (如: 输入'llms'查看模型列表)
+
+会话管理命令：
+• clear - 清除当前会话的记忆内容（保留会话文件）
+• new - 创建新会话
+• sessions - 查看历史会话列表
+• restore <session_id> - 恢复指定会话
+• delete_session <session_id> - 删除指定会话及其文件
+• cleanup - 清理会话（删除孤立文件和索引）
     """
     # 追加 MCP 指令说明
     help_text += "\nMCP 使用与指令：\n"
@@ -448,8 +458,36 @@ async def cli_async():
                 if query.strip().lower() in {"new", "新会话", "创建会话"}:
                     old_session_id = session_id
                     session_id = session_manager.create_new_session()
-                    console.print(f"[green]✅ 已创建新会话: {session_id}[/]")
-                    console.print(f"[dim]原会话 {old_session_id} 已保存[/]")
+                    console.print("[green]✅ 已创建新会话: {session_id}[/]")
+                    console.print("[dim]原会话 {old_session_id} 已保存[/]")
+                    continue
+
+                if query.strip().lower().startswith("delete_session "):
+                    target_session_id = query.strip()[15:].strip()
+                    if target_session_id:
+                        # 检查会话是否存在
+                        if global_memory.session_exists(target_session_id):
+                            # 删除会话
+                            if global_memory.storage.delete_session(target_session_id):
+                                console.print(f"[green]✅ 会话已删除: {target_session_id}[/]")
+                                # 如果删除的是当前会话，创建新会话
+                                if target_session_id == session_id:
+                                    session_id = session_manager.create_new_session()
+                                    console.print(f"[dim]已创建新会话: {session_id}[/]")
+                            else:
+                                console.print(f"[red]❌ 删除会话失败: {target_session_id}[/]")
+                        else:
+                            console.print(f"[red]❌ 会话不存在: {target_session_id}[/]")
+                    else:
+                        console.print("[yellow]⚠️ 请提供有效的会话ID，格式：delete_session <session_id>[/]")
+                    continue
+
+                if query.strip().lower() in {"cleanup", "清理会话"}:
+                    # 清理孤立会话
+                    cleanup_stats = session_manager.cleanup_orphaned_sessions()
+                    console.print(f"[green]✅ 清理会话完成:[/]")
+                    console.print(f"[dim]  清理孤立索引条目: {cleanup_stats['orphaned_index_entries']} 个[/]")
+                    console.print(f"[dim]  清理孤立文件: {cleanup_stats['orphaned_files']} 个[/]")
                     continue
 
                 if query.strip().lower() in {"sessions", "会话列表", "ls"}:
@@ -458,11 +496,14 @@ async def cli_async():
                         console.print(f"[bold blue]历史会话列表 ({len(sessions)} 个):[/]")
                         for i, session in enumerate(sessions[:10], 1):  # 显示前10个
                             created_time = session.get("created_at", "")[:19] if session.get("created_at") else "未知"
+                            updated_time = session.get("updated_at", "")[:19] if session.get("updated_at") else "未知"
                             current_marker = " [当前]" if session['session_id'] == session_id else ""
-                            console.print(f"  {i}. {session['session_id']}{current_marker} - {session['message_count']} 条消息 - {created_time}")
+                            console.print(f"  {i}. {session['session_id']}{current_marker}")
+                            console.print(f"      消息数: {session['message_count']} 条 | 创建: {created_time} | 更新: {updated_time}")
                         if len(sessions) > 10:
                             console.print(f"  ... 还有 {len(sessions) - 10} 个会话")
                         console.print("[dim]输入 'restore <session_id>' 恢复指定会话[/]")
+                        console.print("[dim]输入 'delete_session <session_id>' 删除指定会话[/]")
                     else:
                         console.print("[yellow]暂无历史会话[/]")
                     continue

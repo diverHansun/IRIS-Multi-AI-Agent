@@ -5,7 +5,7 @@
 """
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import uuid
 from rich.console import Console
@@ -272,3 +272,35 @@ class SessionManager:
         except Exception as e:
             logger.error(f"清理旧会话失败: {e}")
             return 0
+    
+    def check_session_consistency(self) -> Dict[str, List[str]]:
+        """
+        检查会话一致性
+        
+        Returns:
+            包含孤立索引条目和孤立文件的字典
+        """
+        try:
+            return self.memory_manager.storage.check_session_consistency()
+        except Exception as e:
+            logger.error(f"检查会话一致性失败: {e}")
+            return {
+                "orphaned_index_entries": [],
+                "orphaned_files": []
+            }
+    
+    def cleanup_orphaned_sessions(self) -> Dict[str, int]:
+        """
+        清理孤立会话
+        
+        Returns:
+            清理统计信息
+        """
+        try:
+            return self.memory_manager.storage.cleanup_orphaned_sessions()
+        except Exception as e:
+            logger.error(f"清理孤立会话失败: {e}")
+            return {
+                "orphaned_index_entries": 0,
+                "orphaned_files": 0
+            }
