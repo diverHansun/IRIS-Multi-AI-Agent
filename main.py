@@ -307,7 +307,7 @@ async def cli_async():
 
                 if query.strip().lower() in {"info", "信息"}:
                     info = agent.get_info()
-                    llm_info = agent.get_llm_info()  # 获取LLM详细信息
+                    llm_info = agent.get_info()  # 获取LLM详细信息
                     
                     console.print(f"[bold blue]系统信息：[/]")
                     console.print(f"  LLM提供商: {info.get('provider', 'N/A')}")

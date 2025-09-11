@@ -621,6 +621,19 @@ class ZhipuAgent:
                 ],
                 "architecture": "混合专家模型(MoE)"
             })
+        # GLM-4-plus特殊能力信息
+        elif self.model == "glm-4-plus":
+            info.update({
+                "context_window": "32K tokens",
+                "max_output": "8K tokens", 
+                "architecture": "Transformer",
+                "model_features": [
+                    "通用对话",
+                    "推理分析",
+                    "工具调用",
+                    "成本优化"
+                ]
+            })
         
         # 添加记忆信息
         if self.enable_memory and self.chat_memory:
@@ -662,44 +675,6 @@ class ZhipuAgent:
     def get_llm(self):
         """获取底层LLM实例用于流式输出"""
         return self.llm
-    
-    def get_llm_info(self) -> Dict[str, Any]:
-        """获取LLM详细信息，包括思考模式状态"""
-        llm_info = {
-            "model": self.model,
-            "temperature": self.temperature,
-            "thinking_mode": False,  # 默认值
-            "model_features": []
-        }
-        
-        # GLM-4.5特殊信息
-        if self.model == "glm-4.5":
-            llm_info.update({
-                "thinking_mode": True,  # GLM-4.5默认启用思考模式
-                "context_window": "128K tokens",
-                "max_output": "96K tokens",
-                "architecture": "混合专家模型(MoE)",
-                "model_features": [
-                    "深度思考模式",
-                    "128K长上下文", 
-                    "代码生成专精",
-                    "工具调用优化"
-                ]
-            })
-        elif self.model == "glm-4-plus":
-            llm_info.update({
-                "context_window": "32K tokens",
-                "max_output": "8K tokens", 
-                "architecture": "Transformer",
-                "model_features": [
-                    "通用对话",
-                    "推理分析",
-                    "工具调用",
-                    "成本优化"
-                ]
-            })
-        
-        return llm_info
     
     def list_tools(self) -> List[str]:
         """列出工具名称"""

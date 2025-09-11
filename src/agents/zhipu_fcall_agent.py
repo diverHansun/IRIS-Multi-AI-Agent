@@ -403,7 +403,7 @@ class ZhipuFunctionCallingAgent:
     
     def get_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
-        return {
+        info = {
             "provider": "zhipu",
             "model": self.model,
             "temperature": self.temperature,
@@ -414,23 +414,10 @@ class ZhipuFunctionCallingAgent:
             "memory_enabled": self.enable_memory,
             "mode": "function_calling"  # 标识使用Function Calling模式
         }
-    
-    def get_llm(self):
-        """获取底层LLM实例用于流式输出"""
-        return self.llm
-    
-    def get_llm_info(self) -> Dict[str, Any]:
-        """获取LLM详细信息，包括思考模式状态"""
-        llm_info = {
-            "model": self.model,
-            "temperature": self.temperature,
-            "thinking_mode": False,  # 默认值
-            "model_features": []
-        }
         
-        # GLM-4.5特殊信息
+        # GLM-4.5特殊能力信息
         if self.model == "glm-4.5":
-            llm_info.update({
+            info.update({
                 "thinking_mode": True,  # GLM-4.5默认启用思考模式
                 "context_window": "128K tokens",
                 "max_output": "96K tokens",
@@ -443,7 +430,11 @@ class ZhipuFunctionCallingAgent:
                 ]
             })
         
-        return llm_info
+        return info
+    
+    def get_llm(self):
+        """获取底层LLM实例用于流式输出"""
+        return self.llm
 
 
 # 兼容性函数
