@@ -289,9 +289,18 @@ def tavily_search_news(query: Annotated[str, "新闻搜索查询关键词"]) -> 
             search_depth="advanced",
             include_answer=True,
             include_raw_content=False,
-            include_domains=["news.baidu.com", "news.sina.com.cn", "news.163.com", 
-                           "news.qq.com", "news.sohu.com", "xinhuanet.com", 
-                           "people.com.cn", "chinanews.com", "cctv.com"]
+            include_domains=[
+                # 中国综合主流新闻
+                "news.baidu.com", "news.sina.com.cn", "news.163.com",
+                "news.qq.com", "news.sohu.com", "xinhuanet.com",
+                "people.com.cn", "chinanews.com", "cctv.com",
+                # 中国经济/财经类
+                "caixin.com", "yicai.com", "21jingji.com",
+                "eeo.com.cn", "stcn.com", "cs.com.cn", "cnstock.com", "ce.cn",
+                # 美国与国际主流媒体
+                "apnews.com", "reuters.com", "bloomberg.com",
+                "axios.com", "cnbc.com", "marketwatch.com", "ft.com", "economist.com"
+            ]
         )
         
         results = search_tool.run(query)

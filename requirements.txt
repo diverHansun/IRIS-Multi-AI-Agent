@@ -105,10 +105,7 @@ idna==3.10
 charset-normalizer==3.4.3
 multidict==6.6.4
 yarl==1.20.1
-frozenlist==1.7.0
 aiosignal==1.4.0
-async-timeout==4.0.3
-attrs==25.3.0
 aiohappyeyeballs==2.6.1
 propcache==0.3.2
 
@@ -186,3 +183,6 @@ annotated-types==0.7.0
 langchain-mcp-adapters
 langchain-mcp-tools
 tomli==2.0.1
+
+# 时间处理
+pytz==2025.2
