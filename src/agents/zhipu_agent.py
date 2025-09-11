@@ -30,6 +30,7 @@ from ..tools.search.search_tools import SEARCH_TOOLS
 from ..tools.search.tavily_search_tool import get_available_tavily_tools
 from ..tools.amap import get_available_amap_tools
 from ..tools.okx_market import get_available_okx_tools
+from ..tools.time import get_available_time_tools
 from ..tools.notion import get_notion_tools
 from ..memory.global_memory import GlobalMemoryManager
 from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -335,6 +336,14 @@ class ZhipuAgent:
             logger.info(f"✅ 已加载OKX加密货币工具: {len(okx_tools)} 个")
         else:
             logger.warning("⚠️ OKX加密货币工具加载失败")
+            
+        # 添加时间工具
+        time_tools = get_available_time_tools()
+        if time_tools:
+            self.tools.extend(time_tools)
+            logger.info(f"✅ 已加载时间工具: {len(time_tools)} 个")
+        else:
+            logger.warning("⚠️ 时间工具加载失败")
         
         # 添加 Notion 工具 (使用新的 Direct API 实现)
         try:

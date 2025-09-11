@@ -15,6 +15,7 @@ from ..tools.calculate.math_tools import add_numbers, calculate_math
 from ..tools.search.search_tools import SEARCH_TOOLS
 from ..tools.search.tavily_search_tool import get_available_tavily_tools
 from ..tools.amap import get_available_amap_tools
+from ..tools.time import get_available_time_tools
 
 logger = logging.getLogger(__name__)
 
@@ -361,6 +362,11 @@ def get_all_available_tools() -> List[BaseTool]:
     amap_tools = get_available_amap_tools()
     if amap_tools:
         tools.extend(amap_tools)
+        
+    # 添加时间工具
+    time_tools = get_available_time_tools()
+    if time_tools:
+        tools.extend(time_tools)
     
     # 添加OKX加密货币工具（如果可用）
     try:

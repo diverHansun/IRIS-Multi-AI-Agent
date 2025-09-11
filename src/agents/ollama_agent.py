@@ -20,6 +20,7 @@ from ..tools.calculate.math_tools import add_numbers, calculate_math
 from ..tools.search.search_tools import SEARCH_TOOLS
 from ..tools.search.tavily_search_tool import get_available_tavily_tools
 from ..tools.amap import get_available_amap_tools
+from ..tools.time import get_available_time_tools
 from ..tools.notion import get_notion_tools
 
 # 尝试导入OKX工具（可选）
@@ -136,8 +137,8 @@ class OllamaAgent:
             logger.error(f"Ollama Agent初始化失败: {str(e)}")
             raise
     
-    def _setup_tools(self):
-        """设置Agent工具"""
+    async def _load_tools(self):
+        """加载所有工具"""
         self._tools = []
         
         # 数学工具
@@ -157,6 +158,12 @@ class OllamaAgent:
         if amap_tools:
             self._tools.extend(amap_tools)
             logger.info(f"已加载高德地图工具: {len(amap_tools)}个")
+            
+        # 时间工具
+        time_tools = get_available_time_tools()
+        if time_tools:
+            self._tools.extend(time_tools)
+            logger.info(f"已加载时间工具: {len(time_tools)}个")
         
         # Notion工具
         notion_tools = get_notion_tools()

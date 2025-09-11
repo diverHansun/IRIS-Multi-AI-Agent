@@ -20,6 +20,7 @@ from ..tools.calculate.math_tools import add_numbers, calculate_math
 from ..tools.search.search_tools import SEARCH_TOOLS
 from ..tools.search.tavily_search_tool import get_available_tavily_tools
 from ..tools.amap import get_available_amap_tools
+from ..tools.time import get_available_time_tools
 from ..tools.notion import get_notion_tools
 
 # 尝试导入OKX工具（可选）
@@ -175,6 +176,12 @@ class OpenAIAgent:
         if amap_tools:
             self._tools.extend(amap_tools)
             logger.info("Amap tools loaded")
+            
+        # 时间工具
+        time_tools = get_available_time_tools()
+        if time_tools:
+            self._tools.extend(time_tools)
+            logger.info("Time tools loaded")
         
         # OKX加密货币工具（可选）
         if OKX_AVAILABLE:
