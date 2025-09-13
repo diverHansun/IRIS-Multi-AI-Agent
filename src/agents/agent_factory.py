@@ -134,6 +134,23 @@ class AgentFactory:
                 # Ollama模型参数处理 - 针对Agent模式优化
                 base_url = kwargs.get('base_url', settings.ollama_base_url)
                 
+                # 如果model为"auto"，则使用本地第一个可用模型
+                if model == "auto":
+                    try:
+                        from ..llm.ollama_utils import list_ollama_models
+                        local_models = await list_ollama_models(base_url, timeout=5)
+                        if local_models:
+                            model = local_models[0]  # 使用第一个本地模型
+                            logger.info(f"自动选择Ollama模型: {model}")
+                        else:
+                            # 如果没有本地模型，使用默认值
+                            model = "gpt-oss:20b"
+                            logger.warning("未找到本地Ollama模型，使用默认模型: gpt-oss:20b")
+                    except Exception as e:
+                        # 出错时回退到默认模型
+                        model = "gpt-oss:20b"
+                        logger.warning(f"获取Ollama模型列表失败，使用默认模型: gpt-oss:20b, 错误: {e}")
+                
                 # Agent模式强制使用低温度，除非用户显式指定
                 agent_temperature = 0.0 if temperature == 0.1 else temperature
                 
@@ -164,6 +181,8 @@ class AgentFactory:
     
     def get_available_configurations(self) -> Dict[str, Any]:
         """获取可用的Agent配置"""
+        from ..config import settings
+        
         providers = self.llm_manager.get_available_providers()
         
         configurations = {
@@ -172,7 +191,10 @@ class AgentFactory:
             "default_config": None
         }
         
+        # 构建提供商信息映射
+        provider_map = {}
         for provider_info in providers:
+            provider_map[provider_info["provider"]] = provider_info
             if provider_info["available"]:
                 configurations["available_providers"].append(provider_info)
                 
@@ -188,25 +210,43 @@ class AgentFactory:
                             "description": model_info["description"]
                         })
         
-        # 设置默认配置
+        # 设置默认配置，优先考虑环境变量设置
         if configurations["available_providers"]:
-            # 优先使用智谱AI
-            zhipu_provider = next(
-                (p for p in configurations["available_providers"] if p["provider"] == "zhipu"), 
-                None
-            )
-            if zhipu_provider:
+            # 检查环境变量中设置的默认提供商是否可用
+            default_provider = settings.default_llm_provider
+            default_model = settings.default_llm_model
+            
+            # 如果环境变量中的提供商可用
+            if default_provider in provider_map and provider_map[default_provider]["available"]:
+                provider_info = provider_map[default_provider]
+                # 如果环境变量中设置了模型且该模型受支持，否则使用提供商的默认模型
+                if default_model and self.llm_manager.validate_model(default_provider, default_model):
+                    model_to_use = default_model
+                else:
+                    model_to_use = provider_info["default_model"]
+                    
                 configurations["default_config"] = {
-                    "provider": "zhipu",
-                    "model": zhipu_provider["default_model"]
+                    "provider": default_provider,
+                    "model": model_to_use
                 }
             else:
-                # 使用第一个可用的提供商
-                first_provider = configurations["available_providers"][0]
-                configurations["default_config"] = {
-                    "provider": first_provider["provider"],
-                    "model": first_provider["default_model"]
-                }
+                # 回退到原来的逻辑：优先使用智谱AI
+                zhipu_provider = next(
+                    (p for p in configurations["available_providers"] if p["provider"] == "zhipu"), 
+                    None
+                )
+                if zhipu_provider:
+                    configurations["default_config"] = {
+                        "provider": "zhipu",
+                        "model": zhipu_provider["default_model"]
+                    }
+                else:
+                    # 使用第一个可用的提供商
+                    first_provider = configurations["available_providers"][0]
+                    configurations["default_config"] = {
+                        "provider": first_provider["provider"],
+                        "model": first_provider["default_model"]
+                    }
         
         return configurations
     

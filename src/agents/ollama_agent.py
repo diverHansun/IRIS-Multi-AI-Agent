@@ -119,7 +119,7 @@ class OllamaAgent:
             
             # 2. 设置工具
             logger.info("设置Agent工具...")
-            self._setup_tools()
+            await self._load_tools()
             
             # 3. 设置记忆
             if self.enable_memory:

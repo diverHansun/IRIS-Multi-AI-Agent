@@ -104,41 +104,8 @@ class LLMManager:
         },
         LLMProvider.OLLAMA: {
             "name": "Ollama本地模型",
-            "models": {
-                "gpt-oss:20b": {
-                    "name": "GPT-OSS-20B",
-                    "description": "开源GPT模型，20B参数，强大的通用对话能力",
-                    "max_tokens": 8192,
-                    "context_window": 32768,
-                    "recommended": True,
-                    "features": ["chat", "reasoning", "large_model"]
-                },
-                "qwen3:8b": {
-                    "name": "Qwen3-8B",
-                    "description": "阿里巴巴通义千问3.0模型，中文优化，综合能力强",
-                    "max_tokens": 32768,
-                    "context_window": 32768,
-                    "recommended": True,
-                    "features": ["chinese_optimized", "chat", "reasoning"]
-                },
-                "gemma3:latest": {
-                    "name": "Gemma3-Latest",
-                    "description": "Google Gemma3模型最新版本，高效轻量",
-                    "max_tokens": 8192,
-                    "context_window": 32768,
-                    "recommended": True,
-                    "features": ["efficient", "chat", "reasoning"]
-                },
-                "deepseek-r1:1.5b": {
-                    "name": "DeepSeek-R1-1.5B",
-                    "description": "DeepSeek推理模型，专注逻辑推理和数学计算",
-                    "max_tokens": 4096,
-                    "context_window": 16384,
-                    "recommended": False,
-                    "features": ["reasoning", "mathematics", "lightweight"]
-                }
-            },
-            "default_model": "gpt-oss:20b",
+            "models": {},  # 移除静态模型定义，使用动态发现
+            "default_model": "auto",  # 使用自动发现的第一个模型作为默认值
             "api_key_env": None,  # Ollama不需要API密钥
             "class": None  # 稍后导入避免循环依赖
         }
