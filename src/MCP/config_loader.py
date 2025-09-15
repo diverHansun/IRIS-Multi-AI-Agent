@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .types import MCPConfig, ServerConfig, RetryConfig
 
@@ -33,18 +33,32 @@ def _expand_env_in_mapping(mapping: Dict[str, Any]) -> Dict[str, Any]:
     return expanded
 
 
-def find_config_path() -> Optional[Path]:
-    # ENV override
+def find_config_paths() -> List[Path]:
+    """Find all available MCP config files (both TOML and JSON)"""
+    paths = []
+    
+    # ENV override (if specified, only use that path)
     override = os.getenv("MCP_CONFIG_PATH")
     if override:
         p = Path(override)
-        return p if p.exists() else None
+        if p.exists():
+            return [p]
+        else:
+            return []
 
-    # default toml then json
-    for candidate in [Path("config/mcp.toml"), Path("config/mcp.json")]:
+    # Look for both TOML and JSON config files
+    candidates = [Path("config/mcp.toml"), Path("config/mcp.json")]
+    for candidate in candidates:
         if candidate.exists():
-            return candidate
-    return None
+            paths.append(candidate)
+    
+    return paths
+
+
+def find_config_path() -> Optional[Path]:
+    """Backward compatibility function - returns the first available config file"""
+    paths = find_config_paths()
+    return paths[0] if paths else None
 
 
 def _validate_and_build(config_dict: Dict[str, Any]) -> MCPConfig:
@@ -103,19 +117,71 @@ def _validate_and_build(config_dict: Dict[str, Any]) -> MCPConfig:
     )
 
 
+def _merge_configs(configs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge multiple config dictionaries, with later configs overriding earlier ones"""
+    if not configs:
+        return {}
+    
+    # Start with the first config
+    merged = configs[0].copy()
+    
+    # Merge subsequent configs
+    for config in configs[1:]:
+        # Merge top-level keys
+        for key, value in config.items():
+            if key == "servers" and "servers" in merged:
+                # Merge servers dictionary
+                merged["servers"].update(value)
+            else:
+                # Override other keys
+                merged[key] = value
+    
+    return merged
+
+
 def load_config(path: Optional[Path] = None) -> MCPConfig:
-    p = path or find_config_path()
-    if not p:
-        # No config file; default disabled config
+    """Load MCP configuration from file(s)"""
+    if path:
+        # Load single specified config file
+        if path.suffix.lower() == ".toml":
+            data = _read_toml(path)
+        else:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        cfg = _validate_and_build(data)
+        cfg.raw["__path__"] = str(path)
+        return cfg
+    
+    # Load all available config files and merge them
+    paths = find_config_paths()
+    if not paths:
+        # No config files; default disabled config
         return MCPConfig(enabled=False, auto_start=False)
-
-    if p.suffix.lower() == ".toml":
-        data = _read_toml(p)
-    else:
-        with p.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-    cfg = _validate_and_build(data)
-    cfg.raw["__path__"] = str(p)
+    
+    # Load all configs
+    configs = []
+    loaded_paths = []
+    for p in paths:
+        try:
+            if p.suffix.lower() == ".toml":
+                data = _read_toml(p)
+            else:
+                with p.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+            configs.append(data)
+            loaded_paths.append(str(p))
+        except Exception as e:
+            # Log error but continue with other configs
+            import logging
+            logging.warning(f"Failed to load MCP config from {p}: {e}")
+    
+    # Merge configs
+    merged_data = _merge_configs(configs)
+    merged_data["__paths__"] = loaded_paths
+    
+    cfg = _validate_and_build(merged_data)
+    # For backward compatibility, set __path__ to the first config file
+    cfg.raw["__path__"] = loaded_paths[0] if loaded_paths else None
+    cfg.raw["__paths__"] = loaded_paths
     return cfg
 

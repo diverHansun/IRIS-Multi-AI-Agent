@@ -6,6 +6,9 @@ This module contains the main CLI loop and command routing.
 import asyncio
 from rich.console import Console
 
+# Import the IRIS logo display function
+from src.ui.logo.logo import display_logo,display_logo_intro
+
 from src.agents.agent_factory import create_default_agent, get_available_configurations
 from src.llm.streaming_llm import stream_llm_response
 from src.memory import GlobalMemoryManager, SessionManager
@@ -37,6 +40,9 @@ class AppState:
 
 async def run():
     """Main CLI loop"""
+    # Display the IRIS logo at startup
+    display_logo()
+    display_logo_intro()
     # Create app state
     ctx = AppState()
     

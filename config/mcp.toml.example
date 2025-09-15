@@ -33,3 +33,13 @@ rename_prefix = "ctx7:"
 [servers.context7.env]
 CONTEXT7_MCP_URL = "https://mcp.context7.com/mcp"
 CONTEXT7_API_KEY = "$CONTEXT7_API_KEY"
+
+# Amap MCP
+[servers.amap-maps]
+transport = "stdio"
+command = "npx"
+args = ["-y", "@amap/amap-maps-mcp-server"]
+rename_prefix = "amap:"
+
+[servers.amap-maps.env]
+AMAP_MAPS_API_KEY = "$AMAP_MAPS_API_KEY"

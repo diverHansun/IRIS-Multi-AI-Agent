@@ -186,3 +186,6 @@ tomli==2.0.1
 
 # 时间处理
 pytz==2025.2
+ 
+ # ASCII 艺术
+ pyfiglet==0.8.post1
