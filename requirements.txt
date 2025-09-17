@@ -18,7 +18,6 @@ pydantic-core==2.33.2
 pydantic-settings==2.10.1
 
 # 搜索功能
-tavily-python==0.7.11
 requests==2.32.5
 requests-toolbelt==1.0.0
 beautifulsoup4==4.13.5
@@ -36,7 +35,7 @@ sniffio==1.3.1
 # (使用aiohttp进行HTTP请求)
 
 # 命令行界面
-rich==14.0.0
+rich==14.1.0
 colorama==0.4.6
 
 # 数学计算
@@ -45,147 +44,17 @@ sympy==1.14.0
 
 # 数据处理
 PyYAML==6.0.2
-Jinja2==3.1.4
-MarkupSafe==2.1.5
+Jinja2==3.1.6
+MarkupSafe==3.0.2
 
-# 工具支持
-typeguard==4.4.3
-typing_extensions==4.14.0
-filelock==3.16.1
 
-# OKX市场数据
-python-okx==0.4.0
-
-# 机器学习/AI支持
-torch==2.7.1+cu128
-torchaudio==2.7.1+cu128
-torchvision==0.22.1+cu128
-tiktoken==0.11.0
-
-# 数据库支持
-SQLAlchemy==2.0.43
-
-# 系统监控
-psutil==7.0.0
-
-# 日志记录
-loguru==0.7.3
-
-# 加密和安全
-cryptography==45.0.6
-certifi==2025.8.3
-
-# JSON处理
-orjson==3.11.2
-jsonpatch==1.33
-jsonpointer==3.0.0
-
-# 文本处理
-regex==2025.7.34
-markdown-it-py==4.0.0
-mdurl==0.1.2
-Pygments==2.19.2
-
-# 进度条和实用工具
-tqdm==4.67.1
-tenacity==9.1.2
-
-# LangSmith (LangChain跟踪)
-langsmith==0.4.16
-
-# 数据序列化
-dataclasses-json==0.6.7
-marshmallow==3.26.1
-
-# 缓存
-cachetools==6.1.0
-
-# 网络相关
-idna==3.10
-charset-normalizer==3.4.3
-multidict==6.6.4
-yarl==1.20.1
-aiosignal==1.4.0
-aiohappyeyeballs==2.6.1
-propcache==0.3.2
-
-# HTTP/2 支持
-h11==0.16.0
-h2==4.3.0
-hpack==4.1.0
-hyperframe==6.1.0
-
-# 网络协议
-greenlet==3.2.4
-hyperlink==21.0.0
-constantly==23.10.4
-incremental==24.7.2
-Automat==25.4.16
-Twisted==25.5.0
-zope.interface==7.2
-
-# JWT处理
-PyJWT==2.8.0
-
-# 压缩
-zstandard==0.24.0
-
-# Windows相关
-pywin32-ctypes==0.2.3
-win32_setctime==1.2.0
-
-# SSL支持
-pyOpenSSL==25.1.0
-cffi==1.17.1
-pycparser==2.22
-
-# 包管理工具
-setuptools==80.3.1
-pip==25.1.1
-packaging==25.0
-
-# 类型检查和元数据
-typing-inspect==0.9.0
-typing-inspection==0.4.1
-mypy_extensions==1.1.0
-importlib_metadata==8.7.0
-zipp==3.23.0
-
-# 图像处理
-pillow==11.0.0
-
-# 网络工具
-networkx==3.4.2
-fsspec==2024.10.0
-
-# 解析工具
-soupsieve==2.7
-
-# 数学扩展
-mpmath==1.3.0
-jiter==0.10.0
-
-# 兼容性
-exceptiongroup==1.3.0
-tomli==2.2.1
-backports.tarfile==1.2.0
-
-# 工具类
-more-itertools==10.7.0
-jaraco.classes==3.4.0
-jaraco.context==6.0.1
-jaraco.functools==4.3.0
-keyring==25.6.0
-distro==1.9.0
-annotated-types==0.7.0
  
 # MCP integration (optional, used if configured)
-langchain-mcp-adapters
-langchain-mcp-tools
-tomli==2.0.1
+langchain-mcp-adapters==0.1.9
+tomli==2.2.1
 
 # 时间处理
 pytz==2025.2
  
- # ASCII 艺术
- pyfiglet==0.8.post1
+# ASCII 艺术
+pyfiglet==0.8.post1

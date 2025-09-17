@@ -370,9 +370,18 @@ Question: {input}
                 "error": str(e)
             }
     
-    def get_info(self) -> Dict[str, Any]:
+    def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
-        return {
+        from ..llm.llm_manager import get_llm_info
+        
+        # 获取模型信息
+        try:
+            model_info = get_llm_info("ollama", self.model)
+        except Exception as e:
+            logger.warning(f"Failed to get model info: {e}")
+            model_info = {}
+        
+        info = {
             "provider": "ollama",
             "model": self.model,
             "base_url": self.base_url,
@@ -380,8 +389,20 @@ Question: {input}
             "tool_count": len(self._tools),
             "memory_enabled": self.enable_memory,
             "initialized": self._initialized,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
+            # 合并模型信息
+            **model_info
         }
+        
+        # Ollama模型不使用Model Features
+        if "model_features" in info:
+            del info["model_features"]
+            
+        return info
+    
+    def get_info(self) -> Dict[str, Any]:
+        """获取Agent信息(兼容旧接口)"""
+        return self.get_agent_info()
     
     def get_llm(self):
         """获取LLM实例（用于流式输出）"""

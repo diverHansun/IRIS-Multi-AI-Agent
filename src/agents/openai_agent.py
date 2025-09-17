@@ -384,9 +384,16 @@ class OpenAIAgent:
                 "session_id": session_id
             }
     
-    def get_info(self) -> Dict[str, Any]:
+    def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
-        llm_info = OpenAILLM(self.api_key, self.model).get_model_info()
+        from ..llm.llm_manager import get_llm_info
+        
+        # 获取模型信息
+        try:
+            model_info = get_llm_info("openai", self.model)
+        except Exception as e:
+            logger.warning(f"Failed to get model info: {e}")
+            model_info = {}
         
         info = {
             "provider": "openai",
@@ -396,14 +403,15 @@ class OpenAIAgent:
             "memory_enabled": self.enable_memory,
             "tool_count": len(self._tools),
             "tools": [tool.name for tool in self._tools] if self._tools else [],
-            "llm_info": llm_info
+            # 合并模型信息
+            **model_info
         }
         
         # GPT-5特殊信息
         if self.model.startswith("gpt-5"):
             info.update({
                 "model_generation": "GPT-5",
-                "enhanced_features": [
+                "model_features": [
                     "高级推理能力",
                     "增强创造性思维", 
                     "精准工具调用",
@@ -416,6 +424,10 @@ class OpenAIAgent:
             })
         
         return info
+    
+    def get_info(self) -> Dict[str, Any]:
+        """获取Agent信息(兼容旧接口)"""
+        return self.get_agent_info()
     
     def get_llm(self):
         """获取底层LLM实例用于流式输出"""

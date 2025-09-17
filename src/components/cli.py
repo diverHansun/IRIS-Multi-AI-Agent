@@ -84,11 +84,11 @@ async def run():
         # Show current mode and prompt
         if ctx.llm_mode:
             ctx.console.print(f"[green]Current Mode: LLM Mode (Streaming Output)[/]")
-            ctx.console.print(f"[dim]Features: Fast response | Real-time display | Direct conversation[/]")
+            ctx.console.print(f"[dim]Model Features: Fast response | Real-time display | Direct conversation[/]")
             ctx.console.print(f"[dim]Switch: Type 'mode agent' to use tool functionality[/]")
         else:
             ctx.console.print(f"[blue]Current Mode: Agent Mode (Tool Calling)[/]")
-            ctx.console.print(f"[dim]Features: Smart reasoning | Tool calling | Session memory[/]")
+            ctx.console.print(f"[dim]Model Features: Smart reasoning | Tool calling | Session memory[/]")
             ctx.console.print(f"[dim]Switch: Type 'mode llm' to use fast conversation[/]")
 
         # Main loop

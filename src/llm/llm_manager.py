@@ -28,89 +28,174 @@ class LLMManager:
     SUPPORTED_LLMS = {
         LLMProvider.ZHIPU: {
             "name": "智谱AI",
+            "default_model": "glm-4.5",
+            "mode_defaults": {
+                "llm": {
+                    "temperature": 0.1,
+                    "streaming": True
+                },
+                "agent": {
+                    "temperature": 0.1,
+                    "memory_enabled": True,
+                    "max_iterations": 8,
+                    "max_execution_time": 300,
+                    "streaming": False
+                }
+            },
             "models": {
                 "glm-4-plus": {
                     "name": "GLM-4-Plus",
                     "description": "智谱AI最新旗舰模型，综合能力强",
-                    "max_tokens": 8192,
-                    "context_window": 32000,
-                    "recommended": True
+                    "recommended": True,
+                    "model_features": ["通用对话", "推理分析", "工具调用", "成本优化"],
+                    "supports_tools": True
                 },
                 "glm-4.5": {
                     "name": "GLM-4.5",
                     "description": "智谱AI新一代MoE架构模型，支持128K上下文，专精代码推理和工具调用",
-                    "max_tokens": 96000,  # GLM-4.5支持高达96K输出token
-                    "context_window": 128000,  # 128K上下文窗口
                     "recommended": True,
-                    "features": ["thinking_mode", "tool_calling", "code_generation", "long_context"],
-                    "architecture": "mixture_of_experts"
+                    "model_features": ["深度思考模式", "128K长上下文", "代码生成专精", "工具调用优化", "复杂推理增强"],
+                    "supports_tools": True,
+                    "mode_overrides": {
+                        "llm": {
+                            "thinking_mode": True
+                        },
+                        "agent": {
+                            "max_iterations": 15,
+                            "max_execution_time": 180
+                        }
+                    }
                 }
-            },
-            "default_model": "glm-4-plus",
-            "api_key_env": "ZHIPU_API_KEY",
-            "class": ZhipuAILLM
+            }
         },
         LLMProvider.OPENAI: {
             "name": "OpenAI",
+            "default_model": "gpt-4o-mini",
+            "api_key_env": "OPENAI_API_KEY",
+            "class": OpenAILLM,
+            "mode_defaults": {
+                "llm": {
+                    "temperature": 0.1,
+                    "streaming": True
+                },
+                "agent": {
+                    "temperature": 0.1,
+                    "memory_enabled": True,
+                    "max_iterations": 10,
+                    "max_execution_time": 300,
+                    "streaming": False
+                }
+            },
             "models": {
                 "gpt-5": {
                     "name": "GPT-5",
                     "description": "新一代语言模型，推理和创造能力显著提升",
-                    "max_tokens": 8192,
-                    "context_window": 8192,
                     "recommended": True,
-                    "features": ["advanced_reasoning", "enhanced_creativity", "improved_tool_calling", "multimodal"],
-                    "architecture": "next_generation",
+                    "model_features": ["高级推理能力", "增强创造性思维", "精准工具调用", "深度上下文理解", "优化任务执行"],
                     "default_temperature": 1.0,
-                    "temperature_fixed": True
+                    "temperature_fixed": True,
+                    "supports_tools": True,
+                    "mode_overrides": {
+                        "llm": {
+                            "temperature": 1.0
+                        },
+                        "agent": {
+                            "temperature": 1.0,
+                            "max_iterations": 15,
+                            "max_execution_time": 600
+                        }
+                    }
                 },
                 "gpt-5-mini": {
                     "name": "GPT-5-mini",
-                    "description": "成本优化版本，速度快成本低",
-                    "max_tokens": 32768,
-                    "context_window": 32768,
+                    "description": "GPT-5成本优化版本，速度快成本低",
                     "recommended": True,
-                    "features": ["fast_inference", "cost_optimized", "tool_calling", "multimodal"],
-                    "architecture": "optimized",
+                    "model_features": ["快速推理", "成本优化", "工具调用", "长上下文"],
                     "default_temperature": 1.0,
-                    "temperature_fixed": True
+                    "temperature_fixed": True,
+                    "supports_tools": True,
+                    "mode_overrides": {
+                        "llm": {
+                            "temperature": 1.0
+                        },
+                        "agent": {
+                            "temperature": 1.0,
+                            "max_iterations": 15,
+                            "max_execution_time": 600
+                        }
+                    }
                 },
                 "gpt-4o": {
                     "name": "GPT-4o",
-                    "description": "OpenAI最新GPT-4优化版本，性能和成本平衡",
-                    "max_tokens": 4096,
-                    "context_window": 131072,
+                    "description": "OpenAI GPT-4优化版本，性能和成本平衡",
                     "recommended": True,
-                    "features": ["multimodal", "long_context", "cost_optimized"]
+                    "model_features": ["多模态", "长上下文", "成本优化"],
+                    "supports_tools": True
                 },
                 "gpt-4o-mini": {
                     "name": "GPT-4o-mini",
-                    "description": "轻量级版本，速度快成本低",
-                    "max_tokens": 16384,
-                    "context_window": 131072,
+                    "description": "轻量级GPT-4o版本，速度快成本低",
                     "recommended": True,
-                    "features": ["multimodal", "long_context", "fast_inference", "cost_optimized"]
+                    "model_features": ["多模态", "长上下文", "快速推理", "成本优化"],
+                    "supports_tools": True
                 },
                 "gpt-4-turbo": {
-                    "name": "GPT-4-turbo",
-                    "description": "高性能版本",
-                    "max_tokens": 4096,
-                    "recommended": False
+                    "name": "GPT-4-Turbo",
+                    "description": "高性能GPT-4版本",
+                    "recommended": False,
+                    "model_features": ["高性能", "稳定"],
+                    "supports_tools": True
                 }
-            },
-            "default_model": "gpt-4o-mini",
-            "api_key_env": "OPENAI_API_KEY",
-            "class": OpenAILLM
+            }
         },
         LLMProvider.OLLAMA: {
             "name": "Ollama本地模型",
-            "models": {},  # 移除静态模型定义，使用动态发现
-            "default_model": "auto",  # 使用自动发现的第一个模型作为默认值
-            "api_key_env": None,  # Ollama不需要API密钥
-            "class": None  # 稍后导入避免循环依赖
+            "default_model": "auto",
+            "api_key_env": None,
+            "class": None,
+            "mode_defaults": {
+                "llm": {
+                    "temperature": 0.1,
+                    "streaming": True
+                },
+                "agent": {
+                    "temperature": 0.0,
+                    "memory_enabled": True,
+                    "max_iterations": 3,
+                    "max_execution_time": 30,
+                    "streaming": False
+                }
+            },
+            "models": {}
         }
     }
-    
+
+    @staticmethod
+    def _merge_mode_defaults(base_defaults: Optional[Dict[str, Dict[str, Any]]],
+                             overrides: Optional[Dict[str, Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+        """合并模式默认参数和覆盖参数"""
+        merged: Dict[str, Dict[str, Any]] = {}
+        if base_defaults:
+            for mode, params in base_defaults.items():
+                merged[mode] = dict(params)
+        if overrides:
+            for mode, params in overrides.items():
+                target = merged.setdefault(mode, {})
+                target.update(params)
+        return merged
+
+    def _get_provider_models(self, provider: LLMProvider, config: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """获取提供商支持的模型列表"""
+        models = dict(config.get("models", {}))
+        if provider == LLMProvider.OLLAMA:
+            try:
+                from .ollama_llm import OllamaLLM  # 动态导入避免循环依赖
+                models.update(OllamaLLM.SUPPORTED_MODELS)
+            except ImportError:
+                pass
+        return models
+
+
     def __init__(self):
         """初始化LLM管理器"""
         self._api_keys = {}
@@ -134,68 +219,80 @@ class LLMManager:
     
     def get_available_providers(self) -> List[Dict[str, Any]]:
         """获取可用的LLM提供商列表"""
-        providers = []
-        
+        providers: List[Dict[str, Any]] = []
+
         for provider, config in self.SUPPORTED_LLMS.items():
-            # Ollama不需要API密钥，始终可用
-            if provider == LLMProvider.OLLAMA:
-                has_api_key = True
-            else:
-                has_api_key = provider in self._api_keys
-            
+            has_api_key = (provider == LLMProvider.OLLAMA) or (provider in self._api_keys)
+            models_registry = self._get_provider_models(provider, config)
+
             provider_info = {
                 "provider": provider.value,
                 "name": config["name"],
                 "available": has_api_key,
                 "default_model": config["default_model"],
-                "models": list(config["models"].keys()),
-                "api_key_required": config["api_key_env"]
+                "models": list(models_registry.keys()),
+                "api_key_required": config.get("api_key_env"),
+                "mode_defaults": dict(config.get("mode_defaults", {}))
             }
-            
-            if has_api_key:
-                provider_info["models_detail"] = config["models"]
-            
+
+            models_detail: Dict[str, Any] = {}
+            for model_name in models_registry:
+                try:
+                    models_detail[model_name] = self.get_llm_info(provider, model_name)
+                except ValueError:
+                    model_cfg = models_registry.get(model_name, {})
+                    models_detail[model_name] = {
+                        "model": model_name,
+                        "name": model_cfg.get("name", model_name),
+                        "description": model_cfg.get("description", "")
+                    }
+
+            if models_detail:
+                provider_info["models_detail"] = models_detail
+
             providers.append(provider_info)
-        
+
         return providers
     
     def get_provider_models(self, provider: Union[str, LLMProvider]) -> Dict[str, Any]:
-        """获取指定提供商的模型列表"""
+        """获取指定提供商的模型注册信息"""
         if isinstance(provider, str):
             provider = LLMProvider(provider)
-        
+
         if provider not in self.SUPPORTED_LLMS:
             raise ValueError(f"不支持的LLM提供商: {provider}")
-        
+
         config = self.SUPPORTED_LLMS[provider]
-        # Ollama不需要API密钥，始终可用
-        if provider == LLMProvider.OLLAMA:
-            available = True
-        else:
-            available = provider in self._api_keys
-        
+        models_registry = self._get_provider_models(provider, config)
+
+        available = (provider == LLMProvider.OLLAMA) or (provider in self._api_keys)
+
         return {
             "provider": provider.value,
             "name": config["name"],
-            "models": config["models"],
+            "models": models_registry,
             "default_model": config["default_model"],
-            "available": available
+            "available": available,
+            "mode_defaults": dict(config.get("mode_defaults", {}))
         }
-    
+
+
     def validate_model(self, provider: Union[str, LLMProvider], model: str) -> bool:
-        """验证模型是否支持"""
+        """验证模型是否受支持"""
         if isinstance(provider, str):
             provider = LLMProvider(provider)
-        
+
         if provider not in self.SUPPORTED_LLMS:
             return False
-        
-        # Ollama支持动态模型，不进行严格验证
+
+        # For Ollama, we don't validate against a fixed list since models are local
         if provider == LLMProvider.OLLAMA:
             return True
-        
-        return model in self.SUPPORTED_LLMS[provider]["models"]
-    
+
+        models_registry = self._get_provider_models(provider, self.SUPPORTED_LLMS[provider])
+        return model in models_registry
+
+
     def create_llm(
         self, 
         provider: Union[str, LLMProvider], 
@@ -261,38 +358,74 @@ class LLMManager:
         else:
             raise ValueError(f"不支持的LLM提供商: {provider}")
     
-    def get_model_info(self, provider: Union[str, LLMProvider], model: str) -> Dict[str, Any]:
-        """获取指定模型的详细信息"""
+    def get_llm_info(self, provider: Union[str, LLMProvider], model: str = None) -> Dict[str, Any]:
+        """获取LLM信息（包含模型配置与可用性）"""
         if isinstance(provider, str):
             provider = LLMProvider(provider)
-        
+
         if provider not in self.SUPPORTED_LLMS:
             raise ValueError(f"不支持的LLM提供商: {provider}")
-        
-        config = self.SUPPORTED_LLMS[provider]
-        
-        if model not in config["models"]:
-            raise ValueError(f"模型 {model} 不受支持")
-        
-        model_config = config["models"][model]
-        
-        # Ollama不需要API密钥，始终可用
-        if provider == LLMProvider.OLLAMA:
-            available = True
-        else:
-            available = provider in self._api_keys
-        
-        return {
+
+        provider_config = self.SUPPORTED_LLMS[provider]
+        models_registry = self._get_provider_models(provider, provider_config)
+
+        # For Ollama, if model is not in the registry, provide generic info
+        if provider == LLMProvider.OLLAMA and model and model not in models_registry:
+            models_registry[model] = {
+                "name": model,
+                "description": f"Ollama本地部署模型: {model}",
+                "supports_tools": True, 
+                "recommended": False
+            }
+
+        if model is None:
+            model = provider_config["default_model"]
+
+        if model not in models_registry:
+            raise ValueError(f"模型 {model} 不受 {provider_config['name']} 支持")
+
+        model_config = models_registry.get(model, {})
+        available = (provider == LLMProvider.OLLAMA) or (provider in self._api_keys)
+
+        mode_defaults = self._merge_mode_defaults(
+            provider_config.get("mode_defaults"),
+            model_config.get("mode_overrides")
+        )
+
+        model_features = list(model_config.get("model_features") or [])
+
+        info: Dict[str, Any] = {
             "provider": provider.value,
-            "provider_name": config["name"],
+            "provider_name": provider_config["name"],
             "model": model,
-            "model_name": model_config["name"],
-            "description": model_config["description"],
-            "max_tokens": model_config["max_tokens"],
+            "model_name": model_config.get("name", model),
+            "name": model_config.get("name", model),
+            "description": model_config.get("description", ""),
+            "available": available,
             "recommended": model_config.get("recommended", False),
-            "available": available
+            "model_features": model_features,
+            "supports_tools": model_config.get("supports_tools", False),
+            "mode_defaults": mode_defaults
         }
-    
+
+        if "default_temperature" in model_config:
+            info["default_temperature"] = model_config["default_temperature"]
+        if "temperature_fixed" in model_config:
+            info["temperature_fixed"] = model_config["temperature_fixed"]
+        if "max_tokens" in model_config:
+            info["max_tokens"] = model_config["max_tokens"]
+        if "max_output_tokens" in model_config:
+            info["max_output_tokens"] = model_config["max_output_tokens"]
+        if "max_output" in model_config:
+            info["max_output"] = model_config["max_output"]
+        if "parameters" in model_config:
+            info["parameters"] = model_config["parameters"]
+        if "tags" in model_config:
+            info["tags"] = list(model_config["tags"])
+
+        return info
+
+
     def set_api_key(self, provider: Union[str, LLMProvider], api_key: str):
         """设置API密钥"""
         if isinstance(provider, str):
@@ -314,22 +447,25 @@ class LLMManager:
     
     def get_recommended_models(self) -> List[Dict[str, Any]]:
         """获取推荐模型列表"""
-        recommended = []
-        
+        recommended: List[Dict[str, Any]] = []
+
         for provider, config in self.SUPPORTED_LLMS.items():
-            # Ollama不需要API密钥，始终可用；其他需要API密钥
             provider_available = (provider == LLMProvider.OLLAMA) or (provider in self._api_keys)
-            if provider_available:
-                for model, model_config in config["models"].items():
-                    if model_config.get("recommended", False):
-                        recommended.append({
-                            "provider": provider.value,
-                            "provider_name": config["name"],
-                            "model": model,
-                            "model_name": model_config["name"],
-                            "description": model_config["description"]
-                        })
-        
+            if not provider_available:
+                continue
+
+            models_registry = self._get_provider_models(provider, config)
+            for model_name in models_registry:
+                info = self.get_llm_info(provider, model_name)
+                if info.get("recommended"):
+                    recommended.append({
+                        "provider": info["provider"],
+                        "provider_name": info["provider_name"],
+                        "model": info["model"],
+                        "model_name": info["model_name"],
+                        "description": info["description"]
+                    })
+
         return recommended
 
 
@@ -348,9 +484,9 @@ def create_llm(provider: str, model: str = None, **kwargs):
     return llm_manager.create_llm(provider, model, **kwargs)
 
 
-def get_model_info(provider: str, model: str) -> Dict[str, Any]:
-    """获取模型信息的便捷函数"""
-    return llm_manager.get_model_info(provider, model)
+def get_llm_info(provider: str, model: str = None) -> Dict[str, Any]:
+    """获取LLM信息的便捷函数"""
+    return llm_manager.get_llm_info(provider, model)
 
 
 def get_recommended_models() -> List[Dict[str, Any]]:

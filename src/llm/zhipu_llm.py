@@ -119,35 +119,7 @@ class ZhipuAILLM:
         """创建LangChain兼容的LLM实例（兼容旧接口）"""
         return self.llm
     
-    def get_model_info(self) -> dict:
-        """获取模型详细信息"""
-        model_specs = {
-            "glm-4-plus": {
-                "context_window": 32000,
-                "max_output": 8192,
-                "architecture": "transformer",
-                "features": ["chat", "reasoning", "tool_calling", "cost_optimized"]
-            },
-            "glm-4.5": {
-                "context_window": 128000,
-                "max_output": 96000, 
-                "architecture": "mixture_of_experts",
-                "features": ["thinking_mode", "long_context", "code_generation", 
-                           "tool_calling", "web_browsing", "complex_reasoning", "advanced_reasoning"]
-            }
-        }
-        
-        base_info = {
-            "model": self.model,
-            "streaming": self.streaming,
-            "thinking_mode": self.thinking_mode,
-            "api_provider": "智谱AI"
-        }
-        
-        if self.model in model_specs:
-            base_info.update(model_specs[self.model])
-        
-        return base_info
+    
 
 def create_zhipu_llm(model: str = "glm-4-plus", streaming: bool = False, 
                      thinking_mode: bool = False, **kwargs) -> BaseChatModel:

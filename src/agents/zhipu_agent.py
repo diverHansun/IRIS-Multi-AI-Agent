@@ -601,8 +601,17 @@ class ZhipuAgent:
         if self._progress_callback:
             self._progress_callback({"type": "thinking", "message": message})
     
-    def get_info(self) -> Dict[str, Any]:
+    def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
+        from ..llm.llm_manager import get_llm_info
+        
+        # 获取模型信息
+        try:
+            model_info = get_llm_info("zhipu", self.model)
+        except Exception as e:
+            logger.warning(f"Failed to get model info: {e}")
+            model_info = {}
+        
         info = {
             "provider": "zhipu",
             "model": self.model,
@@ -611,44 +620,20 @@ class ZhipuAgent:
             "initialized": self.is_initialized,
             "tool_count": len(self.tools),
             "tools": [tool.name for tool in self.tools] if self.tools else [],
-            "memory_enabled": self.enable_memory
+            "memory_enabled": self.enable_memory,
+            # 合并模型信息
+            **model_info
         }
-        
-        # GLM-4.5特殊能力信息
-        if self.model == "glm-4.5":
-            info.update({
-                "model_type": "GLM-4.5 MoE",
-                "context_window": "128K tokens",
-                "max_output": "96K tokens", 
-                "thinking_mode": True,
-                "special_features": [
-                    "深度思考模式",
-                    "128K长上下文",
-                    "代码生成专精",
-                    "工具调用优化",
-                    "复杂推理增强"
-                ],
-                "architecture": "混合专家模型(MoE)"
-            })
-        # GLM-4-plus特殊能力信息
-        elif self.model == "glm-4-plus":
-            info.update({
-                "context_window": "32K tokens",
-                "max_output": "8K tokens", 
-                "architecture": "Transformer",
-                "model_features": [
-                    "通用对话",
-                    "推理分析",
-                    "工具调用",
-                    "成本优化"
-                ]
-            })
         
         # 添加记忆信息
         if self.enable_memory and self.chat_memory:
             info["memory_info"] = self.chat_memory.get_memory_stats()
         
         return info
+    
+    def get_info(self) -> Dict[str, Any]:
+        """获取Agent信息(兼容旧接口)"""
+        return self.get_agent_info()
     
     async def _initialize_notion_mcp(self):
         """异步初始化 Notion MCP 连接"""

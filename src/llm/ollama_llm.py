@@ -342,33 +342,7 @@ class OllamaLLM:
                 logger.info(f"模型 {self.model} 不支持原生工具调用，将使用ReAct模式")
             return self._llm
     
-    def get_model_info(self) -> Dict[str, Any]:
-        """
-        获取模型信息
-        
-        Returns:
-            Dict: 模型信息字典
-        """
-        model_config = self.SUPPORTED_MODELS.get(self.model, {})
-        
-        return {
-            "provider": "ollama",
-            "model": self.model,
-            "name": model_config.get("name", self.model),
-            "description": model_config.get("description", "Ollama本地模型"),
-            "base_url": self.base_url,
-            "parameters": {
-                "temperature": self.temperature,
-                "top_p": self.top_p,
-                "top_k": self.top_k,
-                "num_ctx": self.num_ctx,
-                "keep_alive": self.keep_alive,
-                "timeout": self.timeout
-            },
-            "supported": self.model in self.SUPPORTED_MODELS,
-            "supports_tools": self.supports_tools(),
-            "initialized": self._is_initialized
-        }
+    
     
     @classmethod
     def get_supported_models(cls) -> Dict[str, Dict[str, Any]]:

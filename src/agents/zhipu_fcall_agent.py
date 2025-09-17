@@ -401,8 +401,17 @@ class ZhipuFunctionCallingAgent:
         """
         return await self.invoke(query, session_id, **kwargs)
     
-    def get_info(self) -> Dict[str, Any]:
+    def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
+        from ..llm.llm_manager import get_llm_info
+        
+        # 获取模型信息
+        try:
+            model_info = get_llm_info("zhipu", self.model)
+        except Exception as e:
+            logger.warning(f"Failed to get model info: {e}")
+            model_info = {}
+            
         info = {
             "provider": "zhipu",
             "model": self.model,
@@ -412,25 +421,16 @@ class ZhipuFunctionCallingAgent:
             "tool_count": len(self.tools),
             "tools": [tool.name for tool in self.tools] if self.tools else [],
             "memory_enabled": self.enable_memory,
-            "mode": "function_calling"  # 标识使用Function Calling模式
+            "mode": "function_calling",  # 标识使用Function Calling模式
+            # 合并模型信息
+            **model_info
         }
         
-        # GLM-4.5特殊能力信息
-        if self.model == "glm-4.5":
-            info.update({
-                "thinking_mode": True,  # GLM-4.5默认启用思考模式
-                "context_window": "128K tokens",
-                "max_output": "96K tokens",
-                "architecture": "混合专家模型(MoE)",
-                "model_features": [
-                    "深度思考模式",
-                    "128K长上下文", 
-                    "代码生成专精",
-                    "工具调用优化"
-                ]
-            })
-        
         return info
+    
+    def get_info(self) -> Dict[str, Any]:
+        """获取Agent信息(兼容旧接口)"""
+        return self.get_agent_info()
     
     def get_llm(self):
         """获取底层LLM实例用于流式输出"""

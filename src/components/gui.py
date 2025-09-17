@@ -157,10 +157,6 @@ def render_info(console, agent_info, mode_info):
     console.print(f"  Initialized: {llm_info['initialized']}")
     
     # Show model special information (GLM-4.5)
-    if llm_info.get('architecture'):
-        console.print(f"  Architecture: {llm_info['architecture']}")
-    if llm_info.get('context_window'):
-        console.print(f"  Context: {llm_info['context_window']}")
     if llm_info.get('thinking_mode'):
         console.print(f"  Thinking Mode: [green]Enabled[/]")
     
