@@ -4,6 +4,7 @@ This module contains general control commands.
 """
 
 from src.agents.agent_factory import agent_factory
+from src.llm.llm_manager import reload_llm_config
 
 
 async def switch_llm(ctx, provider: str, model: str = None):
@@ -141,3 +142,35 @@ def get_info(ctx):
             "mode": mode_info
         }
     }
+
+
+def reload_config(ctx):
+    """Reload LLM configuration from JSON files"""
+    try:
+        success = reload_llm_config()
+        
+        if success:
+            # Clear agent factory cache to use new config
+            agent_factory.clear_cache()
+            
+            return {
+                "type": "success",
+                "message": "LLM configuration reloaded successfully",
+                "payload": {
+                    "cache_cleared": True,
+                    "note": "You may need to switch models to use the updated configuration"
+                }
+            }
+        else:
+            return {
+                "type": "error",
+                "message": "Failed to reload LLM configuration",
+                "payload": {}
+            }
+            
+    except Exception as e:
+        return {
+            "type": "error",
+            "message": f"Error reloading configuration: {str(e)}",
+            "payload": {}
+        }

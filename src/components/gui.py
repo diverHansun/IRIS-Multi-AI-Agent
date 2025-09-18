@@ -23,6 +23,7 @@ help - View help information
 info - View system status
 llms - View available LLM list
 switch <provider> [model] - Switch LLM
+reload - Reload LLM configuration from JSON files
 
 Working Modes:
 mode llm - LLM Mode (Streaming output, fast response)
@@ -40,7 +41,7 @@ cleanup - Clean up sessions (remove orphaned files and indexes)
 MCP Management:
 mcp status [-v] - View MCP status/servers/tool count
 mcp tools [--json] - List MCP tools (prefixed with mcp_)
-mcp reload - Reload config/mcp.toml
+mcp reload - Reload config/mcp/mcp.toml
 
 Note: MCP tools in Agent mode are prefixed with mcp_ and require JSON object parameters
     """
@@ -84,6 +85,7 @@ Available Tools:
 
 Basic Commands:
 Type command name to view specific instructions (e.g., type 'llms' to view model list)
+reload - Reload LLM configuration from JSON files 
 
 Session Management Commands:
 • clear - Clear current session memory content (keep session files)

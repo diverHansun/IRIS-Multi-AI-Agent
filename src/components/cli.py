@@ -238,6 +238,17 @@ async def run():
                         ctx.console.print("[yellow]⚠️ Please provide a valid session ID, format: restore <session_id>[/]")
                     continue
 
+                # Reload configuration command
+                if query.strip().lower() in {"reload", "reload llm config"}:
+                    result = control.reload_config(ctx)
+                    if result["type"] == "success":
+                        ctx.console.print(f"[green]✅ {result['message']}[/]")
+                        if "note" in result["payload"]:
+                            ctx.console.print(f"[dim]{result['payload']['note']}[/]")
+                    else:
+                        ctx.console.print(f"[red]❌ {result['message']}[/]")
+                    continue
+
                 # Mode commands
                 if query.strip().lower().startswith("mode "):
                     # Parse mode command
