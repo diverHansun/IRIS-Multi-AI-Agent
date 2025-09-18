@@ -11,7 +11,7 @@ from enum import Enum
 
 from .zhipu_llm import ZhipuAILLM
 from .openai_llm import OpenAILLM, build_openai_chat
-from ..config import settings
+from ..config import settings, config_loader
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,8 @@ class LLMProvider(Enum):
 class LLMManager:
     """LLM管理器"""
     
-    # 支持的LLM配置
-    SUPPORTED_LLMS = {
+    # 硬编码的备用配置（当JSON文件加载失败时使用）
+    FALLBACK_LLMS = {
         LLMProvider.ZHIPU: {
             "name": "智谱AI",
             "default_model": "glm-4.5",
@@ -87,63 +87,11 @@ class LLMManager:
                 }
             },
             "models": {
-                "gpt-5": {
-                    "name": "GPT-5",
-                    "description": "新一代语言模型，推理和创造能力显著提升",
-                    "recommended": True,
-                    "model_features": ["高级推理能力", "增强创造性思维", "精准工具调用", "深度上下文理解", "优化任务执行"],
-                    "default_temperature": 1.0,
-                    "temperature_fixed": True,
-                    "supports_tools": True,
-                    "mode_overrides": {
-                        "llm": {
-                            "temperature": 1.0
-                        },
-                        "agent": {
-                            "temperature": 1.0,
-                            "max_iterations": 15,
-                            "max_execution_time": 600
-                        }
-                    }
-                },
-                "gpt-5-mini": {
-                    "name": "GPT-5-mini",
-                    "description": "GPT-5成本优化版本，速度快成本低",
-                    "recommended": True,
-                    "model_features": ["快速推理", "成本优化", "工具调用", "长上下文"],
-                    "default_temperature": 1.0,
-                    "temperature_fixed": True,
-                    "supports_tools": True,
-                    "mode_overrides": {
-                        "llm": {
-                            "temperature": 1.0
-                        },
-                        "agent": {
-                            "temperature": 1.0,
-                            "max_iterations": 15,
-                            "max_execution_time": 600
-                        }
-                    }
-                },
-                "gpt-4o": {
-                    "name": "GPT-4o",
-                    "description": "OpenAI GPT-4优化版本，性能和成本平衡",
-                    "recommended": True,
-                    "model_features": ["多模态", "长上下文", "成本优化"],
-                    "supports_tools": True
-                },
                 "gpt-4o-mini": {
                     "name": "GPT-4o-mini",
                     "description": "轻量级GPT-4o版本，速度快成本低",
                     "recommended": True,
                     "model_features": ["多模态", "长上下文", "快速推理", "成本优化"],
-                    "supports_tools": True
-                },
-                "gpt-4-turbo": {
-                    "name": "GPT-4-Turbo",
-                    "description": "高性能GPT-4版本",
-                    "recommended": False,
-                    "model_features": ["高性能", "稳定"],
                     "supports_tools": True
                 }
             }
@@ -200,6 +148,47 @@ class LLMManager:
         """初始化LLM管理器"""
         self._api_keys = {}
         self._load_api_keys()
+        self._load_config()
+    
+    def _load_config(self):
+        """加载LLM配置"""
+        try:
+            # 尝试从JSON文件加载配置
+            config_data = config_loader.load_config()
+            self.SUPPORTED_LLMS = self._convert_json_config(config_data)
+            logger.info("✅ 已从JSON配置文件加载LLM配置")
+        except Exception as e:
+            # 降级到硬编码配置
+            logger.warning(f"⚠️ 从JSON加载配置失败，使用备用配置: {e}")
+            self.SUPPORTED_LLMS = self.FALLBACK_LLMS.copy()
+
+    def _convert_json_config(self, config_data: Dict[str, Any]) -> Dict[LLMProvider, Dict[str, Any]]:
+        """将JSON配置转换为内部格式"""
+        converted = {}
+        
+        for provider_key, provider_config in config_data["providers"].items():
+            try:
+                # 转换provider key为枚举
+                provider_enum = LLMProvider(provider_key.lower())
+                
+                # 复制配置并添加类引用（如果需要）
+                config_copy = dict(provider_config)
+                
+                # 添加类引用
+                if provider_enum == LLMProvider.ZHIPU:
+                    config_copy["api_key_env"] = "ZHIPU_API_KEY"
+                    config_copy["class"] = ZhipuAILLM
+                elif provider_enum == LLMProvider.OPENAI:
+                    if "class" in config_copy and config_copy["class"] == "OpenAILLM":
+                        config_copy["class"] = OpenAILLM
+                
+                converted[provider_enum] = config_copy
+                
+            except ValueError as e:
+                logger.warning(f"跳过不支持的provider: {provider_key}, 错误: {e}")
+                continue
+        
+        return converted
     
     def _load_api_keys(self):
         """从配置中加载API密钥"""
@@ -216,6 +205,19 @@ class LLMManager:
             
         except Exception as e:
             logger.warning(f"加载API密钥时出错: {str(e)}")
+    
+    def reload_config(self):
+        """重新加载配置"""
+        logger.info("🔄 重新加载LLM配置...")
+        try:
+            # 重新加载JSON配置
+            config_data = config_loader.reload_config()
+            self.SUPPORTED_LLMS = self._convert_json_config(config_data)
+            logger.info("✅ LLM配置重新加载完成")
+            return True
+        except Exception as e:
+            logger.error(f"❌ 重新加载配置失败: {e}")
+            return False
     
     def get_available_providers(self) -> List[Dict[str, Any]]:
         """获取可用的LLM提供商列表"""
@@ -492,3 +494,8 @@ def get_llm_info(provider: str, model: str = None) -> Dict[str, Any]:
 def get_recommended_models() -> List[Dict[str, Any]]:
     """获取推荐模型"""
     return llm_manager.get_recommended_models()
+
+
+def reload_llm_config() -> bool:
+    """重新加载LLM配置的便捷函数"""
+    return llm_manager.reload_config()
