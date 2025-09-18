@@ -95,10 +95,6 @@ DEFAULT_LLM_MODEL=glm-4-plus OR gpt-4o
 # 启动交互式CLI
 python main.py
 
-# 查看帮助信息
-python main.py --help
-```
-
 ## 支持的LLM模型
 
 ### 智谱AI (推荐)
@@ -127,18 +123,26 @@ python main.py --help
   - 4K输出token，稳定可靠
 
 ### Ollama本地模型
-- **gpt-oss:20b**: 开源GPT模型，20B参数，支持工具调用 (推荐)
-  - 32K上下文窗口，本地离线运行
-  - 支持工具调用和复杂推理
-- **qwen3:8b**: 通义千问3.0模型，中文优化 (推荐)
-  - 32K上下文窗口，中文能力优秀
-  - 支持工具调用，本地部署
+支持所有Ollama兼容的本地模型，用户需要自行使用Ollama下载和管理模型。
+
+推荐模型（需自行下载）：
+- **gpt-oss:20b**: 开源GPT模型，20B参数，支持工具调用
+- **qwen3:8b**: 通义千问3.0模型，中文优化
 - **gemma3:latest**: Google Gemma3模型最新版本
-  - 16K上下文窗口，性能稳定
-  - 支持工具调用
 - **deepseek-r1:1.5b**: DeepSeek推理模型
-  - 16K上下文窗口，专注逻辑推理
-  - 轻量级模型，快速响应
+
+使用方法：
+```bash
+# 1. 安装Ollama
+# 访问 https://ollama.com/ 下载安装
+
+# 2. 下载模型（示例）
+ollama pull qwen3:8b
+ollama pull deepseek-r1:1.5b
+
+# 3. 在项目中使用
+switch ollama qwen3:8b
+```
 
 **Ollama网络配置建议**: 使用规则代理模式可以实现最佳网络兼容性，本地Ollama服务走直连，外部API服务（如搜索、地图等）通过代理访问，确保所有功能正常工作。
 
@@ -189,77 +193,6 @@ python main.py --help
    - 支持复杂的多步骤任务处理
    - 通过JSON ReAct补丁支持MCP工具
 
-## 项目架构
-
-```
-Multi-AI-Agent/
-├── src/                    # 核心源代码
-│   ├── agents/             # Agent实现
-│   │   ├── zhipu_agent.py          # 智谱AI Agent
-│   │   ├── zhipu_fcall_agent.py    # 智谱AI Function Calling Agent
-│   │   ├── functioncalling_adapter.py  # Function Calling工具适配器
-│   │   ├── openai_agent.py         # OpenAI Agent
-│   │   ├── ollama_agent.py         # Ollama本地Agent
-│   │   └── agent_factory.py        # Agent工厂
-│   ├── llm/                # 语言模型封装
-│   │   ├── zhipu_llm.py            # 智谱AI LLM
-│   │   ├── openai_llm.py           # OpenAI LLM
-│   │   ├── ollama_llm.py           # Ollama本地LLM
-│   │   ├── streaming_llm.py        # 流式输出LLM
-│   │   └── llm_manager.py          # LLM管理器
-│   ├── memory/             # 全局记忆系统
-│   │   ├── global_memory.py         # 全局记忆管理器
-│   │   ├── session_manager.py       # 会话管理器
-│   │   └── global_memory_integration.md # 记忆系统集成文档
-│   ├── session/            # 会话存储系统
-│   │   ├── session_storage.py       # JSON文件存储
-│   │   └── message_filter.py        # 消息过滤器
-│   ├── tools/                    # 工具模块
-│   │   ├── __init__.py          # 工具模块初始化
-│   │   ├── amap/                # 高德地图工具
-│   │   │   ├── __init__.py      # 包初始化文件
-│   │   │   ├── client.py        # API客户端
-│   │   │   ├── search.py        # 搜索功能
-│   │   │   ├── route.py         # 路线规划功能
-│   │   │   ├── geocode.py       # 地理编码功能
-│   │   │   ├── formatter.py     # 结果格式化
-│   │   │   ├── validator.py     # 坐标验证
-│   │   │   ├── constants.py     # 常量定义
-│   │   │   ├── exceptions.py    # 异常定义
-│   │   │   ├── provider.py      # 服务提供者
-│   │   │   ├── test.py          # 测试模块
-│   │   │   └── README.md        # 使用说明
-│   │   ├── calculate/           # 数学计算工具
-│   │   │   ├── __init__.py      # 包初始化文件
-│   │   │   └── math_tools.py    # 数学工具实现
-│   │   ├── search/              # 搜索工具
-│   │   │   ├── __init__.py      # 包初始化文件
-│   │   │   ├── search_tools.py  # 网络搜索工具
-│   │   │   └── tavily_search_tool.py  # Tavily搜索工具
-│   │   ├── notion/              # Notion知识管理工具
-│   │   └── okx_market/          # OKX加密货币工具
-│   │   ├── notion/                  # Notion知识管理工具
-│   │   ├── okx_market/              # OKX加密货币工具
-│   │   └── ...
-│   └── config.py           # 配置管理
-├── tests/                  # 测试框架
-│   ├── unit/               # 单元测试
-│   ├── integration/        # 集成测试
-│   ├── conftest.py         # pytest配置
-│   └── README.md           # 测试指南
-├── tutorials/              # 教程文档
-│   ├── function_calling_guide.md   # Function Calling使用指南
-│   ├── mcp_guide.md                # MCP集成指南
-│   ├── software_testing_guide.md   # 软件测试入门教程
-│   ├── langchain_tutorial.md       # LangChain框架教程
-│   └── README.md           # 教程索引
-├── main.py                 # 主程序入口
-├── run_tests.py            # 测试运行脚本
-├── requirements.txt        # 依赖列表
-├── .env.example           # 环境变量示例
-├── .gitignore             # Git忽略文件
-└── README.md              # 项目说明
-```
 
 ## 使用示例
 
@@ -352,6 +285,27 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 - `MAX_TOKENS`: 最大输出token数，默认为 `2048`
 
 ## 更新日志
+
+### v2.8.0 (2025-09-18)
+- **JSON配置系统**: 全面从硬编码配置迁移到灵活的JSON配置
+  - 新增 `config/llms/providers.json` 主配置文件
+  - 实现 `LLMConfigLoader` 配置加载器，支持缓存和热重载
+  - 添加完整的配置验证系统：JSON Schema验证 + 业务逻辑检查
+  - 支持自动配置修复和错误处理
+  - 新增 `reload` CLI命令，支持配置热重载
+- **配置架构优化**:
+  - 重构 `src/components/validation.py` 配置验证组件
+  - 创建 `config/llms/schema.json` JSON Schema定义
+  - 添加 `config/llms/example_provider.json` 示例配置
+  - 完善的文档和使用指南
+- **MCP配置整理**:
+  - 重组MCP配置文件到 `config/mcp/` 目录
+  - 更新所有相关路径引用和文档
+  - 优化配置文件组织结构
+- **向后兼容性**:
+  - 保持硬编码备用配置，确保系统稳定性
+  - 优雅的降级机制，配置加载失败时自动回退
+  - 无破坏性变更，现有用户无需修改使用方式
 
 ### v2.7.0 (2025-09-08)
 - **Function Calling支持**: 完整集成智谱AI原生Function Calling API
