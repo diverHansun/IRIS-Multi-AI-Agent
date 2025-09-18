@@ -239,7 +239,7 @@ async def run():
                     continue
 
                 # Reload configuration command
-                if query.strip().lower() in {"reload", "reload llm config"}:
+                if query.strip().lower() in {"reload", "reload llm"}:
                     result = control.reload_config(ctx)
                     if result["type"] == "success":
                         ctx.console.print(f"[green]✅ {result['message']}[/]")

@@ -11,11 +11,8 @@ import sys
 import os
 from pathlib import Path
 
-# 添加根目录到路径以导入config.py
-root_dir = Path(__file__).parent.parent
-sys.path.insert(0, str(root_dir))
-
-from config import settings
+# 直接从当前包导入config
+from .config import settings
 from .agents.zhipu_agent import build_zhipu_agent, build_simple_zhipu_chat
 
 # 导出 patch 模块中的解析器

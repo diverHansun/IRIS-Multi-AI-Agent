@@ -64,6 +64,13 @@ class AgentFactory:
             config = self.llm_manager.SUPPORTED_LLMS[provider]
             model = config["default_model"]
         
+        # 验证模型是否受支持（除了Ollama，它可以动态加载模型）
+        if provider != LLMProvider.OLLAMA:
+            try:
+                self.llm_manager.get_llm_info(provider, model)
+            except ValueError as e:
+                raise ValueError(str(e))  # 重新抛出模型不支持的错误
+        
         # 检查缓存
         cache_key = f"{provider.value}_{model}_{temperature}_{enable_memory}"
         if use_cache and cache_key in self._cached_agents:

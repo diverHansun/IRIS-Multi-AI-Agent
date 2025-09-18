@@ -43,3 +43,13 @@ rename_prefix = "amap:"
 
 [servers.amap-maps.env]
 AMAP_MAPS_API_KEY = "$AMAP_MAPS_API_KEY"
+
+# Firecrawl MCP
+[servers.firecrawl-mcp]
+transport = "stdio"
+command = "npx"
+args = ["-y", "firecrawl-mcp"]
+rename_prefix = "firecrawl:"
+
+[servers.firecrawl-mcp.env]
+FIRECRAWL_API_KEY = "$FIRECRAWL_API_KEY"

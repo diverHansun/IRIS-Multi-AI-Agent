@@ -22,8 +22,6 @@ async def switch_llm(ctx, provider: str, model: str = None):
             }
         
         # Create new Agent and pass global memory manager
-        ctx.console.print(f"[yellow]Switching to {provider} {model or '(default model)'}...[/]")
-        
         new_agent = await agent_factory.create_agent(
             provider=provider,
             model=model,
