@@ -14,7 +14,7 @@ from .tool_adapter import apply_naming_and_filter, schema_summary
 class GlobalMCPManager:
     """Global singleton MCP manager.
 
-    - Loads config from config/mcp.toml (or JSON fallback)
+    - Loads config from config/mcp/mcp.toml (or JSON fallback)
     - Starts multiple MCP servers via langchain-mcp-adapters (stdio)
     - Exposes aggregated LangChain tools for all agents
     - Provides CLI status/tools/reload interfaces

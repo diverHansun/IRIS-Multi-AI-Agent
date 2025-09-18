@@ -52,7 +52,7 @@
   - MCP integration commands (against `src/MCP/manager.py` GlobalMCPManager):
     - `mcp status [-v]`: status and optional verbose tool schema summary.
     - `mcp tools [--json]`: list MCP tools (prefixed names) or raw JSON.
-    - `mcp reload`: reload `config/mcp.toml` and return summary.
+    - `mcp reload`: reload `config/mcp/mcp.toml` and return summary.
   - Robust when MCP disabled or deps missing: return clear error in payload.
 
 - `src/components/registry.py`

@@ -7,8 +7,8 @@ Model Context Protocol (MCP) 是一种标准化协议，允许 AI Agent 与各�
 ### 配置文件 (`config/` 目录)
 `config/` 目录下的 MCP 配置文件用于管理各种 MCP 服务器的连接和工具。主要文件包括：
 
-- `mcp.toml`: 主配置文件，定义启用的 MCP 服务器及其参数
-- `mcp.toml.example`: 配置示例文件，展示各种 MCP 服务器的配置方法
+- `config/mcp/mcp.toml`: 主配置文件，定义启用的 MCP 服务器及其参数
+- `config/mcp/mcp.toml.example`: 配置示例文件，展示各种 MCP 服务器的配置方法
 
 ### 核心代码 (`src/MCP/` 目录)
 `src/MCP/` 目录包含了 MCP 系统的核心实现代码，提供完整的 MCP 服务器管理和工具集成功能：
@@ -104,7 +104,7 @@ npx -y notion-mcp
 
 ## 配置 MCP 服务器
 
-MCP 服务器通过 `config/mcp.toml` 文件配置。以下是示例配置：
+MCP 服务器通过 `config/mcp/mcp.toml` 文件配置。以下是示例配置：
 
 ```toml
 enabled = true
@@ -220,7 +220,7 @@ NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
 
 2. **MCP 工具无法使用**:
    - 运行 `mcp status -v` 查看详细状态
-   - 检查 `config/mcp.toml` 配置是否正确
+   - 检查 `config/mcp/mcp.toml` 配置是否正确
    - 确认 MCP 服务器命令可以正常执行
 
 3. **Notion MCP 认证失败**:

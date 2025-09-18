@@ -47,7 +47,7 @@ def find_config_paths() -> List[Path]:
             return []
 
     # Look for both TOML and JSON config files
-    candidates = [Path("config/mcp.toml"), Path("config/mcp.json")]
+    candidates = [Path("config/mcp/mcp.toml"), Path("config/mcp/mcp.json")]
     for candidate in candidates:
         if candidate.exists():
             paths.append(candidate)
