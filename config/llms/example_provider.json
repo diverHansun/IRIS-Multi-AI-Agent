@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "providers": {
+    "ANTHROPIC": {
+      "name": "Anthropic",
+      "default_model": "claude-3-sonnet",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "class": "AnthropicLLM",
+      "mode_defaults": {
+        "llm": {
+          "temperature": 0.1,
+          "streaming": true
+        },
+        "agent": {
+          "temperature": 0.1,
+          "memory_enabled": true,
+          "max_iterations": 12,
+          "max_execution_time": 300,
+          "streaming": false
+        }
+      },
+      "models": {
+        "claude-3-sonnet": {
+          "name": "Claude 3 Sonnet",
+          "description": "平衡性能和速度的Claude 3模型",
+          "recommended": true,
+          "model_features": [
+            "高质量推理",
+            "快速响应",
+            "工具调用",
+            "长上下文"
+          ],
+          "supports_tools": true
+        },
+        "claude-3-opus": {
+          "name": "Claude 3 Opus",
+          "description": "最强性能的Claude 3模型",
+          "recommended": true,
+          "model_features": [
+            "最强推理能力",
+            "复杂任务处理",
+            "精准工具调用",
+            "长上下文"
+          ],
+          "supports_tools": true,
+          "mode_overrides": {
+            "agent": {
+              "max_iterations": 20,
+              "max_execution_time": 600
+            }
+          }
+        }
+      }
+    }
+  }
+}

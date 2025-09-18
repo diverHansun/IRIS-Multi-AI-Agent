@@ -166,7 +166,7 @@ def render_info(console, agent_info, mode_info):
     
     if mode_info["llm_mode"]:
         console.print(f"    Streaming: {'Enabled' if mode_info['streaming_enabled'] else 'Disabled'}")
-        console.print(f"    Features: Fast response, real-time display, no tool calling")
+        console.print(f"    Mode Features: Fast response, real-time display, no tool calling")
         # Show model special features
         if llm_info.get('model_features'):
             console.print(f"    Model Features: {', '.join(llm_info['model_features'])}")
@@ -174,7 +174,7 @@ def render_info(console, agent_info, mode_info):
         console.print(f"    Memory: {'Enabled' if llm_info.get('memory_enabled', False) else 'Disabled'}")
         console.print(f"    Tool Count: {llm_info['tool_count']}")
         console.print(f"    Available Tools: {', '.join(llm_info['tools'])}")
-        console.print(f"    Features: Full reasoning, tool calling, session memory")
+        console.print(f"    Mode Features: Full reasoning, tool calling, session memory")
         # Show model special features
         if llm_info.get('model_features'):
             console.print(f"    Model Features: {', '.join(llm_info['model_features'])}")
