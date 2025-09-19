@@ -4,6 +4,10 @@
   "type": "object",
   "required": ["schema_version", "providers"],
   "properties": {
+    "_comment": {
+      "type": "string",
+      "description": "配置文件说明注释"
+    },
     "schema_version": {
       "type": "string",
       "const": "1.0"
@@ -54,6 +58,11 @@
         "supports_tools": { "type": "boolean" },
         "default_temperature": { "type": "number" },
         "temperature_fixed": { "type": "boolean" },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "context_window": { "type": "integer", "minimum": 1 },
+        "parameters": { "type": "object" },
+        "size": { "type": "string" },
+        "modified_at": { "type": "string" },
         "mode_overrides": { "$ref": "#/definitions/mode_defaults" }
       },
       "additionalProperties": false

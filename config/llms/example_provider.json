@@ -1,4 +1,5 @@
 {
+  "_comment": "这是一个示例配置文件，展示如何添加新的LLM提供商。新增字段：max_tokens（最大输出tokens）和context_window（上下文窗口大小）",
   "schema_version": "1.0",
   "providers": {
     "ANTHROPIC": {
@@ -30,7 +31,9 @@
             "工具调用",
             "长上下文"
           ],
-          "supports_tools": true
+          "supports_tools": true,
+          "max_tokens": 4096,
+          "context_window": 200000
         },
         "claude-3-opus": {
           "name": "Claude 3 Opus",
@@ -43,6 +46,8 @@
             "长上下文"
           ],
           "supports_tools": true,
+          "max_tokens": 8192,
+          "context_window": 200000,
           "mode_overrides": {
             "agent": {
               "max_iterations": 20,

@@ -28,7 +28,9 @@
             "工具调用",
             "成本优化"
           ],
-          "supports_tools": true
+          "supports_tools": true,
+          "max_tokens": 2048,
+          "context_window": 128000
         },
         "glm-4.5": {
           "name": "GLM-4.5",
@@ -42,6 +44,8 @@
             "复杂推理增强"
           ],
           "supports_tools": true,
+          "max_tokens": 8192,
+          "context_window": 128000,
           "mode_overrides": {
             "llm": {
               "thinking_mode": true
@@ -87,6 +91,8 @@
           "default_temperature": 1.0,
           "temperature_fixed": true,
           "supports_tools": true,
+          "max_tokens": 8192,
+          "context_window": 8192,
           "mode_overrides": {
             "llm": {
               "temperature": 1.0
@@ -111,6 +117,8 @@
           "default_temperature": 1.0,
           "temperature_fixed": true,
           "supports_tools": true,
+          "max_tokens": 32768,
+          "context_window": 32768,
           "mode_overrides": {
             "llm": {
               "temperature": 1.0
@@ -131,7 +139,9 @@
             "长上下文",
             "成本优化"
           ],
-          "supports_tools": true
+          "supports_tools": true,
+          "max_tokens": 4096,
+          "context_window": 131072
         },
         "gpt-4o-mini": {
           "name": "GPT-4o-mini",
@@ -143,7 +153,9 @@
             "快速推理",
             "成本优化"
           ],
-          "supports_tools": true
+          "supports_tools": true,
+          "max_tokens": 16384,
+          "context_window": 131072
         },
         "gpt-4-turbo": {
           "name": "GPT-4-Turbo",
@@ -153,7 +165,9 @@
             "高性能",
             "稳定"
           ],
-          "supports_tools": true
+          "supports_tools": true,
+          "max_tokens": 4096,
+          "context_window": 4096
         }
       }
     },

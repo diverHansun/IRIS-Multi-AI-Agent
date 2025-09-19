@@ -138,8 +138,11 @@ class LLMManager:
         if provider == LLMProvider.OLLAMA:
             try:
                 from .ollama_llm import OllamaLLM  # 动态导入避免循环依赖
-                models.update(OllamaLLM.SUPPORTED_MODELS)
-            except ImportError:
+                # 使用动态检测方法获取本地已安装的模型
+                dynamic_models = OllamaLLM.get_supported_models()
+                models.update(dynamic_models)
+            except Exception as e:
+                logger.warning(f"获取Ollama动态模型失败: {e}")
                 pass
         return models
 

@@ -219,67 +219,29 @@ class OpenAIAgent:
     async def _create_agent(self):
         """创建Agent和AgentExecutor"""
         
-        # 根据模型选择优化的系统提示词
-        if self.model.startswith("gpt-5"):
-            # GPT-5系列模型的增强提示词
-            system_prompt = """你是一个专业的智能AI助手，具备显著增强的推理能力和创造性思维。
-
-## 核心能力特点
-作为GPT-5模型，你具备以下增强能力：
-- **高级推理**: 多步骤逻辑推理和抽象概念理解
-- **增强创造**: 创新性问题解决和创意生成
-- **精准工具调用**: 更智能的工具选择和参数优化
-- **深度理解**: 复杂上下文和隐含意图的准确把握
-
-## 工作原则
-你能够使用各种专业工具来回答用户问题。凭借GPT-5的先进能力，你可以更智能地预测用户需求，制定更优化的解决方案。
-
-当前时间：{current_time}"""
-        else:
-            # 标准的系统提示词
-            system_prompt = """你是一个专业的智能AI助手，采用ReAct（推理-行动）框架进行逻辑推理和问题解决。你具备多领域专业知识，能够通过系统化的思考过程和工具使用为用户提供准确、全面的帮助。
-
-## 工作原则
-你能够使用各种专业工具来回答用户问题。当需要获取信息、进行计算或执行特定任务时，你会自动选择和调用合适的工具。
-
-当前时间：{current_time}"""
-        
+        # 创建简单的prompt（Function Calling不需要复杂的ReAct格式）
         prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt.format(current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))),
+            ("system", "你是一个智能助手，可以使用工具来帮助用户。"),
             MessagesPlaceholder("chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder("agent_scratchpad"),
         ])
         
-        # 创建OpenAI工具Agent
+        # 创建OpenAI工具Agent（使用原生Function Calling）
         self._agent = create_openai_tools_agent(
             llm=self._llm,
             tools=self._tools,
             prompt=prompt
         )
         
-        # 创建AgentExecutor，在Windows环境下禁用verbose避免编码问题
-        import sys
-        is_windows = sys.platform.startswith('win')
-        verbose_setting = False if is_windows else self.verbose
-        
-        # 针对GPT-5模型的特殊优化配置
-        if self.model.startswith("gpt-5"):
-            # GPT-5具备更强的推理能力，可以处理更复杂的任务
-            max_iterations = 15  # 增加最大迭代次数
-            max_execution_time = 600  # 增加执行时间到10分钟
-            logger.info(f"GPT-5优化配置: max_iterations={max_iterations}, max_execution_time={max_execution_time}")
-        else:
-            max_iterations = 10
-            max_execution_time = 300  # 5分钟超时
-        
+        # 创建AgentExecutor
         self._agent_executor = AgentExecutor(
             agent=self._agent,
             tools=self._tools,
-            verbose=verbose_setting,
+            verbose=self.verbose,
             handle_parsing_errors=True,
-            max_iterations=max_iterations,
-            max_execution_time=max_execution_time,
+            max_iterations=10,
+            return_intermediate_steps=True
         )
         
         # 如果启用记忆，包装AgentExecutor
@@ -517,17 +479,3 @@ async def build_openai_agent(
     return agent
 
 
-# 简单聊天模型构建函数
-def build_simple_openai_chat(
-    api_key: str,
-    model: str = "gpt-4o-mini",
-    temperature: float = 0.1,
-    **kwargs
-) -> BaseChatModel:
-    """构建简单的OpenAI聊天模型（无工具）"""
-    return build_openai_chat(
-        api_key=api_key,
-        model=model,
-        temperature=temperature,
-        **kwargs
-    )

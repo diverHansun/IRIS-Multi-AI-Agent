@@ -22,53 +22,6 @@ logger = logging.getLogger(__name__)
 class OllamaLLM:
     """Ollama本地模型封装类"""
     
-    # 支持的模型配置
-    SUPPORTED_MODELS = {
-        "gpt-oss:20b": {
-            "name": "GPT-OSS-20B",
-            "description": "开源GPT模型，20B参数，支持工具调用",
-            "supports_tools": True,
-            "parameters": {
-                "temperature": 0.1,  # Agent模式使用更低温度
-                "top_p": 0.9,
-                "top_k": 40,
-                "num_ctx": 32768
-            }
-        },
-        "qwen3:8b": {
-            "name": "Qwen3-8B",
-            "description": "通义千问3.0模型，中文优化，支持工具调用",
-            "supports_tools": True,
-            "parameters": {
-                "temperature": 0.1,  # Agent模式使用更低温度
-                "top_p": 0.8,
-                "top_k": 40,
-                "num_ctx": 32768
-            }
-        },
-        "gemma3:latest": {
-            "name": "Gemma3-Latest",
-            "description": "Google Gemma3模型最新版本，支持工具调用",
-            "supports_tools": True,
-            "parameters": {
-                "temperature": 0.1,  # Agent模式使用更低温度
-                "top_p": 0.9,
-                "top_k": 40,
-                "num_ctx": 16384
-            }
-        },
-        "deepseek-r1:1.5b": {
-            "name": "DeepSeek-R1-1.5B", 
-            "description": "DeepSeek推理模型，专注逻辑推理，支持工具调用",
-            "supports_tools": True,
-            "parameters": {
-                "temperature": 0.1,  # Agent模式使用更低温度
-                "top_p": 0.9,
-                "top_k": 50,
-                "num_ctx": 16384
-            }
-        }
-    }
     
     def __init__(
         self,
@@ -100,8 +53,8 @@ class OllamaLLM:
         self.timeout = timeout or settings.ollama_timeout
         self.keep_alive = keep_alive or settings.ollama_keep_alive
         
-        # 获取模型推荐参数
-        model_config = self.SUPPORTED_MODELS.get(self.model, {})
+        # 从配置文件获取模型参数
+        model_config = self._get_model_config(self.model)
         recommended_params = model_config.get("parameters", {})
         
         # 参数优先级：显式传入 > 模型推荐 > 全局默认
@@ -109,12 +62,53 @@ class OllamaLLM:
         self.top_p = top_p if top_p is not None else recommended_params.get("top_p", 0.8)
         self.top_k = top_k if top_k is not None else recommended_params.get("top_k", 40)
         self.num_ctx = num_ctx if num_ctx is not None else recommended_params.get("num_ctx", 32768)
+        self.max_tokens = model_config.get('max_tokens', 8192)
+        self.context_window = model_config.get('context_window', self.num_ctx)
         
         self.extra_kwargs = kwargs
         self._llm = None
         self._is_initialized = False
         
         logger.info(f"初始化Ollama LLM: {self.model} @ {self.base_url}")
+    
+    def _get_model_config(self, model: str) -> Dict[str, Any]:
+        """获取模型的默认配置"""
+        # Ollama模型配置基于模型名称的启发式推断
+        config = {
+            "description": f"Ollama {model} 本地模型",
+            "supports_tools": True,  # 大部分现代模型都支持工具调用
+            "parameters": {
+                "temperature": 0.1,
+                "top_p": 0.9,
+                "top_k": 40,
+                "num_ctx": 32768  # 默认上下文长度
+            }
+        }
+        
+        # 根据模型名称推断一些参数
+        model_lower = model.lower()
+        
+        # 设置max_tokens和context_window
+        if any(x in model_lower for x in ['20b', '32b', '70b']):
+            # 大模型，更大的输出能力
+            config["max_tokens"] = 8192
+            config["context_window"] = 32768
+        elif any(x in model_lower for x in ['1.5b', '3b', '7b', '8b']):
+            # 中等模型
+            config["max_tokens"] = 4096
+            config["context_window"] = 16384
+        else:
+            # 默认配置
+            config["max_tokens"] = 4096
+            config["context_window"] = 16384
+        
+        # 特定模型的特殊配置
+        if 'qwen' in model_lower:
+            config["parameters"]["top_p"] = 0.8  # Qwen模型推荐配置
+        elif 'deepseek' in model_lower:
+            config["parameters"]["top_k"] = 50  # DeepSeek模型推荐配置
+        
+        return config
     
     async def health_check(self) -> bool:
         """
@@ -141,8 +135,8 @@ class OllamaLLM:
                             return True
                         else:
                             logger.warning(f"模型 {self.model} 未安装，尝试自动切换到可用模型...")
-                            # 尝试自动切换到第一个可用的支持工具调用的模型
-                            available_tool_models = [m for m in models if m in self.SUPPORTED_MODELS and self.SUPPORTED_MODELS[m].get("supports_tools", False)]
+                          
+                            available_tool_models = models[:3]  # 取前3个模型作为候选
                             if available_tool_models:
                                 self.model = available_tool_models[0]
                                 logger.info(f"自动切换到模型: {self.model}")
@@ -275,7 +269,8 @@ class OllamaLLM:
                         # 检查并切换模型
                         if self.model not in models:
                             logger.warning(f"模型 {self.model} 未安装，尝试自动切换...")
-                            available_tool_models = [m for m in models if m in self.SUPPORTED_MODELS and self.SUPPORTED_MODELS[m].get("supports_tools", False)]
+                            # 假设大部分现代模型都支持工具调用
+                            available_tool_models = models[:3]  # 取前3个模型作为候选
                             if available_tool_models:
                                 self.model = available_tool_models[0]
                                 logger.info(f"自动切换到模型: {self.model}")
@@ -313,7 +308,7 @@ class OllamaLLM:
         Returns:
             bool: 是否支持工具调用
         """
-        model_config = self.SUPPORTED_MODELS.get(self.model, {})
+        model_config = self._get_model_config(self.model)
         return model_config.get("supports_tools", False)
     
     def bind_tools_if_supported(self, tools: List = None):
@@ -347,22 +342,77 @@ class OllamaLLM:
     @classmethod
     def get_supported_models(cls) -> Dict[str, Dict[str, Any]]:
         """
-        获取支持的模型列表
+        动态获取本地已安装的Ollama模型列表
         
         Returns:
-            Dict: 支持的模型配置
+            Dict: 本地已安装的模型配置
         """
-        return cls.SUPPORTED_MODELS.copy()
+        try:
+            import aiohttp
+            import asyncio
+            from ..config import settings
+            
+            async def fetch_local_models():
+                base_url = settings.ollama_base_url
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(f"{base_url}/api/tags", timeout=10) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                models = {}
+                                for model_info in data.get("models", []):
+                                    model_name = model_info["name"]
+                                    # 创建一个临时实例来获取配置
+                                    temp_llm = cls(model=model_name)
+                                    model_config = temp_llm._get_model_config(model_name)
+                                    
+                                    models[model_name] = {
+                                        "name": model_name,
+                                        "description": model_config["description"],
+                                        "supports_tools": model_config["supports_tools"],
+                                        "max_tokens": model_config["max_tokens"],
+                                        "context_window": model_config["context_window"],
+                                        "parameters": model_config["parameters"],
+                                        "size": model_info.get("size", "Unknown"),
+                                        "modified_at": model_info.get("modified_at", "Unknown")
+                                    }
+                                return models
+                except Exception as e:
+                    logger.error(f"获取本地模型失败: {e}")
+                    return {}
+            
+            # 尝试在当前事件循环中运行
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # 如果在异步上下文中，创建新的线程来运行
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, fetch_local_models())
+                        return future.result(timeout=10)
+                else:
+                    return loop.run_until_complete(fetch_local_models())
+            except RuntimeError:
+                # 如果没有事件循环，创建新的
+                return asyncio.run(fetch_local_models())
+                
+        except Exception as e:
+            logger.warning(f"动态获取本地模型失败: {e}")
+            return {}
     
     @classmethod
     def validate_model(cls, model: str) -> bool:
         """
-        验证模型是否受支持
+        验证模型是否在本地已安装
         
         Args:
             model: 模型名称
             
         Returns:
-            bool: 是否受支持
+            bool: 是否已安装
         """
-        return model in cls.SUPPORTED_MODELS
+        try:
+            supported_models = cls.get_supported_models()
+            return model in supported_models
+        except:
+            return False

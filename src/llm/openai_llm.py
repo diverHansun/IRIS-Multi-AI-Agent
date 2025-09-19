@@ -17,44 +17,6 @@ logger = logging.getLogger(__name__)
 class OpenAILLM:
     """OpenAI LLM包装器类"""
     
-    # 支持的模型配置
-    SUPPORTED_MODELS = {
-        "gpt-5": {
-            "model_name": "gpt-5",
-            "max_tokens": 8192,
-            "context_window": 8192,
-            "description": "GPT-5 - 新一代语言模型，推理和创造能力显著提升",
-            "model_features": ["advanced_reasoning", "multimodal", "thinking_mode"]
-        },
-        "gpt-5-mini": {
-            "model_name": "gpt-5-mini",
-            "max_tokens": 32768,
-            "context_window": 32768,
-            "description": "GPT-5-mini - 成本优化版本，速度快成本低",
-            "model_features": ["fast_inference", "multimodal", "thinking_mode", "long_context"]
-        },
-        "gpt-4o": {
-            "model_name": "gpt-4o",
-            "max_tokens": 4096,
-            "context_window": 131072,
-            "description": "GPT-4o - 最新的GPT-4优化版本，性能和成本平衡",
-            "model_features": ["multimodal", "long_context", "cost_optimized"]
-        },
-        "gpt-4o-mini": {
-            "model_name": "gpt-4o-mini",
-            "max_tokens": 16384,
-            "context_window": 131072,
-            "description": "GPT-4o-mini - 轻量级版本，速度快成本低",
-            "model_features": ["multimodal", "long_context", "fast_inference", "cost_optimized"]
-        },
-        "gpt-4-turbo": {
-            "model_name": "gpt-4-turbo",
-            "max_tokens": 4096,
-            "context_window": 4096,
-            "description": "GPT-4 Turbo - 高性能版本",
-            "model_features": ["high_performance", "stable"]
-        }
-    }
     
     def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str = None, streaming: bool = False,
                  temperature: float = 0.1, max_tokens: int = 4096, callback_manager: Optional[Any] = None,
@@ -75,9 +37,13 @@ class OpenAILLM:
         # 设置实例属性
         self.model = model
         self.temperature = temperature
-        self.max_tokens = max_tokens
         self.streaming = streaming
         self.callback_manager = callback_manager
+        
+        # 从配置文件获取模型参数
+        model_config = self._get_model_config(model)
+        self.max_tokens = model_config.get('max_tokens', max_tokens)
+        self.context_window = model_config.get('context_window', 4096)
         
         # 设置提供商信息
         self.provider_name = "OpenAI"
@@ -85,9 +51,8 @@ class OpenAILLM:
         self.base_url = base_url
         self.llm = None  # 添加 llm 属性
         
-        # 验证模型支持
-        if model not in self.SUPPORTED_MODELS:
-            logger.warning(f"模型 {model} 不在支持列表中，但仍会尝试使用")
+        # 记录模型信息
+        logger.info(f"使用模型: {model}, max_tokens: {self.max_tokens}, context_window: {self.context_window}")
         
         # 设置默认参数
         self.llm_params = {
@@ -97,6 +62,23 @@ class OpenAILLM:
         self.llm_params.update(kwargs)
         
         logger.info(f"初始化OpenAI LLM: {model}")
+    
+    def _get_model_config(self, model: str) -> Dict[str, Any]:
+        """从配置文件获取模型配置"""
+        try:
+            # 延迟导入避免循环导入
+            from ..llm.llm_manager import get_llm_info
+            model_info = get_llm_info("openai", model)
+            return model_info
+        except Exception as e:
+            logger.warning(f"获取模型配置失败: {e}，使用默认配置")
+            # 返回默认配置
+            return {
+                "max_tokens": 4096,
+                "context_window": 4096,
+                "description": f"OpenAI {model} 模型",
+                "supports_tools": True
+            }
     
     async def initialize(self):
         """初始化LLM实例"""
@@ -188,7 +170,13 @@ class OpenAILLM:
     @classmethod
     def get_supported_models(cls) -> Dict[str, Dict[str, Any]]:
         """获取支持的模型列表"""
-        return cls.SUPPORTED_MODELS.copy()
+        try:
+            # 延迟导入避免循环导入
+            from ..llm.llm_manager import get_provider_models
+            return get_provider_models("openai")
+        except Exception as e:
+            logger.warning(f"获取支持的模型列表失败: {e}")
+            return {}
     
     @classmethod
     def validate_api_key(cls, api_key: str) -> bool:
