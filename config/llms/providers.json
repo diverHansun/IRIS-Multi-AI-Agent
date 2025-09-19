@@ -30,7 +30,15 @@
           ],
           "supports_tools": true,
           "max_tokens": 2048,
-          "context_window": 128000
+          "context_window": 128000,
+          "mode_overrides": {
+            "llm": {
+              "temperature": 0.2
+            },
+            "agent": {
+              "temperature": 0.1
+            }
+          }
         },
         "glm-4.5": {
           "name": "GLM-4.5",

@@ -22,4 +22,3 @@ Tool list (with full JSON Schema):
 
 Begin:
 Question: {input}
-Thought: {agent_scratchpad}

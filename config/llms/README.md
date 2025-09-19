@@ -10,7 +10,7 @@
 config/llms/
 ├── schema.json           # JSON Schema定义
 ├── providers.json        # 主配置文件
-├── example_new_provider.json  # 新增Provider示例
+├── example_provider.json # 新增Provider示例
 └── README.md            # 本文档
 ```
 
@@ -22,8 +22,8 @@ config/llms/
 ### 2. providers.json
 主配置文件，包含所有LLM提供商和模型的配置信息。
 
-### 3. example_new_provider.json
-演示如何添加新的LLM提供商的示例文件。
+### 3. example_provider.json
+演示如何添加新的LLM提供商的示例文件，包含最新的配置字段。
 
 ## 配置文件格式
 
@@ -58,6 +58,8 @@ config/llms/
           "recommended": true,
           "model_features": ["特性1", "特性2"],
           "supports_tools": true,
+          "max_tokens": 4096,
+          "context_window": 131072,
           "mode_overrides": {
             "llm": {},
             "agent": {}
@@ -88,9 +90,34 @@ config/llms/
 - `recommended`: 是否推荐使用（布尔值）
 - `model_features`: 模型特性列表
 - `supports_tools`: 是否支持工具调用（布尔值）
+- `max_tokens`: 最大输出token数（整数，可选）
+- `context_window`: 上下文窗口大小（整数，可选）
 - `default_temperature`: 默认温度参数（可选）
 - `temperature_fixed`: 温度是否固定（可选）
 - `mode_overrides`: 模式参数覆盖（可选）
+
+### 新增字段说明
+
+#### max_tokens
+- **类型**: 整数
+- **说明**: 模型的最大输出token数
+- **示例**: 4096, 8192, 16384
+- **用途**: 控制模型单次输出的最大长度
+
+#### context_window
+- **类型**: 整数  
+- **说明**: 模型的上下文窗口大小
+- **示例**: 131072, 200000, 32768
+- **用途**: 控制模型可以处理的输入+输出总长度
+
+### 字段配置建议
+
+| 模型类型 | max_tokens | context_window | 说明 |
+|---------|------------|----------------|------|
+| 小型模型 (1-7B) | 2048-4096 | 8192-16384 | 适合快速响应 |
+| 中型模型 (8-20B) | 4096-8192 | 16384-32768 | 平衡性能和成本 |
+| 大型模型 (70B+) | 8192-16384 | 32768-131072 | 最强能力 |
+| 长上下文模型 | 4096-8192 | 131072-200000 | 支持长文档处理 |
 
 ## 如何添加新的LLM Provider
 
@@ -125,7 +152,9 @@ config/llms/
           "description": "第一个模型",
           "recommended": true,
           "model_features": ["特性A", "特性B"],
-          "supports_tools": true
+          "supports_tools": true,
+          "max_tokens": 4096,
+          "context_window": 131072
         }
       }
     }
@@ -182,6 +211,8 @@ reload
     "recommended": false,
     "model_features": ["新特性"],
     "supports_tools": true,
+    "max_tokens": 8192,
+    "context_window": 131072,
     "mode_overrides": {
       "agent": {
         "max_iterations": 15
@@ -217,7 +248,25 @@ reload
 - 为新模型设置合适的`recommended`标志
 - 提供详细和准确的`description`
 - 根据模型能力设置`supports_tools`
+- **重要**: 正确设置`max_tokens`和`context_window`参数
 - 为特殊模型设置适当的`mode_overrides`
+
+#### 新字段配置建议
+
+1. **max_tokens配置**:
+   - 根据模型实际能力设置，不要过高或过低
+   - 考虑成本因素：更大的输出意味着更高的API费用
+   - 参考官方文档或实际测试确定最佳值
+
+2. **context_window配置**:
+   - 设置为模型实际支持的上下文长度
+   - 注意：这是输入+输出的总长度限制
+   - 长上下文模型可以设置更大的值（如131072+）
+
+3. **配置验证**:
+   - 使用`reload`命令测试配置是否正确
+   - 检查模型是否能正常加载和运行
+   - 验证输出长度是否符合预期
 
 ### 3. 开发时配置
 
@@ -271,4 +320,32 @@ help
 
 ## 示例
 
-参考`example_new_provider.json`文件，了解如何配置一个完整的新Provider（Anthropic Claude）。
+参考`example_provider.json`文件，了解如何配置一个完整的新Provider（Anthropic Claude），包含最新的`max_tokens`和`context_window`字段配置。
+
+### 完整配置示例
+
+```json
+{
+  "schema_version": "1.0",
+  "providers": {
+    "ANTHROPIC": {
+      "name": "Anthropic",
+      "default_model": "claude-3-sonnet",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "models": {
+        "claude-3-sonnet": {
+          "name": "Claude 3 Sonnet",
+          "description": "平衡性能和速度的Claude 3模型",
+          "recommended": true,
+          "model_features": ["高质量推理", "快速响应", "工具调用", "长上下文"],
+          "supports_tools": true,
+          "max_tokens": 4096,
+          "context_window": 200000
+        }
+      }
+    }
+  }
+}
+```
+
+这个示例展示了如何正确配置新字段，确保模型能够按照预期的方式工作。

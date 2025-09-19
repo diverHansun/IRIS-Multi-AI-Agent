@@ -22,4 +22,3 @@
 
 现在开始：
 Question: {input}
-Thought: {agent_scratchpad}
