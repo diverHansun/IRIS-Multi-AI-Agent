@@ -1,165 +1,35 @@
 """
 智谱AI代理模块
 
-基于LangChain的ReAct Agent实现，集成MCP搜索和数学工具。
-简化版本，移除复杂的多类型Agent系统。
+智谱AI Agent实现，专注于GLM-4-plus的ReAct功能。
+使用外置模板系统和JSON ReAct解析器，支持工具调用和记忆管理。
 """
 
-import json
 import logging
 import asyncio
-import re
-from typing import List, Optional, Dict, Any, Callable, Union
+from typing import List, Optional, Dict, Any, Union
 
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
-from langchain_core.tools import BaseTool
-from langchain_core.agents import AgentAction, AgentFinish
-from langchain_core.exceptions import OutputParserException
-import threading
-import time
 
-# 导入自定义的 JSON ReAct 输出解析器（迁移至 parsers）
+# 导入自定义的 JSON ReAct 输出解析器
 from ..parsers.json_react_output_parser import JSONReActSingleInputOutputParser
 from ..prompts.registry import PromptRegistry
 from ..prompts.tooling import serialize_tools
 
 from ..llm.zhipu_llm import create_zhipu_llm
+from ..llm.llm_manager import get_llm_info
 from ..tools.calculate.math_tools import add_numbers, calculate_math
-from ..tools.search.search_tools import SEARCH_TOOLS
 from ..tools.search.tavily_search_tool import get_available_tavily_tools
 from ..tools.amap import get_available_amap_tools
-from ..tools.okx_market import get_available_okx_tools
 from ..tools.time import get_available_time_tools
-from ..tools.notion import get_notion_tools
 from ..memory.global_memory import GlobalMemoryManager
-from langchain_core.runnables.history import RunnableWithMessageHistory
 
 logger = logging.getLogger(__name__)
 
-# GLM-4.5优化的ReAct提示模板（兼容LangChain标准解析器）
-REACT_PROMPT_GLM45 = """你是AI助手，采用ReAct框架进行推理和精确工具调用。
-
-可用工具:
-{tools}
-
-工具清单: {tool_names}
-
-严格使用以下增强ReAct格式：
-
-Question: 用户的问题
-Thought: 深度分析问题，制定完整解决策略
-  1. 问题分析：深度解构问题层面和隐含需求
-  2. 策略制定：制定主路径和备用方案
-  3. 工具规划：分析所需工具序列和预期结果
-Action: 选择最优工具（必须从工具清单选择）
-Action Input: 精确的工具输入参数
-Observation: 工具执行结果和数据分析
-Reflection: 评估结果质量，判断是否需要调整策略
-... (根据需要重复 Thought/Action/Action Input/Observation/Reflection)
-Thought: 综合所有信息进行最终深度分析
-Final Answer: 完整、准确、结构化的专业答案
-
-核心要求：
-1. Action必须严格从工具清单选择: {tool_names}
-2. Action Input必须是符合工具参数要求的JSON格式，避免换行符
-3. 充分利用深度思考能力进行多层推理
-4. 必须基于工具真实结果，禁止编造信息
-
-常用工具说明：
-- tavily_search: 通用搜索，适合大部分查询
-- calculate_math: 数学计算，输入表达式
-- add_numbers: 数字加法，格式"数字1 + 数字2"
-- amap_search_place: 地点搜索，输入关键词
-- amap_route_driving: 驾车路线，格式"起点,终点"
-- get_crypto_price: 加密货币价格，输入符号如"BTC"
-
-Filesystem工具说明：
-- fs:read_text_file: 读取文本文件内容，输入参数为{{"path": "文件路径"}}
-- fs:write_file: 写入文件，输入参数为{{"path": "文件路径", "content": "文件内容"}}
-- fs:list_directory: 列出目录内容，输入参数为{{"path": "目录路径"}}
-- fs:create_directory: 创建目录，输入参数为{{"path": "目录路径"}}
-- fs:search_files: 搜索文件，输入参数为{{"path": "搜索路径", "pattern": "搜索模式"}}
-- fs:get_file_info: 获取文件信息，输入参数为{{"path": "文件路径"}}
-- fs:move_file: 移动文件，输入参数为{{"source": "源路径", "destination": "目标路径"}}
-- fs:edit_file: 编辑文件，输入参数为{{"path": "文件路径", "edits": [{{"oldText": "原文本", "newText": "新文本"}}]}}
-- fs:read_multiple_files: 读取多个文件，输入参数为{{"paths": ["文件路径1", "文件路径2"]}}
-
-Notion工具说明：
-- notion_get_database_info: 获取数据库信息，输入数据库ID
-- notion_query_database: 查询数据库记录，输入数据库ID
-- notion_get_database_summary: 获取数据库摘要，输入数据库ID
-- notion_get_page_info: 获取页面信息，输入页面ID
-- notion_get_page_content: 获取页面内容，输入页面ID
-- notion_get_page_summary: 获取页面摘要，输入页面ID
-- notion_search_page_content: 搜索页面内容，输入页面ID和搜索词
-- notion_search: 全局搜索Notion内容，输入搜索查询
-- notion_search_databases: 搜索数据库，输入搜索查询
-- notion_search_pages: 搜索页面，输入搜索查询
-
-注意：
-1. Notion ID格式为32位十六进制字符，可从页面URL中获取
-2. Filesystem工具只能访问指定的允许目录及其子目录
-3. 所有工具调用的参数都必须是有效的JSON格式
-
-现在开始：
-
-Question: {input}
-Thought: {agent_scratchpad}
-"""
-
-# 优化的ReAct提示模板（兼容LangChain标准解析器）
-REACT_PROMPT_ZH = """你是一个专业的智能AI助手，采用ReAct（推理-行动）框架进行逻辑推理和问题解决。
-
-可用工具:
-{tools}
-
-工具清单: {tool_names}
-
-严格使用以下ReAct格式：
-
-Question: 用户的问题
-Thought: 分析问题，制定解决策略
-Action: 选择工具名称（必须从工具清单中选择）
-Action Input: 工具的输入参数（必须是有效的JSON格式）
-Observation: 工具执行结果
-... (根据需要重复 Thought/Action/Action Input/Observation)
-Thought: 基于观察结果得出结论
-Final Answer: 最终答案
-
-核心要求：
-1. Action必须严格从工具清单选择: {tool_names}
-2. Action Input必须是符合工具参数要求的JSON格式，避免换行符
-3. 必须基于工具返回的真实结果回答，禁止编造信息
-4. 每次只执行一个Action，基于Observation决定下一步
-
-常用工具说明：
-- tavily_search: 通用搜索，适合大部分查询
-- calculate_math: 数学计算，输入表达式
-- add_numbers: 数字加法，格式"数字1 + 数字2"
-- amap_search_place: 地点搜索，输入关键词
-- amap_route_driving: 驾车路线，格式"起点,终点"
-- get_crypto_price: 加密货币价格，输入符号如"BTC"
-
-Filesystem工具说明：
-- fs:read_text_file: 读取文本文件内容，输入参数为{{"path": "文件路径"}}
-- fs:write_file: 写入文件，输入参数为{{"path": "文件路径", "content": "文件内容"}}
-- fs:list_directory: 列出目录内容，输入参数为{{"path": "目录路径"}}
-- fs:create_directory: 创建目录，输入参数为{{"path": "目录路径"}}
-- fs:search_files: 搜索文件，输入参数为{{"path": "搜索路径", "pattern": "搜索模式"}}
-- fs:get_file_info: 获取文件信息，输入参数为{{"path": "文件路径"}}
-- fs:move_file: 移动文件，输入参数为{{"source": "源路径", "destination": "目标路径"}}
-- fs:edit_file: 编辑文件，输入参数为{{"path": "文件路径", "edits": [{{"oldText": "原文本", "newText": "新文本"}}]}}
-- fs:read_multiple_files: 读取多个文件，输入参数为{{"paths": ["文件路径1", "文件路径2"]}}
-
-现在开始：
-
-Question: {input}
-Thought: {agent_scratchpad}"""
-
 
 class ZhipuAgent:
-    """简化的智谱AI Agent - 支持中断功能"""
+    """简化的智谱AI Agent - 专注于GLM-4-plus的ReAct功能"""
     
     def __init__(self, 
                  model: str = "glm-4-plus",
@@ -169,7 +39,6 @@ class ZhipuAgent:
                  enable_memory: bool = True,
                  memory_config: Optional[Dict[str, Any]] = None,
                  global_memory_manager = None,
-                 execution_timeout: Optional[float] = None,
                  prompt_provider: Optional[str] = None):
         """
         初始化智谱AI Agent
@@ -182,7 +51,7 @@ class ZhipuAgent:
             enable_memory: 是否启用记忆功能
             memory_config: 记忆配置参数
             global_memory_manager: 全局记忆管理器
-            execution_timeout: 执行超时时间（秒），None表示不设置超时
+            prompt_provider: 提示模板提供商
         """
         self.model = model
         self.temperature = temperature
@@ -190,18 +59,13 @@ class ZhipuAgent:
         self.max_iterations = max_iterations
         self.enable_memory = enable_memory
         self.global_memory_manager = global_memory_manager
-        self.execution_timeout = execution_timeout
-        self.prompt_provider = prompt_provider
+        self.prompt_provider = prompt_provider or ("glm" if "glm" in model.lower() else None)
         
-        # 组件
+        # 核心组件
         self.llm = None
         self.tools = []
         self.agent_executor = None
         self.is_initialized = False
-        
-        # 中断控制
-        self.interruptible_executor = None
-        self._progress_callback: Optional[Callable] = None
         
         # 记忆管理
         self.chat_memory = None
@@ -210,35 +74,28 @@ class ZhipuAgent:
             self._init_memory(memory_config or {})
     
     async def initialize(self):
-        """
-        初始化Agent - 公开接口
-        """
+        """初始化Agent"""
         if self.is_initialized:
             return
         
         try:
             logger.info("开始初始化智谱AI Agent...")
             
-            # 1. 创建LLM
-            llm_config = {
-                "model": self.model,
-                "temperature": self.temperature,
-                "max_tokens": 2048  # 默认值
-            }
+            # 1. 创建LLM（使用配置文件参数）
+            await self._create_llm()
             
-            # GLM-4.5特殊优化
-            if self.model == "glm-4.5":
-                llm_config.update({
-                    "max_tokens": 8192,  # GLM-4.5支持更大输出
-                    "thinking_mode": True,  # 启用深度思考模式
-                })
-                logger.info("GLM-4.5检测：启用深度思考模式和大输出token配置")
+            # 2. 收集工具
+            self._collect_tools()
             
-            self.llm = create_zhipu_llm(**llm_config)
-            logger.info(f"LLM初始化完成: {self.model}")
+            # 3. 加载MCP工具
+            await self._load_mcp_tools()
             
-            # 2. 初始化Agent
-            await self._initialize_agent()
+            # 4. 构建Agent（使用外置模板系统）
+            self._build_agent()
+            
+            # 5. 创建带记忆的Agent（如果启用记忆）
+            if self.enable_memory and self.chat_memory:
+                self._build_agent_with_memory()
             
             self.is_initialized = True
             logger.info(f"智谱AI Agent初始化完成 - 模型: {self.model}, 工具数量: {len(self.tools)}")
@@ -247,15 +104,58 @@ class ZhipuAgent:
             logger.error(f"Agent初始化失败: {e}")
             raise
     
+    async def _create_llm(self):
+        """创建LLM实例"""
+        # 从配置文件获取模型参数
+        model_config = self._get_model_config()
+        
+        # 优先使用配置文件中的温度设置
+        config_temperature = model_config.get("temperature")
+        if config_temperature is not None:
+            temperature = config_temperature
+            logger.info(f"使用配置文件中的温度设置: {temperature}")
+        else:
+            temperature = self.temperature
+            logger.info(f"使用默认温度设置: {temperature}")
+        
+        llm_config = {
+            "model": self.model,
+            "temperature": temperature,
+            "max_tokens": model_config.get("max_tokens", 2048)
+        }
+        
+        self.llm = create_zhipu_llm(**llm_config)
+        logger.info(f"LLM创建完成: {self.model}, 温度: {temperature}")
+    
+    def _get_model_config(self) -> Dict[str, Any]:
+        """获取模型配置"""
+        try:
+            model_info = get_llm_info("zhipu", self.model)
+            
+            # 从合并后的mode_defaults中提取温度设置
+            mode_defaults = model_info.get("mode_defaults", {})
+            llm_defaults = mode_defaults.get("llm", {})
+            agent_defaults = mode_defaults.get("agent", {})
+            
+            # 优先使用llm模式的温度设置，然后是agent模式
+            temperature = llm_defaults.get("temperature") or agent_defaults.get("temperature")
+            
+            if temperature is not None:
+                model_info["temperature"] = temperature
+                logger.info(f"从配置文件获取温度设置: {temperature}")
+            
+            return model_info
+        except Exception as e:
+            logger.warning(f"获取模型配置失败: {e}，使用默认配置")
+            return {"max_tokens": 2048, "context_window": 128000}
+    
     def _init_memory(self, config: Dict[str, Any]) -> None:
         """初始化记忆管理器"""
         try:
             if self.global_memory_manager:
-                # 使用全局记忆管理器
                 self.chat_memory = self.global_memory_manager
                 logger.info("使用全局记忆管理器")
             else:
-                # 使用本地GlobalMemoryManager（向后兼容）
                 self.chat_memory = GlobalMemoryManager(
                     storage_dir=config.get("storage_path", "data/sessions"),
                     max_messages=config.get("max_messages", 50)
@@ -264,176 +164,88 @@ class ZhipuAgent:
         except Exception as e:
             logger.error(f"记忆管理器初始化失败: {e}")
             self.enable_memory = False
-        
-    async def _initialize_agent(self):
-        """
-        初始化具体的Agent实现
-        """
-        try:
-            # 1. 收集工具
-            self._collect_tools()
-
-            # 1.1 聚合全局 MCP 工具（如 Notion MCP、Filesystem 等）
-            try:
-                from ..MCP import GlobalMCPManager
-                await GlobalMCPManager.initialize()
-                mcp_tools = GlobalMCPManager.get_tools()
-                if mcp_tools:
-                    self.tools.extend(mcp_tools)
-                    logger.info(f"MCP 工具已加载: {len(mcp_tools)}")
-                else:
-                    logger.info("MCP 工具为空或未启用")
-            except Exception as mcp_e:
-                logger.warning(f"跳过 MCP 工具（未安装/未启用/加载失败）: {mcp_e}")
-            
-            # 2. 创建Agent（使用外置模板与自定义解析器）
-            self._build_agent_with_external_prompt()
-            
-            # 3. 创建带记忆的Agent（如果启用记忆）
-            if self.enable_memory and self.chat_memory:
-                self._build_agent_with_memory()
-            
-            logger.info(f"智谱AI Agent初始化完成 - 工具数量: {len(self.tools)}")
-            
-        except Exception as e:
-            logger.error(f"Agent初始化失败: {e}")
-            raise
     
     def _collect_tools(self):
-        """收集所有可用工具"""
-        # 清空工具列表  
+        """收集核心工具"""
         self.tools = []
         
-        # 添加数学工具
+        # 基础工具：数学计算
         self.tools.extend([add_numbers, calculate_math])
-        logger.info(f"✅ 已加载数学工具: {len([add_numbers, calculate_math])} 个")
+        logger.info(f"已加载数学工具: {len([add_numbers, calculate_math])} 个")
         
-        # 添加Tavily搜索工具（优先）
+        # 搜索工具：优先使用Tavily
         tavily_tools = get_available_tavily_tools()
         if tavily_tools:
             self.tools.extend(tavily_tools)
-            logger.info(f"✅ 已加载 Tavily 搜索工具: {len(tavily_tools)} 个")
-        else:
-            logger.warning("⚠️ Tavily 搜索工具未配置，将使用备用搜索工具")
+            logger.info(f"已加载Tavily搜索工具: {len(tavily_tools)} 个")
         
-        # 添加备用搜索工具（DuckDuckGo等）
-        if SEARCH_TOOLS:
-            self.tools.extend(SEARCH_TOOLS)
-            logger.info(f"✅ 已加载备用搜索工具: {len(SEARCH_TOOLS)} 个")
-        
-        # 添加高德地图工具
+        # 地图工具
         amap_tools = get_available_amap_tools()
         if amap_tools:
             self.tools.extend(amap_tools)
-            logger.info(f"✅ 已加载高德地图工具: {len(amap_tools)} 个")
-        else:
-            logger.warning("⚠️ 高德地图工具未配置，需要设置 AMAP_API_KEY")
+            logger.info(f"已加载高德地图工具: {len(amap_tools)} 个")
         
-        # 添加OKX加密货币行情工具
-        okx_tools = get_available_okx_tools()
-        if okx_tools:
-            self.tools.extend(okx_tools)
-            logger.info(f"✅ 已加载OKX加密货币工具: {len(okx_tools)} 个")
-        else:
-            logger.warning("⚠️ OKX加密货币工具加载失败")
-            
-        # 添加时间工具
+        # 时间工具
         time_tools = get_available_time_tools()
         if time_tools:
             self.tools.extend(time_tools)
-            logger.info(f"✅ 已加载时间工具: {len(time_tools)} 个")
-        else:
-            logger.warning("⚠️ 时间工具加载失败")
+            logger.info(f"已加载时间工具: {len(time_tools)} 个")
         
-        # 添加 Notion 工具 (使用新的 Direct API 实现)
-        try:
-            from ..tools.notion import get_notion_tools, is_auth_configured
-            
-            if is_auth_configured():
-                # 使用新的 Direct API 工具
-                notion_tools = get_notion_tools()
-                if notion_tools:
-                    self.tools.extend(notion_tools)
-                    logger.info(f"✅ 已加载 Notion 工具: {len(notion_tools)} 个")
-                    
-                    # 记录具体的工具名称
-                    tool_names = [tool.name for tool in notion_tools]
-                    logger.info(f"   工具列表: {tool_names}")
-                else:
-                    logger.warning("⚠️ Notion 工具创建失败")
-                    self._add_notion_placeholder_tools()
-            else:
-                logger.warning("⚠️ Notion 工具未配置，需要设置 NOTION_TOKEN")
-                self._add_notion_placeholder_tools()
-                
-        except Exception as e:
-            logger.warning(f"⚠️ Notion 工具加载失败: {e}")
-            # 备用方案：使用简单的占位符工具
-            try:
-                self._add_notion_placeholder_tools()
-            except Exception as e2:
-                logger.error(f"❌ 连备用 Notion 工具都加载失败: {e2}")
-        
-        logger.info(f"📋 总共收集到 {len(self.tools)} 个工具")
+        logger.info(f"核心工具收集完成，共 {len(self.tools)} 个")
     
-    def _add_notion_placeholder_tools(self):
-        """添加 Notion 占位符工具"""
-        from langchain_core.tools import tool
-        
-        @tool
-        def notion_info() -> str:
-            """
-            获取 Notion 集成信息
-            
-            Returns:
-                Notion 集成状态和配置指南
-            """
-            return """
-            🔧 Notion 集成状态：未完全配置
-            
-            当前可用的集成方式：
-            1. **Direct API** (推荐)：需要 Integration Token
-            2. **MCP 服务器**：需要 OAuth 认证
-            
-            配置步骤：
-            1. 访问 https://www.notion.so/my-integrations
-            2. 创建新的 Integration
-            3. 复制 Integration Token 到 .env 文件
-            4. 重启应用以加载 Notion 工具
-            
-            注意：MCP 服务器需要 OAuth 流程，暂不支持 Integration Token。
-            """
-        
-        self.tools.append(notion_info)
-        logger.info("✅ 已添加 Notion 信息工具")
-        
-        logger.info(f"📋 总共收集到 {len(self.tools)} 个工具")
+    async def _load_mcp_tools(self):
+        """加载MCP工具"""
+        try:
+            from ..MCP import GlobalMCPManager
+            await GlobalMCPManager.initialize()
+            mcp_tools = GlobalMCPManager.get_tools()
+            if mcp_tools:
+                self.tools.extend(mcp_tools)
+                logger.info(f"MCP工具已加载: {len(mcp_tools)} 个")
+        except Exception as e:
+            logger.warning(f"MCP工具加载失败: {e}")
     
     def _build_agent(self):
-        """构建Agent执行器，根据模型选择优化的提示词"""
+        """构建Agent - 使用外置模板系统"""
         try:
-            # 确保LLM已经初始化
-            if not self.llm:
-                raise ValueError("LLM未正确初始化，无法构建Agent")
+            # 使用外置模板系统
+            template_text = PromptRegistry.get_prompt(
+                agent_type="react_json",
+                provider=self.prompt_provider,
+                locale="zh_CN",
+            )
             
-            # 根据模型选择最优化的提示模板
-            if self.model == "glm-4.5":
-                prompt_template = REACT_PROMPT_GLM45
-                logger.info("使用GLM-4.5优化提示词模板")
-            else:
-                prompt_template = REACT_PROMPT_ZH
-                logger.info("使用标准ReAct提示词模板")
+            # 准备模板变量
+            tools_descriptions = []
+            tool_names = []
+            for tool in self.tools:
+                tools_descriptions.append(f"{tool.name}: {tool.description}")
+                tool_names.append(tool.name)
             
-            # 创建提示模板
-            prompt = PromptTemplate.from_template(prompt_template)
+            tools_str = "\n".join(tools_descriptions)
+            tool_names_str = ", ".join(tool_names)
             
-            # 创建自定义输出解析器
+            # 渲染模板
+            tools_block = serialize_tools(self.tools)
+            rendered = PromptRegistry.render(template_text, tools_block=tools_block)
+            
+            # 创建PromptTemplate，确保所有变量都能正确替换
+            prompt = PromptTemplate.from_template(
+                rendered,
+                partial_variables={
+                    "tools": tools_str,
+                    "tool_names": tool_names_str,
+                    "agent_scratchpad": ""  # 提供空的agent_scratchpad变量
+                }
+            )
+            
+            # 使用JSON ReAct解析器
             output_parser = JSONReActSingleInputOutputParser()
             
-            # 创建ReAct Agent（self.llm直接就是LangChain模型）
+            # 创建ReAct Agent
             agent = create_react_agent(self.llm, self.tools, prompt, output_parser=output_parser)
             
-            # 为GLM-4.5优化Agent执行器配置
+            # 配置Agent执行器
             executor_config = {
                 "agent": agent,
                 "tools": self.tools,
@@ -444,21 +256,19 @@ class ZhipuAgent:
                 "return_intermediate_steps": True
             }
             
-            # GLM-4.5特殊优化：允许更多迭代以充分发挥深度思考能力
+            # GLM-4.5特殊优化
             if self.model == "glm-4.5":
                 executor_config.update({
-                    "max_iterations": max(self.max_iterations, 15),  # GLM-4.5可以处理更复杂的推理链
-                    "max_execution_time": 180,  # 允许更长的执行时间用于深度思考
+                    "max_iterations": max(self.max_iterations, 15),
+                    "max_execution_time": 180,
                 })
                 logger.info("GLM-4.5优化：增加最大迭代次数和执行时间")
             
-            # 创建Agent执行器
             self.agent_executor = AgentExecutor(**executor_config)
-            
-            logger.info("✅ Agent执行器创建完成")
+            logger.info("Agent执行器创建完成")
             
         except Exception as e:
-            logger.error(f"❌ Agent构建失败: {e}")
+            logger.error(f"Agent构建失败: {e}")
             raise
     
     def _build_agent_with_memory(self):
@@ -468,68 +278,45 @@ class ZhipuAgent:
                 raise ValueError("基础Agent必须先初始化")
             
             if self.global_memory_manager:
-                # 使用全局记忆管理器创建带记忆的Runnable
                 self.agent_with_memory = self.global_memory_manager.create_runnable_with_memory(
                     self.agent_executor,
                     input_key="input",
                     history_key="chat_history"
                 )
             else:
-                # 使用本地GlobalMemoryManager（向后兼容）
                 self.agent_with_memory = self.chat_memory.create_runnable_with_memory(
                     self.agent_executor
                 )
             
-            logger.info("✅ 带记忆的Agent执行器创建完成")
+            logger.info("带记忆的Agent执行器创建完成")
             
         except Exception as e:
-            logger.error(f"❌ 带记忆的Agent构建失败: {e}")
+            logger.error(f"带记忆的Agent构建失败: {e}")
             self.enable_memory = False
             raise
     
     async def _execute_query(self, query: str, session_id: str = "default", **kwargs) -> Dict[str, Any]:
-        """
-        执行查询的核心逻辑
-        
-        Args:
-            query: 用户查询
-            session_id: 会话 ID
-            **kwargs: 额外参数
-            
-        Returns:
-            查询结果字典
-        """
+        """执行查询的核心逻辑"""
         try:
-            # 发送思考事件
-            await self._emit_thinking_event("开始分析用户查询...")
-            
             # 使用带记忆的Agent（如果启用记忆）
             if self.enable_memory and self.agent_with_memory:
-                # 使用RunnableWithMessageHistory标准接口
                 result = await self.agent_with_memory.ainvoke(
                     {"input": query},
                     config={"configurable": {"session_id": session_id}}
                 )
                 
-                # 保存会话到存储
+                # 保存会话
                 if self.chat_memory:
                     self.chat_memory.save_session(session_id)
                 
                 # 提取工具名称
-                tool_names = []
-                intermediate_steps = result.get("intermediate_steps", [])
-                for step in intermediate_steps:
-                    if hasattr(step, '__len__') and len(step) >= 1:
-                        # step 是 (AgentAction, observation) 元组
-                        agent_action = step[0]
-                        if hasattr(agent_action, 'tool'):
-                            tool_names.append(agent_action.tool)
+                tool_names = self._extract_tool_names(result.get("intermediate_steps", []))
                 
                 return {
                     "output": result["output"],
-                    "intermediate_steps": intermediate_steps,
+                    "intermediate_steps": result.get("intermediate_steps", []),
                     "success": True,
-                    "tool_calls": len(intermediate_steps),
+                    "tool_calls": len(result.get("intermediate_steps", [])),
                     "tool_names": tool_names,
                     "session_id": session_id,
                     "memory_enabled": True
@@ -539,20 +326,13 @@ class ZhipuAgent:
                 result = await self.agent_executor.ainvoke({"input": query})
                 
                 # 提取工具名称
-                tool_names = []
-                intermediate_steps = result.get("intermediate_steps", [])
-                for step in intermediate_steps:
-                    if hasattr(step, '__len__') and len(step) >= 1:
-                        # step 是 (AgentAction, observation) 元组
-                        agent_action = step[0]
-                        if hasattr(agent_action, 'tool'):
-                            tool_names.append(agent_action.tool)
+                tool_names = self._extract_tool_names(result.get("intermediate_steps", []))
                 
                 return {
                     "output": result["output"],
-                    "intermediate_steps": intermediate_steps,
+                    "intermediate_steps": result.get("intermediate_steps", []),
                     "success": True,
-                    "tool_calls": len(intermediate_steps),
+                    "tool_calls": len(result.get("intermediate_steps", [])),
                     "tool_names": tool_names,
                     "session_id": None,
                     "memory_enabled": False
@@ -560,73 +340,49 @@ class ZhipuAgent:
             
         except Exception as e:
             logger.error(f"查询处理失败: {e}")
-            raise
+            return {
+                "output": f"查询处理失败: {str(e)}",
+                "intermediate_steps": [],
+                "success": False,
+                "tool_calls": 0,
+                "tool_names": [],
+                "session_id": session_id,
+                "memory_enabled": self.enable_memory
+            }
     
-    def invoke_sync(self, query: str, session_id: str = "default") -> Dict[str, Any]:
-        """
-        同步执行查询（兼容旧接口）
-        
-        Args:
-            query: 用户查询
-            session_id: 会话ID，用于记忆管理
-            
-        Returns:
-            包含输出和中间步骤的结果
-        """
-        import asyncio
-        
-        # 使用异步invoke实现
-        try:
-            loop = asyncio.get_running_loop()
-            # 在异步环境中，需要创建新任务
-            task = asyncio.create_task(self.invoke(query, session_id))
-            # 注意：这可能会导致阻塞，建议使用异步版本
-            return asyncio.run_coroutine_threadsafe(task, loop).result()
-        except RuntimeError:
-            # 在同步环境中
-            return asyncio.run(self.invoke(query, session_id))
+    def _extract_tool_names(self, intermediate_steps: List) -> List[str]:
+        """从中间步骤中提取工具名称"""
+        tool_names = []
+        for step in intermediate_steps:
+            if hasattr(step, '__len__') and len(step) >= 1:
+                # step 是 (AgentAction, observation) 元组
+                agent_action = step[0]
+                if hasattr(agent_action, 'tool'):
+                    tool_names.append(agent_action.tool)
+        return tool_names
     
     async def invoke(self, query: str, session_id: str = "default", **kwargs) -> Dict[str, Any]:
-        """
-        异步执行查询（主要接口）
-        
-        Args:
-            query: 用户查询
-            session_id: 会话ID，用于记忆管理
-            **kwargs: 额外参数
-            
-        Returns:
-            包含输出和中间步骤的结果字典
-        """
+        """异步执行查询（主要接口）"""
         if not self.is_initialized:
             await self.initialize()
         
         return await self._execute_query(query, session_id, **kwargs)
     
     async def ainvoke(self, query: str, session_id: str = "default", **kwargs) -> Dict[str, Any]:
-        """
-        异步调用Agent（LangChain标准接口）
-        
-        Args:
-            query: 用户查询
-            session_id: 会话ID，用于记忆管理
-            **kwargs: 额外参数
-            
-        Returns:
-            包含输出和中间步骤的结果字典
-        """
-        # ainvoke 方法与 invoke 方法功能相同，为了保持 LangChain 接口兼容性
+        """异步调用Agent（LangChain标准接口）"""
         return await self.invoke(query, session_id, **kwargs)
     
-    async def _emit_thinking_event(self, message: str):
-        """发送思考事件"""
-        if self._progress_callback:
-            self._progress_callback({"type": "thinking", "message": message})
+    def invoke_sync(self, query: str, session_id: str = "default") -> Dict[str, Any]:
+        """同步执行查询（兼容旧接口）"""
+        try:
+            loop = asyncio.get_running_loop()
+            task = asyncio.create_task(self.invoke(query, session_id))
+            return asyncio.run_coroutine_threadsafe(task, loop).result()
+        except RuntimeError:
+            return asyncio.run(self.invoke(query, session_id))
     
     def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
-        from ..llm.llm_manager import get_llm_info
-        
         # 获取模型信息
         try:
             model_info = get_llm_info("zhipu", self.model)
@@ -634,16 +390,20 @@ class ZhipuAgent:
             logger.warning(f"Failed to get model info: {e}")
             model_info = {}
         
+        # 获取实际使用的温度设置
+        actual_temperature = self.temperature
+        if hasattr(self, 'llm') and self.llm and hasattr(self.llm, 'temperature'):
+            actual_temperature = self.llm.temperature
+        
         info = {
             "provider": "zhipu",
             "model": self.model,
-            "temperature": self.temperature,
+            "temperature": actual_temperature,
             "max_iterations": self.max_iterations,
             "initialized": self.is_initialized,
             "tool_count": len(self.tools),
             "tools": [tool.name for tool in self.tools] if self.tools else [],
             "memory_enabled": self.enable_memory,
-            # 合并模型信息
             **model_info
         }
         
@@ -657,39 +417,8 @@ class ZhipuAgent:
         """获取Agent信息(兼容旧接口)"""
         return self.get_agent_info()
     
-    async def _initialize_notion_mcp(self):
-        """异步初始化 Notion MCP 连接"""
-        try:
-            from ..tools.notion import initialize_notion_mcp
-            
-            logger.info("🚀 开始初始化 Notion MCP 连接...")
-            success = await initialize_notion_mcp()
-            
-            if success:
-                logger.info("✅ Notion MCP 连接初始化成功")
-            else:
-                logger.warning("⚠️ Notion MCP 连接初始化失败，工具将使用基本模式")
-                
-        except Exception as e:
-            logger.error(f"❌ Notion MCP 初始化异常: {e}")
-    
-    async def ensure_notion_ready(self):
-        """确保 Notion 工具已就绪"""
-        try:
-            from ..tools.notion import ensure_tools_initialized, is_auth_configured
-            
-            if not is_auth_configured():
-                return False
-            
-            tools = await ensure_tools_initialized()
-            return len(tools) > 0
-            
-        except Exception as e:
-            logger.error(f"检查 Notion 就绪状态失败: {e}")
-            return False
-    
     def get_llm(self):
-        """获取底层LLM实例用于流式输出"""
+        """获取底层LLM实例"""
         return self.llm
     
     def list_tools(self) -> List[str]:
@@ -732,18 +461,6 @@ class ZhipuAgent:
         if self.enable_memory and self.chat_memory:
             return self.chat_memory.get_session_info(session_id)
         return None
-    
-    def restore_session(self, session_id: str) -> bool:
-        """恢复指定会话的记忆"""
-        if self.enable_memory and self.chat_memory:
-            # 检查会话是否存在
-            if session_id in [s["session_id"] for s in self.chat_memory.list_sessions()]:
-                logger.info(f"恢复会话记忆: {session_id}")
-                return True
-            else:
-                logger.warning(f"会话不存在: {session_id}")
-                return False
-        return False
 
 
 # 兼容性函数，保持向后兼容
@@ -753,18 +470,7 @@ async def build_zhipu_agent(
     temperature: float = 0.1,
     **kwargs
 ) -> ZhipuAgent:
-    """
-    创建并初始化智谱AI Agent
-    
-    Args:
-        model: 智谱AI模型名称
-        verbose: 是否显示详细日志
-        temperature: 模型温度参数
-        **kwargs: 其他参数
-        
-    Returns:
-        初始化完成的ZhipuAgent实例
-    """
+    """创建并初始化智谱AI Agent"""
     agent = ZhipuAgent(
         model=model,
         temperature=temperature,
@@ -777,92 +483,5 @@ async def build_zhipu_agent(
 
 
 def build_simple_zhipu_chat(model: str = "glm-4-plus", **kwargs):
-    """
-    创建简单的智谱AI聊天模型（不包含工具）
-    
-    Args:
-        model: 模型名称
-        **kwargs: 其他参数
-        
-    Returns:
-        智谱AI聊天模型实例
-    """
+    """创建简单的智谱AI聊天模型（不包含工具）"""
     return create_zhipu_llm(model=model, **kwargs)
-
-
-async def test_zhipu_agent():
-    """测试智谱AI Agent"""
-    print("🧪 测试智谱AI Agent...")
-    
-    try:
-        # 创建Agent
-        print("1. 创建Agent...")
-        agent = await build_zhipu_agent(verbose=False)
-        
-        # 显示Agent信息
-        info = agent.get_info()
-        print(f"✅ Agent创建成功")
-        print(f"   - 模型: {info['model']}")
-        print(f"   - 工具数量: {info['tool_count']}")
-        print(f"   - 工具列表: {', '.join(info['tools'])}")
-        
-        # 测试数学计算
-        print("\n2. 测试数学计算:")
-        result = agent.invoke("计算 25 + 37")
-        print(f"   查询: 计算 25 + 37")
-        print(f"   结果: {result['output']}")
-        print(f"   工具调用次数: {result['tool_calls']}")
-        
-        # 测试搜索功能
-        print("\n3. 测试搜索功能:")
-        result = agent.invoke("搜索Python教程")
-        print(f"   查询: 搜索Python教程")
-        print(f"   结果: {result['output'][:200]}...")
-        print(f"   工具调用次数: {result['tool_calls']}")
-        
-        print("\n✅ 所有测试完成!")
-        
-    except Exception as e:
-        print(f"❌ 测试失败: {e}")
-
-
-if __name__ == "__main__":
-    # 运行测试
-    asyncio.run(test_zhipu_agent())
-else:
-    # 为向后兼容的方式，提供基于外置模板的Agent构建方法（类外定义后绑定）
-    def _build_agent_with_external_prompt(self):
-        """使用外置系统提示模板与 JSON 输出解析器构建 Agent。"""
-        if not self.llm:
-            raise ValueError("LLM未正确初始化，无法构建Agent")
-
-        provider_key = self.prompt_provider or ("glm" if "glm" in (self.model or "").lower() else None)
-        try:
-            template_text = PromptRegistry.get_prompt(
-                agent_type="react_json",
-                provider=provider_key,
-                locale="zh_CN",
-            )
-        except Exception as e:
-            logger.warning(f"加载外置模板失败，使用默认中文模板。原因: {e}")
-            template_text = PromptRegistry.get_prompt(agent_type="react_json", provider=None, locale="zh_CN")
-
-        tools_block = serialize_tools(self.tools)
-        rendered = PromptRegistry.render(template_text, tools_block=tools_block)
-        prompt = PromptTemplate.from_template(rendered)
-
-        output_parser = JSONReActSingleInputOutputParser()
-        agent = create_react_agent(self.llm, self.tools, prompt, output_parser=output_parser)
-        executor_config = {
-            "agent": agent,
-            "tools": self.tools,
-            "verbose": self.verbose,
-            "handle_parsing_errors": True,
-            "max_iterations": self.max_iterations,
-            "early_stopping_method": "force",
-            "return_intermediate_steps": True,
-        }
-        self.agent_executor = AgentExecutor(**executor_config)
-
-    # 绑定到类（保持原代码最小侵入）
-    ZhipuAgent._build_agent_with_external_prompt = _build_agent_with_external_prompt
