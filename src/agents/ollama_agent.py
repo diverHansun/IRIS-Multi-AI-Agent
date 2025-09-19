@@ -316,9 +316,21 @@ Question: {input}
             else:
                 result = self._agent_executor.invoke({"input": message})
             
+            # 提取工具名称
+            tool_names = []
+            intermediate_steps = result.get("intermediate_steps", [])
+            for step in intermediate_steps:
+                if hasattr(step, '__len__') and len(step) >= 1:
+                    # step 是 (AgentAction, observation) 元组
+                    agent_action = step[0]
+                    if hasattr(agent_action, 'tool'):
+                        tool_names.append(agent_action.tool)
+            
             return {
                 "output": result.get("output", ""),
-                "intermediate_steps": result.get("intermediate_steps", []),
+                "intermediate_steps": intermediate_steps,
+                "tool_calls": len(intermediate_steps),
+                "tool_names": tool_names,
                 "success": True
             }
             
@@ -327,6 +339,8 @@ Question: {input}
             return {
                 "output": f"抱歉，处理您的请求时出现错误: {str(e)}",
                 "intermediate_steps": [],
+                "tool_calls": 0,
+                "tool_names": [],
                 "success": False,
                 "error": str(e)
             }
@@ -355,9 +369,21 @@ Question: {input}
             else:
                 result = await self._agent_executor.ainvoke({"input": message})
             
+            # 提取工具名称
+            tool_names = []
+            intermediate_steps = result.get("intermediate_steps", [])
+            for step in intermediate_steps:
+                if hasattr(step, '__len__') and len(step) >= 1:
+                    # step 是 (AgentAction, observation) 元组
+                    agent_action = step[0]
+                    if hasattr(agent_action, 'tool'):
+                        tool_names.append(agent_action.tool)
+            
             return {
                 "output": result.get("output", ""),
-                "intermediate_steps": result.get("intermediate_steps", []),
+                "intermediate_steps": intermediate_steps,
+                "tool_calls": len(intermediate_steps),
+                "tool_names": tool_names,
                 "success": True
             }
             
@@ -366,6 +392,8 @@ Question: {input}
             return {
                 "output": f"抱歉，处理您的请求时出现错误: {str(e)}",
                 "intermediate_steps": [],
+                "tool_calls": 0,
+                "tool_names": [],
                 "success": False,
                 "error": str(e)
             }

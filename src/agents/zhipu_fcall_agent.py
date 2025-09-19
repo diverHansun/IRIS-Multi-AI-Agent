@@ -343,18 +343,32 @@ class ZhipuFunctionCallingAgent:
                     if self.enable_memory and self.chat_memory:
                         self.chat_memory.add_conversation(session_id, query, final_answer)
                     
+                    # 提取工具名称
+                    tool_names = []
+                    for step in intermediate_steps:
+                        if isinstance(step, dict) and "tool" in step:
+                            tool_names.append(step["tool"])
+                    
                     return {
                         "output": final_answer,
                         "tool_calls": len(intermediate_steps),
+                        "tool_names": tool_names,
                         "intermediate_steps": intermediate_steps,
                         "error": None,
                         "success": True
                     }
             
             # 达到最大迭代次数
+            # 提取工具名称
+            tool_names = []
+            for step in intermediate_steps:
+                if isinstance(step, dict) and "tool" in step:
+                    tool_names.append(step["tool"])
+            
             return {
                 "output": "达到最大迭代次数，无法完成任务",
                 "tool_calls": len(intermediate_steps),
+                "tool_names": tool_names,
                 "intermediate_steps": intermediate_steps,
                 "error": "达到最大迭代次数",
                 "success": False
@@ -365,6 +379,7 @@ class ZhipuFunctionCallingAgent:
             return {
                 "output": "",
                 "tool_calls": 0,
+                "tool_names": [],
                 "intermediate_steps": [],
                 "error": str(e),
                 "success": False

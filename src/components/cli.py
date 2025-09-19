@@ -382,7 +382,12 @@ async def run():
 
                             # Show tool call information
                             if result.get("tool_calls", 0) > 0:
-                                ctx.console.print(f"[dim]Used {result['tool_calls']} tool calls[/]")
+                                tool_names = result.get("tool_names", [])
+                                if tool_names:
+                                    tools_str = ", ".join(tool_names)
+                                    ctx.console.print(f"[dim]Used {result['tool_calls']} tool calls: {tools_str}[/]")
+                                else:
+                                    ctx.console.print(f"[dim]Used {result['tool_calls']} tool calls[/]")
                             
                             # Agent mode conversations are automatically saved to memory through RunnableWithMessageHistory
                             # No manual saving needed as Agent already integrates global memory manager

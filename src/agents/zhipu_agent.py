@@ -515,11 +515,22 @@ class ZhipuAgent:
                 if self.chat_memory:
                     self.chat_memory.save_session(session_id)
                 
+                # 提取工具名称
+                tool_names = []
+                intermediate_steps = result.get("intermediate_steps", [])
+                for step in intermediate_steps:
+                    if hasattr(step, '__len__') and len(step) >= 1:
+                        # step 是 (AgentAction, observation) 元组
+                        agent_action = step[0]
+                        if hasattr(agent_action, 'tool'):
+                            tool_names.append(agent_action.tool)
+                
                 return {
                     "output": result["output"],
-                    "intermediate_steps": result.get("intermediate_steps", []),
+                    "intermediate_steps": intermediate_steps,
                     "success": True,
-                    "tool_calls": len(result.get("intermediate_steps", [])),
+                    "tool_calls": len(intermediate_steps),
+                    "tool_names": tool_names,
                     "session_id": session_id,
                     "memory_enabled": True
                 }
@@ -527,11 +538,22 @@ class ZhipuAgent:
                 # 使用无记忆的Agent
                 result = await self.agent_executor.ainvoke({"input": query})
                 
+                # 提取工具名称
+                tool_names = []
+                intermediate_steps = result.get("intermediate_steps", [])
+                for step in intermediate_steps:
+                    if hasattr(step, '__len__') and len(step) >= 1:
+                        # step 是 (AgentAction, observation) 元组
+                        agent_action = step[0]
+                        if hasattr(agent_action, 'tool'):
+                            tool_names.append(agent_action.tool)
+                
                 return {
                     "output": result["output"],
-                    "intermediate_steps": result.get("intermediate_steps", []),
+                    "intermediate_steps": intermediate_steps,
                     "success": True,
-                    "tool_calls": len(result.get("intermediate_steps", [])),
+                    "tool_calls": len(intermediate_steps),
+                    "tool_names": tool_names,
                     "session_id": None,
                     "memory_enabled": False
                 }

@@ -316,15 +316,24 @@ class OpenAIAgent:
             else:
                 result = self._agent_executor.invoke({"input": query})
             
-            # 统计工具调用次数
+            # 统计工具调用次数和提取工具名称
             tool_calls = 0
+            tool_names = []
             if "intermediate_steps" in result:
                 tool_calls = len(result["intermediate_steps"])
+                # 提取工具名称
+                for step in result["intermediate_steps"]:
+                    if hasattr(step, '__len__') and len(step) >= 1:
+                        # step 是 (AgentAction, observation) 元组
+                        agent_action = step[0]
+                        if hasattr(agent_action, 'tool'):
+                            tool_names.append(agent_action.tool)
             
             return {
                 "success": True,
                 "output": result.get("output", ""),
                 "tool_calls": tool_calls,
+                "tool_names": tool_names,
                 "session_id": session_id
             }
             
@@ -339,6 +348,7 @@ class OpenAIAgent:
                 "error": msg,
                 "output": "",
                 "tool_calls": 0,
+                "tool_names": [],
                 "session_id": session_id
             }
     
@@ -358,15 +368,24 @@ class OpenAIAgent:
             else:
                 result = await self._agent_executor.ainvoke({"input": query})
             
-            # 统计工具调用次数
+            # 统计工具调用次数和提取工具名称
             tool_calls = 0
+            tool_names = []
             if "intermediate_steps" in result:
                 tool_calls = len(result["intermediate_steps"])
+                # 提取工具名称
+                for step in result["intermediate_steps"]:
+                    if hasattr(step, '__len__') and len(step) >= 1:
+                        # step 是 (AgentAction, observation) 元组
+                        agent_action = step[0]
+                        if hasattr(agent_action, 'tool'):
+                            tool_names.append(agent_action.tool)
             
             return {
                 "success": True,
                 "output": result.get("output", ""),
                 "tool_calls": tool_calls,
+                "tool_names": tool_names,
                 "session_id": session_id
             }
             
@@ -381,6 +400,7 @@ class OpenAIAgent:
                 "error": msg,
                 "output": "",
                 "tool_calls": 0,
+                "tool_names": [],
                 "session_id": session_id
             }
     
