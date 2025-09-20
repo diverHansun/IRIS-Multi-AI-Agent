@@ -36,6 +36,9 @@ class AppState:
         self.llm_mode = True  # True: LLM mode (streaming chat), False: Agent mode (tool calling)
         self.streaming_enabled = True  # Effective only when llm_mode is True
         self.mcp_manager = GlobalMCPManager if MCP_AVAILABLE else None
+        # Dify integration
+        self.dify_mode = False  # Dify mode flag
+        self.dify_control = None  # Dify control instance
 
 
 async def run():
@@ -95,33 +98,58 @@ async def run():
         while True:
             try:
                 # Dynamic prompt showing current mode
-                mode_indicator = "LLM" if ctx.llm_mode else "Agent"
-                stream_indicator = "[S]" if (ctx.llm_mode and ctx.streaming_enabled) else ""
+                if ctx.dify_mode:
+                    mode_indicator = "Dify"
+                    stream_indicator = "☁️"
+                else:
+                    mode_indicator = "LLM" if ctx.llm_mode else "Agent"
+                    stream_indicator = "[S]" if (ctx.llm_mode and ctx.streaming_enabled) else ""
                 
                 prompt = f"\n[bold cyan]{mode_indicator}{stream_indicator}[/] > "
                 query = await asyncio.to_thread(ctx.console.input, prompt)
 
                 if query.strip().lower() in {"exit", "quit"}:
+                    # 清理 Dify 控制器资源
+                    if ctx.dify_control:
+                        await ctx.dify_control.cleanup()
+                        ctx.dify_control = None
                     ctx.console.print("[yellow]Goodbye![/]")
                     break
 
                 if query.strip().lower() in {"help"}:
-                    gui.print_help(ctx.console)
+                    gui.print_help(ctx.console, dify_mode=ctx.dify_mode)
                     continue
 
                 if query.strip().lower() in {"info"}:
-                    result = control.get_info(ctx)
-                    if result["type"] == "info":
-                        gui.render_info(ctx.console, result["payload"]["agent"], result["payload"]["mode"])
+                    if ctx.dify_mode:
+                        # Dify 模式下的 info 命令
+                        if ctx.dify_control:
+                            dify_info = await ctx.dify_control.get_detailed_info()
+                            gui.render_dify_info(ctx.console, dify_info, ctx.session_id)
+                        else:
+                            ctx.console.print("[red]❌ Dify 控制器未初始化[/]")
+                    else:
+                        # LLM 模式下的 info 命令
+                        result = control.get_info(ctx)
+                        if result["type"] == "info":
+                            gui.render_info(ctx.console, result["payload"]["agent"], result["payload"]["mode"])
                     continue
 
                 if query.strip().lower() in {"llms", "llm"}:
+                    if ctx.dify_mode:
+                        ctx.console.print("[yellow]⚠️ LLM catalog is not available in Dify mode[/]")
+                        ctx.console.print("[dim]Dify mode uses cloud AI service. Use 'switch dify' to exit and view local LLM options.[/]")
+                        continue
                     catalog = await registry.get_catalog()
                     gui.render_llms(ctx.console, catalog)
                     continue
 
                 # MCP commands
                 if query.strip().lower().startswith("mcp "):
+                    if ctx.dify_mode:
+                        ctx.console.print("[yellow]⚠️ MCP commands are not available in Dify mode[/]")
+                        ctx.console.print("[dim]Dify mode uses cloud AI service. Use 'switch dify' to exit and access MCP tools.[/]")
+                        continue
                     parts = query.strip().split()
                     sub = parts[1].lower() if len(parts) > 1 else ""
                     
@@ -166,14 +194,39 @@ async def run():
                     # Parse switch command
                     parts = query.strip().split()
                     if len(parts) < 2:
-                        ctx.console.print("[yellow]⚠️ Usage: switch <provider> [model][/]")
+                        ctx.console.print("[yellow]⚠️ Usage: switch <provider> [model] | switch dify[/]")
                         ctx.console.print("[dim]Example: switch openai gpt-4o-mini[/]")
+                        ctx.console.print("[dim]Example: switch dify[/]")
                         continue
 
-                    provider = parts[1]
+                    provider = parts[1].lower()
+
+                    # Handle Dify switch
+                    if provider == "dify":
+                        from src.components.dify.control import init_dify_client
+                        with ctx.console.status("[yellow]初始化 Dify 客户端...[/]"):
+                            result = await init_dify_client(ctx)
+                        
+                        if result["type"] == "success":
+                            ctx.dify_mode = True
+                            ctx.console.print("[green]✅ 已切换到 Dify 模式[/]")
+                            ctx.console.print("[dim]Features: 文件上传 | 流式对话 | 云端智能[/]")
+                            ctx.console.print("[dim]Commands: upload (上传文件) | reset (重置会话)[/]")
+                        else:
+                            ctx.console.print(f"[red]❌ 切换失败: {result['message']}[/]")
+                        continue
+
+                    # Handle regular LLM switch
                     model = parts[2] if len(parts) > 2 else None
 
-                    # Switch LLM
+                    # Switch LLM (exit Dify mode if active)
+                    if ctx.dify_mode:
+                        ctx.dify_mode = False
+                        if ctx.dify_control:
+                            await ctx.dify_control.cleanup()
+                            ctx.dify_control = None
+                        ctx.console.print("[dim]已退出 Dify 模式[/]")
+
                     with ctx.console.status(f"[yellow]Switching to {provider} {model or '(default model)'}...[/]"):
                         result = await control.switch_llm(ctx, provider, model)
                     if result["type"] == "error":
@@ -181,6 +234,28 @@ async def run():
                         if "payload" in result and "available_providers" in result["payload"]:
                             ctx.console.print(f"[dim]Available providers: {', '.join(result['payload']['available_providers'])}[/]")
                     continue
+
+                # Dify specific commands
+                if ctx.dify_mode:
+                    if query.strip().lower().startswith("upload"):
+                        from src.components.dify.control import handle_dify_upload
+                        result = await handle_dify_upload(ctx, query)
+                        continue
+                    
+                    if query.strip().lower() in {"reset"}:
+                        if ctx.dify_control:
+                            await ctx.dify_control.reset_conversation()
+                        continue
+                    
+                    if query.strip().lower() in {"files", "listfiles", "list_files"}:
+                        if ctx.dify_control:
+                            await ctx.dify_control.list_files()
+                        continue
+                    
+                    if query.strip().lower() in {"clearfiles", "clear_files"}:
+                        if ctx.dify_control:
+                            await ctx.dify_control.clear_files()
+                        continue
 
                 # Session commands
                 if query.strip().lower() in {"clear"}:
@@ -251,6 +326,12 @@ async def run():
 
                 # Mode commands
                 if query.strip().lower().startswith("mode "):
+                    # 在 Dify 模式下禁用模式切换命令
+                    if ctx.dify_mode:
+                        ctx.console.print("[yellow]⚠️ Mode switching is not available in Dify mode[/]")
+                        ctx.console.print("[dim]Dify mode is a standalone cloud AI service. Use 'switch dify' to exit and switch to local LLM modes.[/]")
+                        continue
+                    
                     # Parse mode command
                     parts = query.strip().split()
                     if len(parts) < 2:
@@ -276,6 +357,12 @@ async def run():
 
                 # Stream commands
                 if query.strip().lower().startswith("stream "):
+                    # 在 Dify 模式下禁用流式控制命令
+                    if ctx.dify_mode:
+                        ctx.console.print("[yellow]⚠️ Stream control is not available in Dify mode[/]")
+                        ctx.console.print("[dim]Dify mode uses built-in streaming. Use 'switch dify' to exit and switch to local LLM modes.[/]")
+                        continue
+                    
                     # Parse stream command (only effective in LLM mode)
                     if not ctx.llm_mode:
                         ctx.console.print("[yellow]⚠️ Streaming output is only available in LLM mode, please switch to LLM mode first[/]")
@@ -300,6 +387,12 @@ async def run():
                     continue
 
                 if not query.strip():
+                    continue
+
+                # Handle Dify mode queries
+                if ctx.dify_mode:
+                    from src.components.dify.control import handle_dify_query
+                    result = await handle_dify_query(ctx, query)
                     continue
 
                 # Handle user queries based on working mode

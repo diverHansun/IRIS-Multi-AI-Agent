@@ -4,11 +4,13 @@
 ## 功能特性
 
 - **多LLM支持**: 智谱AI GLM-4.5/GLM-4-Plus、OpenAI GPT-5/GPT-5-mini/GPT-4o系列、Ollama本地模型，支持动态切换
+- **Dify Cloud Agent**: 集成云端AI平台，支持文件上传、多模态理解、流式对话
 - **双模式智能对话**: 
   - ReAct推理框架（GLM-4-Plus等）：基于经典ReAct框架的自然语言交互
   - Function Calling模式（GLM-4.5）：基于智谱AI原生Function Calling API的高效工具调用
 - **全局记忆系统**: 基于LangChain 2025最佳实践的统一记忆管理
 - **工具调用**: 支持数学计算、网络搜索、地图导航、加密货币分析、Notion知识管理等多种工具
+- **Dify文件处理**: 支持文档分析、图片识别、多模态对话，文件一次性使用机制
 - **多搜索引擎**: 集成Tavily搜索API + DuckDuckGo备用搜索
 - **高德地图集成**: 支持地点搜索、附近查询、驾车导航、步行导航、公共交通规划
 - **OKX加密货币**: 实时行情、K线分析、价格预警、市场洞察
@@ -75,6 +77,10 @@ OLLAMA_MODEL=gpt-oss:20b
 # 推荐 - 搜索和地图功能
 TAVILY_API_KEY=your_tavily_api_key_here
 AMAP_API_KEY=your_amap_api_key_here
+
+# Dify云端AI平台(可选)
+DIFY_API_KEY=your_dify_api_key_here
+DIFY_BASE_URL=https://api.dify.ai/v1
 
 # 可选 - Notion知识管理
 NOTION_TOKEN=your_notion_integration_token_here
@@ -268,6 +274,30 @@ switch openai gpt-5     # 创意写作任务
 switch openai gpt-5-mini # 快速响应任务
 ```
 
+#### Dify云端AI使用
+```bash
+# 切换到Dify云端AI模式
+switch dify
+
+# 上传文件进行分析
+upload
+
+# 查看待发送文件
+files
+
+# 清空待发送文件
+clearfiles
+
+# 重置对话
+reset
+
+# 查看连接状态
+info
+
+# 退出Dify模式
+switch dify
+```
+
 ## 配置选项
 
 创建 `.env` 文件进行配置参见.env.example：
@@ -295,6 +325,17 @@ DEFAULT_LLM_MODEL=gpt-4o-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
+### Dify配置
+- `DIFY_API_KEY`: Dify API密钥 (可选，用于云端AI功能)
+- `DIFY_BASE_URL`: Dify API基础URL (可选，默认为 https://api.dify.ai/v1)
+
+#### Dify配置示例
+```bash
+# Dify云端AI配置
+DIFY_API_KEY=your_dify_api_key_here
+DIFY_BASE_URL=https://api.dify.ai/v1
+```
+
 ### 工具配置
 - `TAVILY_API_KEY`: Tavily搜索API密钥(推荐)
 - `AMAP_API_KEY`: 高德地图API密钥(推荐)
@@ -308,6 +349,27 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 - `MAX_TOKENS`: 最大输出token数，默认为 `2048`
 
 ## 更新日志
+
+### v2.9.0 (2025-09-20)
+- **Dify云端AI集成**: 完整集成Dify云端AI平台
+  - 支持文件上传和文档分析，包括PDF、Word、Excel、图片等多种格式
+  - 实现多模态理解，支持文本和图像混合对话
+  - 流式对话输出，实时显示AI响应
+  - 文件一次性使用机制，避免重复发送文件
+- **流式输出优化**: 借鉴streaming_llm设计优化Dify流式处理
+  - 增加速率控制和性能监控，防止处理过载
+  - 智能缓冲机制，提升显示效果和稳定性
+  - 可配置的流式参数，支持自定义缓冲大小和延迟
+  - 详细的性能统计显示，包括处理速度和数据量
+- **文件管理增强**: 新增文件管理命令和功能
+  - `files` 命令：查看当前待发送文件列表
+  - `clearfiles` 命令：清空待发送文件
+  - 自动文件清理机制，对话后自动清空文件列表
+  - 改进的帮助信息和用户提示
+- **用户体验优化**: 
+  - Dify模式专用命令界面，隐藏不相关功能
+  - 清晰的配置说明和API密钥设置指南
+  - 详细的错误处理和状态显示
 
 ### v2.8.0 (2025-09-18)
 - **JSON配置系统**: 全面从硬编码配置迁移到灵活的JSON配置

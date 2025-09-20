@@ -48,9 +48,45 @@ Note: MCP tools in Agent mode are prefixed with mcp_ and require JSON object par
     console.print(Panel(welcome_text, title="Welcome", border_style="cyan"))
 
 
-def print_help(console):
+def print_help(console, dify_mode=False):
     """Print help message in English"""
-    help_text = """
+    if dify_mode:
+        help_text = """
+Dify Mode - Cloud AI Platform:
+
+File Upload & Analysis:
+"upload" - Upload files (documents, images) for AI analysis (one-time use)
+"这个文件说了什么？" - Ask about uploaded file content
+"分析这个图片" - Analyze uploaded images
+
+File Management:
+• Files are used ONCE in the next conversation, then automatically cleared
+• Use "files" to see pending files • Use "clearfiles" to clear without using
+
+Cloud AI Features:
+• Streaming conversation with cloud AI
+• File upload and analysis
+• Multi-modal understanding
+• Built-in conversation memory
+
+Available Commands:
+• upload - Upload files for analysis (files are used once in next conversation)
+• files - List currently pending files for next conversation
+• clearfiles - Clear pending files without using them
+• reset - Reset conversation (clear memory)
+• info - Show Dify connection status and uploaded files
+• switch dify - Exit Dify mode and return to local LLM modes
+
+File Support:
+• Documents: .txt, .md, .pdf, .docx, .xlsx, .csv, .html, .xml, .epub
+• Images: .jpg, .jpeg, .png, .gif, .webp, .svg
+• Max file size: 10MB per file
+
+Note: Dify mode is a standalone cloud AI service. 
+Use 'switch dify' to exit and return to local LLM modes.
+        """
+    else:
+        help_text = """
 Usage Examples:
 
 Math Calculations:
@@ -68,12 +104,13 @@ Cryptocurrency:
 Notion Knowledge Management:
 "Search for project documents in Notion", "Get recent work records from Notion"
 
-Multi-LLM Switching Examples:
-"switch zhipu glm-4-plus", "switch openai gpt-4o", "switch ollama gpt-oss:20b"
+Multi LLM Provider Switching Examples:
+"switch zhipu glm-4-plus", "switch openai gpt-4o", "switch ollama gpt-oss:20b", "switch dify"
 
 Working Modes:
 • LLM Mode: Fast conversation, supports streaming output (default)
 • Agent Mode: Full functionality, tool calling, session memory
+• Dify Mode(Cloud Agent): Cloud AI platform, file upload, streaming chat
 
 Streaming Output:
 • Only available in LLM mode
@@ -81,6 +118,7 @@ Streaming Output:
 
 Available Tools:
 • Math calculations, web search, map navigation, cryptocurrency prices
+• Dify: File upload (upload), conversation reset (reset)
 • Try related questions directly for detailed functionality
 
 Basic Commands:
@@ -94,12 +132,15 @@ Session Management Commands:
 • restore <session_id> - Restore specified session
 • delete_session <session_id> - Delete specified session and its files
 • cleanup - Clean up sessions (remove orphaned files and indexes)
-    """
-    # Append MCP instruction description
-    help_text += "\nMCP Usage and Commands:\n"
-    help_text += "- Management: mcp status [-v] | mcp tools [--json] | mcp reload\n"
-    help_text += "- In Agent mode: Tool names are prefixed with mcp_ (e.g., mcp_API-post-search); Action Input must be a single-line JSON (e.g., {\"query\":\"keyword\"}).\n"
-    help_text += "  Example: Call mcp_API-post-search with parameters {\"query\":\"Roadmap\"}; Call mcp_API-retrieve-a-page with parameters {\"page_id\":\"<page_id>\"}\n"
+        """
+    
+    # Append MCP instruction description (only for non-Dify modes)
+    if not dify_mode:
+        help_text += "\nMCP Usage and Commands:\n"
+        help_text += "- Management: mcp status [-v] | mcp tools [--json] | mcp reload\n"
+        help_text += "- In Agent mode: Tool names are prefixed with mcp_ (e.g., mcp_API-post-search); Action Input must be a single-line JSON (e.g., {\"query\":\"keyword\"}).\n"
+        help_text += "  Example: Call mcp_API-post-search with parameters {\"query\":\"Roadmap\"}; Call mcp_API-retrieve-a-page with parameters {\"page_id\":\"<page_id>\"}\n"
+    
     console.print(Panel(help_text, title="Help Information", border_style="green"))
 
 
@@ -182,6 +223,45 @@ def render_info(console, agent_info, mode_info):
             console.print(f"    Model Features: {', '.join(llm_info['model_features'])}")
     
     console.print(f"  Current Session ID: {mode_info['session_id']}")
+
+
+def render_dify_info(console, dify_info, session_id):
+    """Render Dify system information"""
+    console.print(f"[bold blue]System Information:[/]")
+    console.print(f"  Provider: {dify_info['provider']}")
+    console.print(f"  Model: {dify_info['model']}")
+    console.print(f"  Initialized: {dify_info['initialized']}")
+    
+    # Show Dify-specific information
+    console.print(f"  Working Mode: [cyan]Dify Mode (Cloud AI)[/]")
+    console.print(f"    Base URL: [dim]{dify_info['base_url']}[/]")
+    console.print(f"    API Key: [dim]{dify_info['api_key_prefix']}[/]")
+    console.print(f"    Timeout: {dify_info['timeout']}s")
+    
+    # Show conversation information
+    if dify_info['conversation_id']:
+        console.print(f"    Conversation ID: [dim]{dify_info['conversation_id'][:20]}...[/]")
+    else:
+        console.print(f"    Conversation ID: [yellow]Not started[/]")
+    
+    # Show file upload information
+    console.print(f"    Uploaded Files: {dify_info['uploaded_files_count']}")
+    if dify_info['uploaded_files']:
+        for i, file_info in enumerate(dify_info['uploaded_files'], 1):
+            file_type = file_info['type']
+            file_id = file_info['file_id'][:8] + "..." if len(file_info['file_id']) > 8 else file_info['file_id']
+            console.print(f"      [{i}] {file_type} ({file_id})")
+    
+    # Show file support information
+    supported_types = dify_info['supported_file_types']
+    if supported_types:
+        console.print(f"    Supported File Types: {', '.join(supported_types[:5])}{'...' if len(supported_types) > 5 else ''}")
+    console.print(f"    Max File Size: {dify_info['max_file_size_mb']:.1f}MB")
+    
+    # Show mode features
+    console.print(f"    Mode Features: File upload, streaming chat, cloud intelligence")
+    
+    console.print(f"  Current Session ID: {session_id}")
 
 
 def render_sessions(console, sessions, current_session_id):
