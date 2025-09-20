@@ -18,30 +18,30 @@ Supported Features:
 • Session Memory and Multi-turn Dialogues
 
 Basic Commands:
-exit/quit - Exit the program
-help - View help information
-info - View system status
-llms - View available LLM list
-switch <provider> [model] - Switch LLM
-reload - Reload LLM configuration from JSON files
+/exit or /quit - Exit the program
+/help - View help information
+/info - View system status
+/llms - View available LLM list
+/switch <provider> [model] - Switch LLM
+/reload - Reload LLM configuration from JSON files
 
 Working Modes:
-mode llm - LLM Mode (Streaming output, fast response)
-mode agent - Agent Mode (Tool calling, reasoning analysis)
-stream on/off - Control streaming output
+/mode llm - LLM Mode (Streaming output, fast response)
+/mode agent - Agent Mode (Tool calling, reasoning analysis)
+/stream on/off - Control streaming output
 
 Memory Management:
-clear - Clear current session memory
-new - Create new session
-sessions - View session history list
-restore <session_id> - Restore specified session
-delete_session <session_id> - Delete specified session and its files
-cleanup - Clean up sessions (remove orphaned files and indexes)
+/clear - Clear current session memory
+/new - Create new session
+/sessions - View session history list
+/restore <session_id> - Restore specified session
+/delete_session <session_id> - Delete specified session and its files
+/cleanup - Clean up sessions (remove orphaned files and indexes)
 
 MCP Management:
-mcp status [-v] - View MCP status/servers/tool count
-mcp tools [--json] - List MCP tools (prefixed with mcp_)
-mcp reload - Reload config/mcp/mcp.toml
+/mcp status [-v] - View MCP status/servers/tool count
+/mcp tools [--json] - List MCP tools (prefixed with mcp_)
+/mcp reload - Reload config/mcp/mcp.toml
 
 Note: MCP tools in Agent mode are prefixed with mcp_ and require JSON object parameters
     """
@@ -55,13 +55,13 @@ def print_help(console, dify_mode=False):
 Dify Mode - Cloud AI Platform:
 
 File Upload & Analysis:
-"upload" - Upload files (documents, images) for AI analysis (one-time use)
+"/upload" - Upload files (documents, images) for AI analysis (one-time use)
 "这个文件说了什么？" - Ask about uploaded file content
 "分析这个图片" - Analyze uploaded images
 
 File Management:
 • Files are used ONCE in the next conversation, then automatically cleared
-• Use "files" to see pending files • Use "clearfiles" to clear without using
+• Use "/files" to see pending files • Use "/clearfiles" to clear without using
 
 Cloud AI Features:
 • Streaming conversation with cloud AI
@@ -70,12 +70,13 @@ Cloud AI Features:
 • Built-in conversation memory
 
 Available Commands:
-• upload - Upload files for analysis (files are used once in next conversation)
-• files - List currently pending files for next conversation
-• clearfiles - Clear pending files without using them
-• reset - Reset conversation (clear memory)
-• info - Show Dify connection status and uploaded files
-• switch dify - Exit Dify mode and return to local LLM modes
+• /upload - Upload files for analysis (files are used once in next conversation)
+• /files - List currently pending files for next conversation
+• /clearfiles - Clear pending files without using them
+• /reset - Reset conversation (clear memory)
+• /reconnect - Reconnect to Dify service (force reinitialize connection)
+• /info - Show Dify connection status and uploaded files
+• /switch dify - Exit Dify mode and return to local LLM modes
 
 File Support:
 • Documents: .txt, .md, .pdf, .docx, .xlsx, .csv, .html, .xml, .epub
@@ -105,7 +106,7 @@ Notion Knowledge Management:
 "Search for project documents in Notion", "Get recent work records from Notion"
 
 Multi LLM Provider Switching Examples:
-"switch zhipu glm-4-plus", "switch openai gpt-4o", "switch ollama gpt-oss:20b", "switch dify"
+"/switch zhipu glm-4-plus", "/switch openai gpt-4o", "/switch ollama gpt-oss:20b", "/switch dify"
 
 Working Modes:
 • LLM Mode: Fast conversation, supports streaming output (default)
@@ -114,30 +115,30 @@ Working Modes:
 
 Streaming Output:
 • Only available in LLM mode
-• 'stream on/off' to enable/disable
+• '/stream on/off' to enable/disable
 
 Available Tools:
 • Math calculations, web search, map navigation, cryptocurrency prices
-• Dify: File upload (upload), conversation reset (reset)
+• Dify: File upload (/upload), conversation reset (/reset)
 • Try related questions directly for detailed functionality
 
 Basic Commands:
-Type command name to view specific instructions (e.g., type 'llms' to view model list)
-reload - Reload LLM configuration from JSON files 
+Type command name to view specific instructions (e.g., type '/llms' to view model list)
+/reload - Reload LLM configuration from JSON files 
 
 Session Management Commands:
-• clear - Clear current session memory content (keep session files)
-• new - Create new session
-• sessions - View session history list
-• restore <session_id> - Restore specified session
-• delete_session <session_id> - Delete specified session and its files
-• cleanup - Clean up sessions (remove orphaned files and indexes)
+• /clear - Clear current session memory content (keep session files)
+• /new - Create new session
+• /sessions - View session history list
+• /restore <session_id> - Restore specified session
+• /delete_session <session_id> - Delete specified session and its files
+• /cleanup - Clean up sessions (remove orphaned files and indexes)
         """
     
     # Append MCP instruction description (only for non-Dify modes)
     if not dify_mode:
         help_text += "\nMCP Usage and Commands:\n"
-        help_text += "- Management: mcp status [-v] | mcp tools [--json] | mcp reload\n"
+        help_text += "- Management: /mcp status [-v] | /mcp tools [--json] | /mcp reload\n"
         help_text += "- In Agent mode: Tool names are prefixed with mcp_ (e.g., mcp_API-post-search); Action Input must be a single-line JSON (e.g., {\"query\":\"keyword\"}).\n"
         help_text += "  Example: Call mcp_API-post-search with parameters {\"query\":\"Roadmap\"}; Call mcp_API-retrieve-a-page with parameters {\"page_id\":\"<page_id>\"}\n"
     

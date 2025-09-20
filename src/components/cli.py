@@ -41,6 +41,52 @@ class AppState:
         self.dify_control = None  # Dify control instance
 
 
+def parse_command(query: str) -> tuple[str, str]:
+    """
+    解析命令，智能处理空格和前缀
+    
+    Args:
+        query: 用户输入的命令
+        
+    Returns:
+        (命令部分, 参数部分) 的元组
+    """
+    # 去除前后空格
+    query = query.strip()
+    
+    if not query:
+        return "", ""
+    
+    # 移除 / 前缀
+    if query.startswith('/'):
+        query = query[1:]
+    
+    # 分割命令和参数
+    parts = query.split(' ', 1)
+    command = parts[0].strip() if parts else ""
+    args = parts[1].strip() if len(parts) > 1 else ""
+    
+    return command, args
+
+
+def normalize_command(query: str) -> str:
+    """
+    标准化命令，移除/前缀以便统一处理，但保留参数间的空格
+    
+    Args:
+        query: 用户输入的命令
+        
+    Returns:
+        标准化后的命令（移除开头的/，保留参数间空格）
+    """
+    command, args = parse_command(query)
+    
+    if args:
+        return f"{command} {args}"
+    else:
+        return command
+
+
 async def run():
     """Main CLI loop"""
     # Display the IRIS logo at startup
@@ -108,7 +154,10 @@ async def run():
                 prompt = f"\n[bold cyan]{mode_indicator}{stream_indicator}[/] > "
                 query = await asyncio.to_thread(ctx.console.input, prompt)
 
-                if query.strip().lower() in {"exit", "quit"}:
+                # 标准化命令，移除/前缀
+                normalized_query = normalize_command(query)
+
+                if normalized_query.lower() in {"exit", "quit"}:
                     # 清理 Dify 控制器资源
                     if ctx.dify_control:
                         await ctx.dify_control.cleanup()
@@ -116,11 +165,11 @@ async def run():
                     ctx.console.print("[yellow]Goodbye![/]")
                     break
 
-                if query.strip().lower() in {"help"}:
+                if normalized_query.lower() in {"help"}:
                     gui.print_help(ctx.console, dify_mode=ctx.dify_mode)
                     continue
 
-                if query.strip().lower() in {"info"}:
+                if normalized_query.lower() in {"info"}:
                     if ctx.dify_mode:
                         # Dify 模式下的 info 命令
                         if ctx.dify_control:
@@ -135,23 +184,23 @@ async def run():
                             gui.render_info(ctx.console, result["payload"]["agent"], result["payload"]["mode"])
                     continue
 
-                if query.strip().lower() in {"llms", "llm"}:
+                if normalized_query.lower() in {"llms", "llm"}:
                     if ctx.dify_mode:
                         ctx.console.print("[yellow]⚠️ LLM catalog is not available in Dify mode[/]")
-                        ctx.console.print("[dim]Dify mode uses cloud AI service. Use 'switch dify' to exit and view local LLM options.[/]")
+                        ctx.console.print("[dim]Dify mode uses cloud AI service. Use '/switch dify' to exit and view local LLM options.[/]")
                         continue
                     catalog = await registry.get_catalog()
                     gui.render_llms(ctx.console, catalog)
                     continue
 
                 # MCP commands
-                if query.strip().lower().startswith("mcp "):
+                if normalized_query.lower().startswith("mcp "):
                     if ctx.dify_mode:
                         ctx.console.print("[yellow]⚠️ MCP commands are not available in Dify mode[/]")
-                        ctx.console.print("[dim]Dify mode uses cloud AI service. Use 'switch dify' to exit and access MCP tools.[/]")
+                        ctx.console.print("[dim]Dify mode uses cloud AI service. Use '/switch dify' to exit and access MCP tools.[/]")
                         continue
-                    parts = query.strip().split()
-                    sub = parts[1].lower() if len(parts) > 1 else ""
+                    command, args = parse_command(query)
+                    sub = args.split()[0].lower() if args else ""
                     
                     if sub in {"status", "tools", "reload"}:
                         if not MCP_AVAILABLE or GlobalMCPManager is None:
@@ -159,7 +208,7 @@ async def run():
                             continue
                         
                         if sub == "status":
-                            verbose = any(a in ["-v", "--verbose"] for a in parts[2:])
+                            verbose = any(a in ["-v", "--verbose"] for a in args.split()[1:] if args)
                             result = await mcp_control.mcp_status(verbose=verbose)
                             if result["type"] == "status":
                                 gui.render_mcp_status(ctx.console, result["payload"], verbose=verbose)
@@ -168,7 +217,7 @@ async def run():
                             continue
                         
                         if sub == "tools":
-                            json_flag = any(a == "--json" for a in parts[2:])
+                            json_flag = any(a == "--json" for a in args.split()[1:] if args)
                             result = await mcp_control.mcp_tools(json_flag=json_flag)
                             if result["type"] == "list":
                                 gui.render_mcp_tools(ctx.console, result["payload"]["tools"], json_flag=json_flag)
@@ -186,23 +235,34 @@ async def run():
                                 ctx.console.print(f"[red]Error: {result['message']}[/]")
                             continue
                     
-                    ctx.console.print("[yellow]Usage: mcp status [-v] | mcp tools [--json] | mcp reload[/]")
+                    ctx.console.print("[yellow]Usage: /mcp status [-v] | /mcp tools [--json] | /mcp reload[/]")
                     continue
 
                 # Switch command
-                if query.strip().lower().startswith("switch "):
-                    # Parse switch command
-                    parts = query.strip().split()
-                    if len(parts) < 2:
-                        ctx.console.print("[yellow]⚠️ Usage: switch <provider> [model] | switch dify[/]")
-                        ctx.console.print("[dim]Example: switch openai gpt-4o-mini[/]")
-                        ctx.console.print("[dim]Example: switch dify[/]")
+                if normalized_query.lower().startswith("switch "):
+                    # Parse switch command using new parser
+                    command, args = parse_command(query)
+                    if not args:
+                        ctx.console.print("[yellow]⚠️ Usage: /switch <provider> [model] | /switch dify[/]")
+                        ctx.console.print("[dim]Example: /switch openai gpt-4o-mini[/]")
+                        ctx.console.print("[dim]Example: /switch dify[/]")
                         continue
 
-                    provider = parts[1].lower()
+                    # Parse provider and model from args
+                    args_parts = args.split()
+                    provider = args_parts[0].lower()
+                    model = args_parts[1] if len(args_parts) > 1 else None
 
                     # Handle Dify switch
                     if provider == "dify":
+                        # 检查是否已经在 Dify 模式
+                        if ctx.dify_mode and ctx.dify_control and ctx.dify_control.is_initialized:
+                            ctx.console.print("[yellow]⚠️ 已经在 Dify 模式中[/]")
+                            ctx.console.print("[dim]当前状态: 已连接 | 会话ID: " + 
+                                (ctx.dify_control.conversation_id or "未创建") + "[/]")
+                            ctx.console.print("[dim]如需重新初始化，请先切换到其他模式再切换回来[/]")
+                            continue
+                        
                         from src.components.dify.control import init_dify_client
                         with ctx.console.status("[yellow]初始化 Dify 客户端...[/]"):
                             result = await init_dify_client(ctx)
@@ -211,13 +271,13 @@ async def run():
                             ctx.dify_mode = True
                             ctx.console.print("[green]✅ 已切换到 Dify 模式[/]")
                             ctx.console.print("[dim]Features: 文件上传 | 流式对话 | 云端智能[/]")
-                            ctx.console.print("[dim]Commands: upload (上传文件) | reset (重置会话)[/]")
+                            ctx.console.print("[dim]Commands: /upload (上传文件) | /reset (重置会话)[/]")
                         else:
                             ctx.console.print(f"[red]❌ 切换失败: {result['message']}[/]")
                         continue
 
                     # Handle regular LLM switch
-                    model = parts[2] if len(parts) > 2 else None
+                    # model already parsed above
 
                     # Switch LLM (exit Dify mode if active)
                     if ctx.dify_mode:
@@ -237,28 +297,39 @@ async def run():
 
                 # Dify specific commands
                 if ctx.dify_mode:
-                    if query.strip().lower().startswith("upload"):
+                    if normalized_query.lower().startswith("upload"):
                         from src.components.dify.control import handle_dify_upload
-                        result = await handle_dify_upload(ctx, query)
+                        result = await handle_dify_upload(ctx, normalized_query)
                         continue
                     
-                    if query.strip().lower() in {"reset"}:
+                    if normalized_query.lower() in {"reset"}:
                         if ctx.dify_control:
                             await ctx.dify_control.reset_conversation()
                         continue
                     
-                    if query.strip().lower() in {"files", "listfiles", "list_files"}:
+                    if normalized_query.lower() in {"files", "listfiles", "list_files"}:
                         if ctx.dify_control:
                             await ctx.dify_control.list_files()
                         continue
                     
-                    if query.strip().lower() in {"clearfiles", "clear_files"}:
+                    if normalized_query.lower() in {"clearfiles", "clear_files"}:
                         if ctx.dify_control:
                             await ctx.dify_control.clear_files()
                         continue
+                    
+                    if normalized_query.lower() in {"reconnect", "reconnect dify"}:
+                        from src.components.dify.control import init_dify_client
+                        with ctx.console.status("[yellow]重新连接 Dify 客户端...[/]"):
+                            result = await init_dify_client(ctx, force_reinit=True)
+                        
+                        if result["type"] == "success":
+                            ctx.console.print("[green]✅ Dify 客户端重新连接成功[/]")
+                        else:
+                            ctx.console.print(f"[red]❌ 重新连接失败: {result['message']}[/]")
+                        continue
 
                 # Session commands
-                if query.strip().lower() in {"clear"}:
+                if normalized_query.lower() in {"clear"}:
                     result = session_control.clear_session(ctx)
                     if result["type"] == "success":
                         ctx.console.print("[green]✅ Current session memory cleared[/]")
@@ -266,26 +337,26 @@ async def run():
                         ctx.console.print("[yellow]⚠️ Failed to clear memory[/]")
                     continue
 
-                if query.strip().lower() in {"new"}:
+                if normalized_query.lower() in {"new"}:
                     result = session_control.new_session(ctx)
                     if result["type"] == "success":
                         ctx.console.print(f"[green]✅ {result['message']}[/]")
                         ctx.console.print(f"[dim]Previous session {result['payload']['old_session_id']} saved[/]")
                     continue
 
-                if query.strip().lower().startswith("delete_session "):
-                    target_session_id = query.strip()[15:].strip()
-                    if target_session_id:
-                        result = session_control.delete_session(ctx, target_session_id)
+                if normalized_query.lower().startswith("delete_session "):
+                    command, args = parse_command(query)
+                    if args:
+                        result = session_control.delete_session(ctx, args)
                         if result["type"] == "success":
                             ctx.console.print(f"[green]✅ {result['message']}[/]")
                         else:
                             ctx.console.print(f"[red]❌ {result['message']}[/]")
                     else:
-                        ctx.console.print("[yellow]⚠️ Please provide a valid session ID, format: delete_session <session_id>[/]")
+                        ctx.console.print("[yellow]⚠️ Please provide a valid session ID, format: /delete_session <session_id>[/]")
                     continue
 
-                if query.strip().lower() in {"cleanup"}:
+                if normalized_query.lower() in {"cleanup"}:
                     result = session_control.cleanup_sessions(ctx)
                     if result["type"] == "success":
                         ctx.console.print(f"[green]✅ {result['message']}[/]")
@@ -293,16 +364,16 @@ async def run():
                         ctx.console.print(f"[dim]  Cleaned orphaned files: {result['payload']['orphaned_files']}[/]")
                     continue
 
-                if query.strip().lower() in {"sessions", "ls"}:
+                if normalized_query.lower() in {"sessions", "ls"}:
                     result = session_control.list_sessions(ctx)
                     if result["type"] == "list":
                         gui.render_sessions(ctx.console, result["payload"]["sessions"], result["payload"]["current_session_id"])
                     continue
 
-                if query.strip().lower().startswith("restore "):
-                    target_session_id = query.strip()[8:].strip()
-                    if target_session_id:
-                        result = session_control.restore_session(ctx, target_session_id)
+                if normalized_query.lower().startswith("restore "):
+                    command, args = parse_command(query)
+                    if args:
+                        result = session_control.restore_session(ctx, args)
                         if result["type"] == "success":
                             ctx.console.print(f"[green]✅ {result['message']}[/]")
                             if "session_info" in result["payload"]:
@@ -310,11 +381,11 @@ async def run():
                         else:
                             ctx.console.print(f"[red]❌ {result['message']}[/]")
                     else:
-                        ctx.console.print("[yellow]⚠️ Please provide a valid session ID, format: restore <session_id>[/]")
+                        ctx.console.print("[yellow]⚠️ Please provide a valid session ID, format: /restore <session_id>[/]")
                     continue
 
                 # Reload configuration command
-                if query.strip().lower() in {"reload", "reload llm"}:
+                if normalized_query.lower() in {"reload", "reload llm"}:
                     result = control.reload_config(ctx)
                     if result["type"] == "success":
                         ctx.console.print(f"[green]✅ {result['message']}[/]")
@@ -325,22 +396,22 @@ async def run():
                     continue
 
                 # Mode commands
-                if query.strip().lower().startswith("mode "):
+                if normalized_query.lower().startswith("mode "):
                     # 在 Dify 模式下禁用模式切换命令
                     if ctx.dify_mode:
                         ctx.console.print("[yellow]⚠️ Mode switching is not available in Dify mode[/]")
-                        ctx.console.print("[dim]Dify mode is a standalone cloud AI service. Use 'switch dify' to exit and switch to local LLM modes.[/]")
+                        ctx.console.print("[dim]Dify mode is a standalone cloud AI service. Use '/switch dify' to exit and switch to local LLM modes.[/]")
                         continue
                     
                     # Parse mode command
-                    parts = query.strip().split()
-                    if len(parts) < 2:
+                    command, args = parse_command(query)
+                    if not args:
                         current_mode = "LLM Mode" if ctx.llm_mode else "Agent Mode"
-                        ctx.console.print(f"[yellow]⚠️ Usage: mode llm/agent[/]")
+                        ctx.console.print(f"[yellow]⚠️ Usage: /mode llm/agent[/]")
                         ctx.console.print(f"[dim]Current mode: {current_mode}[/]")
                         continue
 
-                    mode = parts[1].lower()
+                    mode = args.lower()
                     result = control.set_mode(ctx, mode)
                     if result["type"] == "success":
                         if ctx.llm_mode:
@@ -356,26 +427,26 @@ async def run():
                     continue
 
                 # Stream commands
-                if query.strip().lower().startswith("stream "):
+                if normalized_query.lower().startswith("stream "):
                     # 在 Dify 模式下禁用流式控制命令
                     if ctx.dify_mode:
                         ctx.console.print("[yellow]⚠️ Stream control is not available in Dify mode[/]")
-                        ctx.console.print("[dim]Dify mode uses built-in streaming. Use 'switch dify' to exit and switch to local LLM modes.[/]")
+                        ctx.console.print("[dim]Dify mode uses built-in streaming. Use '/switch dify' to exit and switch to local LLM modes.[/]")
                         continue
                     
                     # Parse stream command (only effective in LLM mode)
                     if not ctx.llm_mode:
                         ctx.console.print("[yellow]⚠️ Streaming output is only available in LLM mode, please switch to LLM mode first[/]")
-                        ctx.console.print("[dim]Use 'mode llm' to switch to LLM mode[/]")
+                        ctx.console.print("[dim]Use '/mode llm' to switch to LLM mode[/]")
                         continue
                         
-                    parts = query.strip().split()
-                    if len(parts) < 2:
-                        ctx.console.print("[yellow]⚠️ Usage: stream on/off[/]")
+                    command, args = parse_command(query)
+                    if not args:
+                        ctx.console.print("[yellow]⚠️ Usage: /stream on/off[/]")
                         ctx.console.print(f"[dim]LLM streaming output status: {'Enabled' if ctx.streaming_enabled else 'Disabled'}[/]")
                         continue
 
-                    action = parts[1].lower()
+                    action = args.lower()
                     result = control.set_stream(ctx, action)
                     if result["type"] == "success":
                         if ctx.streaming_enabled:

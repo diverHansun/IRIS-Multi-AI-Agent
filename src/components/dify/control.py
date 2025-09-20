@@ -124,14 +124,28 @@ class DifyControl:
         
         return True
     
-    async def initialize(self) -> Dict[str, Any]:
+    async def initialize(self, force_reinit: bool = False) -> Dict[str, Any]:
         """
         初始化 Dify 客户端
+        
+        Args:
+            force_reinit: 是否强制重新初始化（即使已经初始化过）
         
         Returns:
             初始化结果
         """
         try:
+            # 如果已经初始化且不强制重新初始化，直接返回成功
+            if self.is_initialized and not force_reinit:
+                return {
+                    "type": "success",
+                    "message": "Dify 客户端已经初始化"
+                }
+            
+            # 如果已初始化且需要重新初始化，先清理现有连接
+            if self.is_initialized and force_reinit:
+                await self.cleanup()
+            
             # 加载配置
             self.config = self._load_config()
             
@@ -385,30 +399,55 @@ class DifyControl:
     async def cleanup(self):
         """清理资源"""
         try:
+            # 关闭客户端连接
             if self.client:
-                await self.client.close()
-                self.client = None
+                try:
+                    await self.client.close()
+                    self.client = None
+                    logger.debug("Dify 客户端连接已关闭")
+                except Exception as e:
+                    logger.warning(f"关闭 Dify 客户端连接时出错: {e}")
+            
+            # 重置流式处理器
+            if self.streaming:
+                self.streaming = None
+                
         except Exception as e:
-            logger.warning(f"清理 Dify 客户端时出错: {e}")
+            logger.warning(f"清理 Dify 资源时出错: {e}")
         finally:
+            # 重置所有状态
             self.is_initialized = False
             self.conversation_id = None
             self.uploaded_files = []
-            self.streaming = None
+            self.config = None
 
 
-async def init_dify_client(ctx) -> Dict[str, Any]:
+async def init_dify_client(ctx, force_reinit: bool = False) -> Dict[str, Any]:
     """
     初始化 Dify 客户端的便捷函数
     
     Args:
         ctx: 应用上下文
+        force_reinit: 是否强制重新初始化
         
     Returns:
         初始化结果
     """
+    # 如果已存在控制器且不强制重新初始化，直接使用现有实例
+    if ctx.dify_control and ctx.dify_control.is_initialized and not force_reinit:
+        return {
+            "type": "success",
+            "message": "使用现有的 Dify 客户端连接"
+        }
+    
+    # 如果需要强制重新初始化，先清理现有连接
+    if ctx.dify_control and force_reinit:
+        await ctx.dify_control.cleanup()
+        ctx.dify_control = None
+    
+    # 创建新的控制器实例
     control = DifyControl(ctx.console)
-    result = await control.initialize()
+    result = await control.initialize(force_reinit=force_reinit)
     
     if result["type"] == "success":
         # 保存控制器实例到上下文

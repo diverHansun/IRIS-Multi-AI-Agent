@@ -12,21 +12,27 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 class MessageFilter:
     """消息过滤器，用于过滤系统命令和保留对话内容"""
     
-    # 需要过滤的系统命令
+    # 需要过滤的系统命令（同时支持带/前缀和不带前缀的版本）
     SYSTEM_COMMANDS = {
-        'help', '帮助', 'info', '信息', 
-        'llms', 'llm', '模型列表',
-        'clear', '清除记忆', '重置',
-        'sessions', '会话列表', 'ls',
-        'exit', 'quit', '退出'
+        'help', '/help', '帮助', 'info', '/info', '信息', 
+        'llms', '/llms', 'llm', '/llm', '模型列表',
+        'clear', '/clear', '清除记忆', '重置',
+        'sessions', '/sessions', '会话列表', 'ls', '/ls',
+        'exit', '/exit', 'quit', '/quit', '退出',
+        'new', '/new', 'upload', '/upload', 'reset', '/reset',
+        'files', '/files', 'clearfiles', '/clearfiles',
+        'reload', '/reload', 'cleanup', '/cleanup',
+        'reconnect', '/reconnect'
     }
     
-    # 命令前缀模式
+    # 命令前缀模式（同时支持带/前缀和不带前缀的版本）
     COMMAND_PREFIXES = [
-        r'^switch\s+',      # switch openai gpt-4o
-        r'^mode\s+',        # mode llm/agent
-        r'^stream\s+',      # stream on/off
-        r'^restore\s+',     # restore session_id
+        r'^/?switch\s+',      # switch openai gpt-4o 或 /switch openai gpt-4o
+        r'^/?mode\s+',        # mode llm/agent 或 /mode llm/agent
+        r'^/?stream\s+',      # stream on/off 或 /stream on/off
+        r'^/?restore\s+',     # restore session_id 或 /restore session_id
+        r'^/?mcp\s+',         # mcp status/tools/reload 或 /mcp status/tools/reload
+        r'^/?delete_session\s+',  # delete_session session_id 或 /delete_session session_id
     ]
     
     def __init__(self):
@@ -43,15 +49,16 @@ class MessageFilter:
         Returns:
             True如果是系统命令，False如果是普通对话
         """
-        message = message.strip().lower()
+        message = message.strip()
+        message_lower = message.lower()
         
         # 检查精确匹配的系统命令
-        if message in self.SYSTEM_COMMANDS:
+        if message_lower in self.SYSTEM_COMMANDS:
             return True
         
         # 检查命令前缀模式
         for pattern in self.command_patterns:
-            if pattern.match(message):
+            if pattern.match(message_lower):
                 return True
         
         return False
