@@ -109,17 +109,16 @@ Multi LLM Provider Switching Examples:
 "/switch zhipu glm-4-plus", "/switch openai gpt-4o", "/switch ollama gpt-oss:20b", "/switch dify"
 
 Working Modes:
-• LLM Mode: Fast conversation, supports streaming output (default)
-• Agent Mode: Full functionality, tool calling, session memory
-• Dify Mode(Cloud Agent): Cloud AI platform, file upload, streaming chat
+/mode llm - LLM Mode: Fast conversation, supports streaming output (default)
+/mode agent - Agent Mode: Full functionality, tool calling, session memory
+/switch dify - Dify Mode(Cloud Agent): Cloud AI platform, file upload, streaming chat
 
 Streaming Output:
 • Only available in LLM mode
 • '/stream on/off' to enable/disable
 
-Available Tools:
+Agent Mode Available Tools:
 • Math calculations, web search, map navigation, cryptocurrency prices
-• Dify: File upload (/upload), conversation reset (/reset)
 • Try related questions directly for detailed functionality
 
 Basic Commands:
@@ -138,10 +137,7 @@ Session Management Commands:
     # Append MCP instruction description (only for non-Dify modes)
     if not dify_mode:
         help_text += "\nMCP Usage and Commands:\n"
-        help_text += "- Management: /mcp status [-v] | /mcp tools [--json] | /mcp reload\n"
-        help_text += "- In Agent mode: Tool names are prefixed with mcp_ (e.g., mcp_API-post-search); Action Input must be a single-line JSON (e.g., {\"query\":\"keyword\"}).\n"
-        help_text += "  Example: Call mcp_API-post-search with parameters {\"query\":\"Roadmap\"}; Call mcp_API-retrieve-a-page with parameters {\"page_id\":\"<page_id>\"}\n"
-    
+        help_text += "- Management: /mcp status [-v] | /mcp tools [--json] | /mcp reload\n"    
     console.print(Panel(help_text, title="Help Information", border_style="green"))
 
 

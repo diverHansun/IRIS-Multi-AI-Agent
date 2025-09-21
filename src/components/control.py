@@ -33,7 +33,7 @@ async def switch_llm(ctx, provider: str, model: str = None):
         
         # Get Agent info
         info = new_agent.get_info()
-        ctx.console.print(f"[green]✅ Successfully switched to {info['provider']} / {info['model']}[/]")
+        ctx.console.print(f"[green]Successfully switched to {info['provider']} / {info['model']}[/]")
         ctx.console.print(f"[dim]Tool count: {info['tool_count']}, Memory: {'Enabled' if info['memory_enabled'] else 'Disabled'}[/]")
         ctx.console.print(f"[dim]Memory continuity maintained, you can continue previous conversations after switching[/]")
         
