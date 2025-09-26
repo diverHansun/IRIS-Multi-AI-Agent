@@ -7,6 +7,8 @@
 from langchain_core.tools import tool
 from typing import Annotated
 import re
+from typing import List
+from langchain_core.tools import BaseTool
 
 @tool
 def add_numbers(expression: Annotated[str, "数学表达式，例如：'15 + 25' 或 '15和25相加'"]) -> str:
@@ -46,3 +48,7 @@ def calculate_math(expression: Annotated[str, "基础数学表达式，支持加
         return f"{expression} = {result}"
     except Exception as e:
         return f"计算错误: {str(e)}" 
+
+def get_available_math_tools() -> List[BaseTool]:
+    """获取可用的数学工具列表"""
+    return [add_numbers, calculate_math]

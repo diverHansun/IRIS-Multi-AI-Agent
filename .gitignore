@@ -214,3 +214,9 @@ config/mcp/mcp.json
 .memory/ 
 data/ 
 
+# Dify 个人配置文件
+config/dify/chatflows/*.yml
+config/dify/chatflows/*.yaml
+config/dify/workflows/*.yml
+config/dify/workflows/*.yaml
+

@@ -352,29 +352,31 @@ def get_webpage_content(url: Annotated[str, "网页URL地址"]) -> str:
 # 计算器工具已移动到 math_tools.py，避免重复
 
 
-# 导出工具列表
-SEARCH_TOOLS = [
-    web_search_tool,
-    web_search_detailed,
-    get_webpage_content
-]
+def get_available_search_tools():
+    """
+    获取可用的搜索工具列表
+    
+    Returns:
+        搜索工具列表
+    """
+    return [web_search_tool, web_search_detailed, get_webpage_content]
 
 
 def test_search_tools():
     """测试搜索工具"""
-    print("🔧 测试搜索工具...")
+    print("测试搜索工具...")
 
     # 测试基础搜索
     print("\n1. 测试基础搜索:")
     try:
         result = web_search_tool.func("Python教程")
-        print(f"✅ 基础搜索成功: {result[:200]}...")
+        print(f"基础搜索成功: {result[:200]}...")
     except Exception as e:
-        print(f"❌ 基础搜索失败: {e}")
+        print(f"基础搜索失败: {e}")
 
     # 计算器工具已移动到 math_tools.py
 
-    print("\n✅ 搜索工具测试完成!")
+    print("\n搜索工具测试完成!")
 
 
 if __name__ == "__main__":

@@ -16,12 +16,12 @@ Notion工具模块
 使用方法:
 1. 设置环境变量 NOTION_TOKEN
 2. 导入并使用相应的工具类
-3. 或者直接使用 get_notion_tools() 获取LangChain工具列表
+3. 或者直接使用 get_available_notion_tools() 获取LangChain工具列表
 
 示例:
-    from src.tools.notion import get_notion_tools
+    from src.tools.notion import get_available_notion_tools
     
-    tools = get_notion_tools()
+    tools = get_available_notion_tools()
     # 在LangChain Agent中使用这些工具
 """
 
@@ -32,7 +32,7 @@ from .database_tools import NotionDatabaseTools
 from .page_tools import NotionPageTools
 from .search_tools import NotionSearchTools
 from .langchain_tools import (
-    get_notion_tools,
+    get_available_notion_tools,
     get_notion_database_tools,
     get_notion_page_tools,
     get_notion_search_tools,
@@ -64,7 +64,7 @@ __all__ = [
     "NotionSearchTools",
     
     # LangChain集成
-    "get_notion_tools",
+    "get_available_notion_tools",
     "get_notion_database_tools",
     "get_notion_page_tools",
     "get_notion_search_tools",
@@ -123,7 +123,7 @@ def get_module_info() -> dict:
         "version": __version__,
         "author": __author__,
         "description": MODULE_DESCRIPTION,
-        "tools_count": len(get_notion_tools()),
+        "tools_count": len(get_available_notion_tools()),
         "components": [
             "NotionClient",
             "NotionDatabaseTools", 
@@ -184,7 +184,7 @@ async def ensure_tools_initialized():
         if not is_auth_configured():
             return None
         
-        tools = get_notion_tools()
+        tools = get_available_notion_tools()
         return tools
     except Exception:
         return None

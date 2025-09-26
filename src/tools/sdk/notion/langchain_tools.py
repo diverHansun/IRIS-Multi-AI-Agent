@@ -261,7 +261,7 @@ def get_all_notion_tools() -> List[BaseTool]:
 
 
 # 主要导出函数
-def get_notion_tools() -> List[BaseTool]:
+def get_available_notion_tools() -> List[BaseTool]:
     """
     获取可用的Notion工具列表
     
