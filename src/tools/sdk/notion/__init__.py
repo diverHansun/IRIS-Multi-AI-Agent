@@ -31,7 +31,7 @@ from .data_processor import NotionDataProcessor
 from .database_tools import NotionDatabaseTools
 from .page_tools import NotionPageTools
 from .search_tools import NotionSearchTools
-from .langchain_tools import (
+from .adapter import (
     get_available_notion_tools,
     get_notion_database_tools,
     get_notion_page_tools,

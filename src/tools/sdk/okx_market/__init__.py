@@ -18,7 +18,7 @@ OKX Market API Integration Module
 from .client import OKXMarketClient
 from .market_data import MarketDataTools
 from .price_monitor import PriceMonitor
-from .langchain_tools import (
+from .adapter import (
     get_crypto_price,
     get_market_data,
     get_kline_data,

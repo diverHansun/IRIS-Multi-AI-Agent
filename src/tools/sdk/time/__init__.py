@@ -4,6 +4,6 @@
 """
 
 from .time_tool import get_current_time_tool
-from .provider import get_available_time_tools
+from .adapter import get_available_time_tools
 
 __all__ = ["get_current_time_tool", "get_available_time_tools"]

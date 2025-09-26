@@ -6,7 +6,7 @@
 """
 
 # 导入主要的类和函数
-from .provider import (
+from .adapter import (
     AmapServiceProvider,
     get_amap_service_provider,
     get_available_amap_tools,

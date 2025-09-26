@@ -6,7 +6,7 @@ import logging
 from typing import List
 from langchain_core.tools import BaseTool
 
-from .provider import get_amap_service_provider, get_available_amap_tools
+from .adapter import get_amap_service_provider, get_available_amap_tools
 
 logger = logging.getLogger(__name__)
 

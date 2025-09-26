@@ -9,8 +9,8 @@ from .search.search_tools import get_available_search_tools
 from .search.tavily_search_tool import get_available_tavily_tools
 from .notion import get_available_notion_tools
 from .time import get_available_time_tools
-from .amap.provider import get_available_amap_tools
-from .okx_market.langchain_tools import get_available_okx_tools
+from .amap.adapter import get_available_amap_tools
+from .okx_market.adapter import get_available_okx_tools
 from .manager import SDKToolManager
 
 __all__ = [
