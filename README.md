@@ -350,6 +350,19 @@ DIFY_BASE_URL=https://api.dify.ai/v1
 
 ## 更新日志
 
+### v2.10.0 (2025-09-26)
+- **工具函数架构重构**: 完善工具函数的组织架构
+  - 创建SDK统一工具函数管理器(SDKToolManager)，提供统一的工具获取接口
+  - 实现工具函数标准化命名规范：get_available_*_tools()系列函数
+  - 重构数学工具：使用get_available_math_tools()统一获取数学工具
+  - 重构搜索工具：使用get_available_search_tools()统一获取搜索工具
+  - 重构Notion工具：使用get_available_notion_tools()统一获取Notion工具
+  - 重构OKX工具：使用get_available_okx_tools()统一获取OKX工具
+  - 优化MCP工具：移除src/MCP目录，统一到src/tools/mcp，保持功能独立性
+  - 提升代码一致性：所有工具函数遵循相同命名规范
+  - 改进Agent集成：统一通过SDKToolManager获取工具列表
+  - 确保向后兼容：保持现有功能和API不变
+
 ### v2.9.0 (2025-09-20)
 - **Dify云端AI集成**: 完整集成Dify云端AI平台
   - 支持文件上传和文档分析，包括PDF、Word、Excel、图片等多种格式

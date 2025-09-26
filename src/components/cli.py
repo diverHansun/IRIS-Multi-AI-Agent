@@ -15,7 +15,7 @@ from src.memory import GlobalMemoryManager, SessionManager
 
 # Try to import MCP manager
 try:
-    from src.MCP import GlobalMCPManager
+    from src.tools.mcp import GlobalMCPManager
     MCP_AVAILABLE = True
 except Exception:
     GlobalMCPManager = None
