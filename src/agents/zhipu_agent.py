@@ -19,10 +19,7 @@ from ..prompts.tooling import serialize_tools
 
 from ..llm.zhipu_llm import create_zhipu_llm
 from ..llm.llm_manager import get_llm_info
-from ..tools.calculate.math_tools import add_numbers, calculate_math
-from ..tools.search.tavily_search_tool import get_available_tavily_tools
-from ..tools.amap import get_available_amap_tools
-from ..tools.time import get_available_time_tools
+from ..tools import SDKToolManager
 from ..memory.global_memory import GlobalMemoryManager
 
 logger = logging.getLogger(__name__)
@@ -169,34 +166,17 @@ class ZhipuAgent:
         """收集核心工具"""
         self.tools = []
         
-        # 基础工具：数学计算
-        self.tools.extend([add_numbers, calculate_math])
-        logger.info(f"已加载数学工具: {len([add_numbers, calculate_math])} 个")
-        
-        # 搜索工具：优先使用Tavily
-        tavily_tools = get_available_tavily_tools()
-        if tavily_tools:
-            self.tools.extend(tavily_tools)
-            logger.info(f"已加载Tavily搜索工具: {len(tavily_tools)} 个")
-        
-        # 地图工具
-        amap_tools = get_available_amap_tools()
-        if amap_tools:
-            self.tools.extend(amap_tools)
-            logger.info(f"已加载高德地图工具: {len(amap_tools)} 个")
-        
-        # 时间工具
-        time_tools = get_available_time_tools()
-        if time_tools:
-            self.tools.extend(time_tools)
-            logger.info(f"已加载时间工具: {len(time_tools)} 个")
+        # 使用SDK工具管理器获取所有SDK工具
+        sdk_tools = SDKToolManager.get_all_tools()
+        self.tools.extend(sdk_tools)
+        logger.info(f"SDK工具收集完成: {len(sdk_tools)} 个")
         
         logger.info(f"核心工具收集完成，共 {len(self.tools)} 个")
     
     async def _load_mcp_tools(self):
         """加载MCP工具"""
         try:
-            from ..MCP import GlobalMCPManager
+            from ..tools.mcp import GlobalMCPManager
             await GlobalMCPManager.initialize()
             mcp_tools = GlobalMCPManager.get_tools()
             if mcp_tools:

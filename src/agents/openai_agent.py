@@ -16,23 +16,13 @@ from langchain_core.language_models import BaseChatModel
 
 from ..llm.openai_llm import build_openai_chat, OpenAILLM
 from ..memory.global_memory import GlobalMemoryManager
-from ..tools.calculate.math_tools import add_numbers, calculate_math
-from ..tools.search.search_tools import SEARCH_TOOLS
-from ..tools.search.tavily_search_tool import get_available_tavily_tools
-from ..tools.amap import get_available_amap_tools
-from ..tools.time import get_available_time_tools
-from ..tools.notion import get_notion_tools
+from ..tools import SDKToolManager
 
-# 尝试导入OKX工具（可选）
-try:
-    from ..tools.okx_market.langchain_tools import (
-        get_crypto_price, get_market_data, get_kline_data, 
-        analyze_price_trend, create_price_alert, check_price_alerts,
-        get_market_summary, search_crypto_symbols
-    )
-    OKX_AVAILABLE = True
-except ImportError:
-    OKX_AVAILABLE = False
+# 导入工具管理器
+from ..tools import SDKToolManager
+
+# OKX工具可用性 - 通过工具管理器处理
+OKX_AVAILABLE = True  # 由SDKToolManager统一管理
 
 logger = logging.getLogger(__name__)
 
@@ -158,56 +148,15 @@ class OpenAIAgent:
         """加载所有工具"""
         self._tools = []
         
-        # 数学工具
-        self._tools.extend([add_numbers, calculate_math])
-        
-        # 搜索工具 - 优先使用Tavily
-        tavily_tools = get_available_tavily_tools()
-        if tavily_tools:
-            self._tools.extend(tavily_tools)
-            logger.info("Tavily search tools loaded")
-        else:
-            # 备用搜索工具
-            self._tools.extend(SEARCH_TOOLS)
-            logger.info("Backup search tools loaded")
-        
-        # 高德地图工具
-        amap_tools = get_available_amap_tools()
-        if amap_tools:
-            self._tools.extend(amap_tools)
-            logger.info("Amap tools loaded")
-            
-        # 时间工具
-        time_tools = get_available_time_tools()
-        if time_tools:
-            self._tools.extend(time_tools)
-            logger.info("Time tools loaded")
-        
-        # OKX加密货币工具（可选）
-        if OKX_AVAILABLE:
-            okx_tools = [
-                get_crypto_price, get_market_data, get_kline_data,
-                analyze_price_trend, create_price_alert, check_price_alerts,
-                get_market_summary, search_crypto_symbols
-            ]
-            self._tools.extend(okx_tools)
-            logger.info("OKX crypto tools loaded")
-        
-        # 添加 Notion 工具
-        try:
-            notion_tools = get_notion_tools()
-            if notion_tools:
-                self._tools.extend(notion_tools)
-                logger.info(f"Notion tools loaded: {len(notion_tools)} tools")
-            else:
-                logger.warning("Notion tools not configured, need NOTION_TOKEN")
-        except Exception as e:
-            logger.warning(f"Failed to load Notion tools: {e}")
-        
+        # 使用SDK工具管理器获取所有SDK工具
+        sdk_tools = SDKToolManager.get_all_tools()
+        self._tools.extend(sdk_tools)
+        logger.info(f"SDK tools loaded: {len(sdk_tools)} tools")
         logger.info(f"Total {len(self._tools)} tools loaded")
+        
         # Append global MCP tools if available
         try:
-            from ..MCP import GlobalMCPManager
+            from ..tools.mcp import GlobalMCPManager
             await GlobalMCPManager.initialize()
             mcp_tools = GlobalMCPManager.get_tools()
             if mcp_tools:

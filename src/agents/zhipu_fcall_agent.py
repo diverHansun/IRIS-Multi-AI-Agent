@@ -126,7 +126,7 @@ class ZhipuFunctionCallingAgent:
             
             # 1.1 聚合全局 MCP 工具（如 Notion MCP、Filesystem 等）
             try:
-                from ..MCP import GlobalMCPManager
+                from ..tools.mcp import GlobalMCPManager
                 await GlobalMCPManager.initialize()
                 mcp_tools = GlobalMCPManager.get_tools()
                 if mcp_tools:

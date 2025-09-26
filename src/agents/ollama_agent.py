@@ -16,25 +16,15 @@ from langchain_core.language_models import BaseChatModel
 
 from ..llm.ollama_llm import OllamaLLM
 from ..memory.global_memory import GlobalMemoryManager
-from ..tools.calculate.math_tools import add_numbers, calculate_math
-from ..tools.search.search_tools import SEARCH_TOOLS
-from ..tools.search.tavily_search_tool import get_available_tavily_tools
-from ..tools.amap import get_available_amap_tools
-from ..tools.time import get_available_time_tools
-from ..tools.notion import get_notion_tools
-
-# 尝试导入OKX工具（可选）
-try:
-    from ..tools.okx_market.langchain_tools import (
-        get_crypto_price, get_market_data, get_kline_data, 
-        analyze_price_trend, create_price_alert, check_price_alerts,
-        get_market_summary, search_crypto_symbols
-    )
-    OKX_AVAILABLE = True
-except ImportError:
-    OKX_AVAILABLE = False
+from ..tools import SDKToolManager
 
 logger = logging.getLogger(__name__)
+
+# 导入工具管理器
+from ..tools import SDKToolManager
+
+# OKX工具可用性 - 通过工具管理器处理
+OKX_AVAILABLE = True  # 由SDKToolManager统一管理
 
 
 class OllamaAgent:
@@ -141,46 +131,10 @@ class OllamaAgent:
         """加载所有工具"""
         self._tools = []
         
-        # 数学工具
-        self._tools.extend([add_numbers, calculate_math])
-        
-        # 搜索工具
-        tavily_tools = get_available_tavily_tools()
-        if tavily_tools:
-            self._tools.extend(tavily_tools)
-            logger.info(f"已加载Tavily搜索工具: {len(tavily_tools)}个")
-        else:
-            self._tools.extend(SEARCH_TOOLS)
-            logger.info(f"已加载DuckDuckGo搜索工具: {len(SEARCH_TOOLS)}个")
-        
-        # 高德地图工具
-        amap_tools = get_available_amap_tools()
-        if amap_tools:
-            self._tools.extend(amap_tools)
-            logger.info(f"已加载高德地图工具: {len(amap_tools)}个")
-            
-        # 时间工具
-        time_tools = get_available_time_tools()
-        if time_tools:
-            self._tools.extend(time_tools)
-            logger.info(f"已加载时间工具: {len(time_tools)}个")
-        
-        # Notion工具
-        notion_tools = get_notion_tools()
-        if notion_tools:
-            self._tools.extend(notion_tools)
-            logger.info(f"已加载Notion工具: {len(notion_tools)}个")
-        
-        # OKX工具
-        if OKX_AVAILABLE:
-            okx_tools = [
-                get_crypto_price, get_market_data, get_kline_data,
-                analyze_price_trend, create_price_alert, check_price_alerts,
-                get_market_summary, search_crypto_symbols
-            ]
-            self._tools.extend(okx_tools)
-            logger.info(f"已加载OKX工具: {len(okx_tools)}个")
-        
+        # 使用SDK工具管理器获取所有SDK工具
+        sdk_tools = SDKToolManager.get_all_tools()
+        self._tools.extend(sdk_tools)
+        logger.info(f"SDK工具加载完成: {len(sdk_tools)}个")
         logger.info(f"总共加载工具: {len(self._tools)}个")
     
     def _setup_memory(self):

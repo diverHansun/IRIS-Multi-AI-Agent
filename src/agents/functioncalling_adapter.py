@@ -11,11 +11,7 @@ from typing import Dict, Any, List
 from langchain_core.tools import BaseTool
 
 # 导入工具模块
-from ..tools.calculate.math_tools import add_numbers, calculate_math
-from ..tools.search.search_tools import SEARCH_TOOLS
-from ..tools.search.tavily_search_tool import get_available_tavily_tools
-from ..tools.amap import get_available_amap_tools
-from ..tools.time import get_available_time_tools
+from ..tools import SDKToolManager
 
 logger = logging.getLogger(__name__)
 
@@ -345,46 +341,8 @@ def get_all_available_tools() -> List[BaseTool]:
     Returns:
         BaseTool列表
     """
-    tools = []
-    
-    # 添加数学工具
-    tools.extend([add_numbers, calculate_math])
-    
-    # 添加Tavily搜索工具（优先）
-    tavily_tools = get_available_tavily_tools()
-    if tavily_tools:
-        tools.extend(tavily_tools)
-    else:
-        # 添加备用搜索工具
-        tools.extend(SEARCH_TOOLS)
-    
-    # 添加高德地图工具
-    amap_tools = get_available_amap_tools()
-    if amap_tools:
-        tools.extend(amap_tools)
-        
-    # 添加时间工具
-    time_tools = get_available_time_tools()
-    if time_tools:
-        tools.extend(time_tools)
-    
-    # 添加OKX加密货币工具（如果可用）
-    try:
-        from ..tools.okx_market import get_available_okx_tools
-        okx_tools = get_available_okx_tools()
-        if okx_tools:
-            tools.extend(okx_tools)
-    except ImportError:
-        logger.warning("OKX工具未安装")
-    
-    # 添加Notion工具（如果可用）
-    try:
-        from ..tools.notion import get_notion_tools
-        notion_tools = get_notion_tools()
-        if notion_tools:
-            tools.extend(notion_tools)
-    except ImportError:
-        logger.warning("Notion工具未安装")
+    # 使用SDK工具管理器获取所有SDK工具
+    tools = SDKToolManager.get_all_tools()
     
     logger.info(f" 已加载 {len(tools)} 个工具")
     return tools
