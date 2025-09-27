@@ -9,11 +9,14 @@ from .sdk import (
     get_available_search_tools, get_available_tavily_tools,
     get_available_time_tools,
     get_available_amap_tools,
+    get_available_notion_tools,
     get_available_okx_tools,
     SDKToolManager
 )
 
-from .sdk.notion.langchain_tools import get_available_notion_tools
+from .connector import (
+    ConnectorToolManager
+)
 
 __all__ = [
     # 数学工具
@@ -29,5 +32,6 @@ __all__ = [
     # OKX工具
     "get_available_okx_tools",
     # 工具管理器
-    "SDKToolManager"
+    "SDKToolManager",
+    "ConnectorToolManager"
 ] 
