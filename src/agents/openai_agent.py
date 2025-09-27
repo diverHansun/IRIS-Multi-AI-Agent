@@ -16,10 +16,25 @@ from langchain_core.language_models import BaseChatModel
 
 from ..llm.openai_llm import build_openai_chat, OpenAILLM
 from ..memory.global_memory import GlobalMemoryManager
-from ..tools import SDKToolManager
+from ..tools import SDKToolManager, ConnectorToolManager
 
-# 导入工具管理器
-from ..tools import SDKToolManager
+__all__ = [
+    # 数学工具
+    "add_numbers", "calculate_math",
+    # 搜索工具
+    "get_available_search_tools", "get_available_tavily_tools",
+    # 时间工具
+    "get_available_time_tools",
+    # 高德地图工具
+    "get_available_amap_tools",
+    # Notion工具
+    "get_available_notion_tools",
+    # OKX工具
+    "get_available_okx_tools",
+    # 工具管理器
+    "SDKToolManager",
+    "ConnectorToolManager"
+]
 
 # OKX工具可用性 - 通过工具管理器处理
 OKX_AVAILABLE = True  # 由SDKToolManager统一管理
@@ -152,6 +167,13 @@ class OpenAIAgent:
         sdk_tools = SDKToolManager.get_all_tools()
         self._tools.extend(sdk_tools)
         logger.info(f"SDK tools loaded: {len(sdk_tools)} tools")
+        
+        # Load connector tools
+        connector_manager = ConnectorToolManager()
+        connector_tools = connector_manager.get_all_tools()
+        self._tools.extend(connector_tools)
+        logger.info(f"Connector tools loaded: {len(connector_tools)} tools")
+        
         logger.info(f"Total {len(self._tools)} tools loaded")
         
         # Append global MCP tools if available

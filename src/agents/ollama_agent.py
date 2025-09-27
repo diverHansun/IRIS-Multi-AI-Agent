@@ -16,12 +16,9 @@ from langchain_core.language_models import BaseChatModel
 
 from ..llm.ollama_llm import OllamaLLM
 from ..memory.global_memory import GlobalMemoryManager
-from ..tools import SDKToolManager
+from ..tools import SDKToolManager, ConnectorToolManager
 
 logger = logging.getLogger(__name__)
-
-# 导入工具管理器
-from ..tools import SDKToolManager
 
 # OKX工具可用性 - 通过工具管理器处理
 OKX_AVAILABLE = True  # 由SDKToolManager统一管理
@@ -130,12 +127,30 @@ class OllamaAgent:
     async def _load_tools(self):
         """加载所有工具"""
         self._tools = []
-        
+
         # 使用SDK工具管理器获取所有SDK工具
         sdk_tools = SDKToolManager.get_all_tools()
         self._tools.extend(sdk_tools)
         logger.info(f"SDK工具加载完成: {len(sdk_tools)}个")
+
+        # Load connector tools
+        connector_manager = ConnectorToolManager()
+        connector_tools = connector_manager.get_all_tools()
+        self._tools.extend(connector_tools)
+        logger.info(f"Connector工具加载完成: {len(connector_tools)}个")
+
         logger.info(f"总共加载工具: {len(self._tools)}个")
+
+        # Append global MCP tools if available
+        try:
+            from ..tools.mcp import GlobalMCPManager
+            await GlobalMCPManager.initialize()
+            mcp_tools = GlobalMCPManager.get_tools()
+            if mcp_tools:
+                self._tools.extend(mcp_tools)
+                logger.info(f"MCP工具加载完成: {len(mcp_tools)}个")
+        except Exception:
+            pass
     
     def _setup_memory(self):
         """设置记忆管理"""

@@ -19,7 +19,7 @@ from ..prompts.tooling import serialize_tools
 
 from ..llm.zhipu_llm import create_zhipu_llm
 from ..llm.llm_manager import get_llm_info
-from ..tools import SDKToolManager
+from ..tools import SDKToolManager, ConnectorToolManager
 from ..memory.global_memory import GlobalMemoryManager
 
 logger = logging.getLogger(__name__)
@@ -170,6 +170,12 @@ class ZhipuAgent:
         sdk_tools = SDKToolManager.get_all_tools()
         self.tools.extend(sdk_tools)
         logger.info(f"SDK工具收集完成: {len(sdk_tools)} 个")
+        
+        # 加载connector工具
+        connector_manager = ConnectorToolManager()
+        connector_tools = connector_manager.get_all_tools()
+        self.tools.extend(connector_tools)
+        logger.info(f"Connector工具收集完成: {len(connector_tools)} 个")
         
         logger.info(f"核心工具收集完成，共 {len(self.tools)} 个")
     

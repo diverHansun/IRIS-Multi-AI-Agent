@@ -124,6 +124,13 @@ class ZhipuFunctionCallingAgent:
             # 获取所有可用工具
             self.tools = get_all_available_tools()
             
+            # Load connector tools
+            from ..tools import ConnectorToolManager
+            connector_manager = ConnectorToolManager()
+            connector_tools = connector_manager.get_all_tools()
+            self.tools.extend(connector_tools)
+            logger.info(f"Connector tools loaded: {len(connector_tools)} tools")
+            
             # 1.1 聚合全局 MCP 工具（如 Notion MCP、Filesystem 等）
             try:
                 from ..tools.mcp import GlobalMCPManager
