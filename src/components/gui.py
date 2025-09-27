@@ -43,6 +43,11 @@ MCP Management:
 /mcp tools [--json] - List MCP tools (prefixed with mcp_)
 /mcp reload - Reload config/mcp/mcp.toml
 
+Connector Management:
+/connector status [-v] - View connector service status
+/connector tools [--json] - List available connector tools
+/connector reload - Reload connector tools and refresh connections
+
 Note: MCP tools in Agent mode are prefixed with mcp_ and require JSON object parameters
     """
     console.print(Panel(welcome_text, title="Welcome", border_style="cyan"))
@@ -314,3 +319,36 @@ def render_mcp_tools(console, tools, json_flag=False):
             console.print(Panel("\n".join(lines), title="MCP Tools", border_style="magenta"))
         else:
             console.print("[yellow]No MCP tools available (possibly not enabled or initialization failed)[/]")
+
+
+def render_connector_status(console, status, verbose=False):
+    """Render Connector status"""
+    if verbose:
+        import json
+        console.print(Panel(json.dumps(status, ensure_ascii=False, indent=2), title="Connector Status", border_style="cyan"))
+    else:
+        lines = [
+            f"Service: {status.get('service', 'N/A')}  Status: {status.get('status', 'unknown')}  Tools: {status.get('tool_count', 0)}",
+            f"Base URL: {status.get('base_url', 'N/A')}  Timeout: {status.get('timeout', 'N/A')}s",
+        ]
+        if status.get("schema_error"):
+            lines.append(f"Schema Error: {status['schema_error']}")
+        console.print(Panel("\n".join(lines), title="Connector Status", border_style="cyan"))
+
+
+def render_connector_tools(console, tools, json_flag=False):
+    """Render Connector tools"""
+    if json_flag:
+        import json
+        data = [{"name": name, "description": desc} for name, desc in tools.items()]
+        console.print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        if tools:
+            lines = [f"Total {len(tools)} connector tools:"]
+            for name, desc in list(tools.items())[:100]:
+                lines.append(f"- {name}: {desc[:120]}")
+            if len(tools) > 100:
+                lines.append(f"... {len(tools) - 100} more tools not shown")
+            console.print(Panel("\n".join(lines), title="Connector Tools", border_style="cyan"))
+        else:
+            console.print("[yellow]No connector tools available (possibly not enabled or service unavailable)[/]")

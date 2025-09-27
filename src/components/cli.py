@@ -23,6 +23,7 @@ except Exception:
 
 # Import components
 from . import control, session_control, mcp_control, registry, gui
+from .connector_control import connector_status, connector_tools, connector_reload
 
 
 class AppState:
@@ -351,6 +352,47 @@ async def run():
                                 continue
 
                         ctx.console.print("[yellow]Usage: /mcp status [-v] | /mcp tools [--json] | /mcp reload[/]")
+                        continue
+
+                    # Connector commands
+                    if command_name.lower() == "connector":
+                        if ctx.dify_mode:
+                            ctx.console.print("[yellow]Connector commands are not available in Dify mode[/]")
+                            ctx.console.print("[dim]Dify mode uses cloud AI service. Use '/switch <provider>' to exit and access connector tools.[/]")
+                            continue
+                        sub = args.split()[0].lower() if args else ""
+
+                        if sub in {"status", "tools", "reload"}:
+                            if sub == "status":
+                                verbose = any(a in ["-v", "--verbose"] for a in args.split()[1:] if args)
+                                result = await connector_status(verbose=verbose)
+                                if result["type"] == "status":
+                                    from .gui import render_connector_status
+                                    render_connector_status(ctx.console, result["payload"], verbose=verbose)
+                                elif result["type"] == "error":
+                                    ctx.console.print(f"[red]Error: {result['message']}[/]")
+                                continue
+
+                            if sub == "tools":
+                                json_flag = any(a == "--json" for a in args.split()[1:] if args)
+                                result = await connector_tools(json_flag=json_flag)
+                                if result["type"] == "list":
+                                    from .gui import render_connector_tools
+                                    render_connector_tools(ctx.console, result["payload"]["tools"], json_flag=json_flag)
+                                elif result["type"] == "error":
+                                    ctx.console.print(f"[red]Error: {result['message']}[/]")
+                                continue
+
+                            if sub == "reload":
+                                result = await connector_reload()
+                                if result["type"] == "success":
+                                    ctx.console.print("[green]Connector reloaded successfully[/]")
+                                    ctx.console.print(result["message"])
+                                elif result["type"] == "error":
+                                    ctx.console.print(f"[red]Error: {result['message']}[/]")
+                                continue
+
+                        ctx.console.print("[yellow]Usage: /connector status [-v] | /connector tools [--json] | /connector reload[/]")
                         continue
 
                     # Switch command
