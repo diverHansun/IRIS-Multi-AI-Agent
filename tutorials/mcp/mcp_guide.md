@@ -57,10 +57,10 @@ Model Context Protocol (MCP) 是一种标准化协议，允许 AI Agent 与各�
 
 ## 支持的 MCP 服务器
 
-### 1. Fetch MCP
-用于从 URL 获取网页内容
-- 工具名称前缀: `fetch:`
-- 主要功能: 网页内容抓取
+### 1. Context7 MCP
+用于获取最新的库文档和代码示例
+- 工具名称前缀: `context7:`
+- 主要功能: 库文档查询、代码示例获取
 
 ### 2. Filesystem MCP
 用于读取本地文件系统
@@ -78,11 +78,14 @@ Model Context Protocol (MCP) 是一种标准化协议，允许 AI Agent 与各�
 使用 npm 全局安装 MCP 服务器，这样可以在任何位置使用：
 
 ```bash
-# 安装 Fetch MCP 服务器
-npm install -g @modelcontextprotocol/server-fetch
+# 安装 Context7 MCP 服务器
+npm install -g @upstash/context7-mcp
 
 # 安装 Filesystem MCP 服务器
 npm install -g @modelcontextprotocol/server-filesystem
+
+# 安装 Firecrawl MCP 服务器
+npm install -g firecrawl-mcp
 
 # 安装 Notion MCP 服务器
 npm install -g notion-mcp
@@ -92,11 +95,14 @@ npm install -g notion-mcp
 直接使用 npx 运行，无需预先安装：
 
 ```bash
-# 运行 Fetch MCP 服务器
-npx -y @modelcontextprotocol/server-fetch
+# 运行 Context7 MCP 服务器
+npx -y @upstash/context7-mcp --api-key YOUR_API_KEY
 
 # 运行 Filesystem MCP 服务器
 npx -y @modelcontextprotocol/server-filesystem
+
+# 运行 Firecrawl MCP 服务器
+npx -y firecrawl-mcp
 
 # 运行 Notion MCP 服务器
 npx -y notion-mcp
@@ -113,12 +119,12 @@ prefer_mcp = true
 namespace_strategy = "prefix"
 default_prefix = "mcp_"
 
-# Fetch MCP 配置
-[servers.fetch]
+# Context7 MCP 配置
+[servers.context7]
 transport = "stdio"
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-fetch"]
-rename_prefix = "fetch:"
+args = ["-y", "@upstash/context7-mcp", "--api-key", "$CONTEXT7_API_KEY"]
+rename_prefix = "context7:"
 
 # Filesystem MCP 配置
 [servers.filesystem]
@@ -126,6 +132,16 @@ transport = "stdio"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "--root", "./data"]
 rename_prefix = "fs:"
+
+# Firecrawl MCP 配置
+[servers.firecrawl]
+transport = "stdio"
+command = "npx"
+args = ["-y", "firecrawl-mcp"]
+rename_prefix = "firecrawl:"
+
+[servers.firecrawl.env]
+FIRECRAWL_API_KEY = "$FIRECRAWL_API_KEY"
 
 # Notion MCP 配置
 [servers.notion]
@@ -148,11 +164,58 @@ NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
 - `mcp tools [--json]`: 列出所有可用的 MCP 工具
 - `mcp reload`: 重新加载 MCP 配置
 
-### Fetch MCP 使用示例
+### Context7 MCP 使用示例
 
 ```json
 {
-  "name": "mcp_fetch-fetch",
+  "name": "mcp_context7-resolve-library-id",
+  "arguments": {
+    "libraryName": "react"
+  }
+}
+```
+
+```json
+{
+  "name": "mcp_context7-get-library-docs",
+  "arguments": {
+    "context7CompatibleLibraryID": "/facebook/react",
+    "topic": "hooks",
+    "tokens": 5000
+  }
+}
+```
+
+### Firecrawl MCP 使用示例
+
+```json
+{
+  "name": "mcp_firecrawl-firecrawl_scrape",
+  "arguments": {
+    "url": "https://example.com",
+    "formats": ["markdown"],
+    "onlyMainContent": true
+  }
+}
+```
+
+```json
+{
+  "name": "mcp_firecrawl-firecrawl_search",
+  "arguments": {
+    "query": "最新 AI 研究论文",
+    "limit": 5,
+    "scrapeOptions": {
+      "formats": ["markdown"],
+      "onlyMainContent": true
+    }
+  }
+}
+```
+
+```json
+{
+  "name": "mcp_firecrawl-firecrawl_map",
   "arguments": {
     "url": "https://example.com"
   }
@@ -183,12 +246,13 @@ NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
 
 ## 工具参数说明
 
-### Fetch MCP
-1. `fetch`: 从 URL 获取内容
-   - `url` (string, required): 要获取的 URL
-   - `method` (string, optional): HTTP 方法，默认为 "GET"
-   - `headers` (object, optional): 请求头
-   - `body` (string, optional): 请求体
+### Context7 MCP
+1. `resolve-library-id`: 解析库名称获取 Context7 兼容的库 ID
+   - `libraryName` (string, required): 库名称（如 "react", "vue" 等）
+2. `get-library-docs`: 获取库的最新文档和代码示例
+   - `context7CompatibleLibraryID` (string, required): Context7 兼容的库 ID（如 "/facebook/react"）
+   - `topic` (string, optional): 特定主题（如 "hooks", "routing"）
+   - `tokens` (number, optional): 最大 token 数，默认 5000
 
 ### Filesystem MCP
 1. `read-file`: 读取文件内容
@@ -202,13 +266,46 @@ NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
 2. `get-page`: 获取页面内容
    - `page_id` (string, required): 页面 ID
 
+### Firecrawl MCP
+用于网页抓取、爬取与发现、搜索与内容抽取
+- 工具名称前缀: `firecrawl:`
+- 主要功能: 网页抓取、网站爬取、内容搜索、结构化数据提取
+1. `firecrawl_scrape`: 抓取单个网页内容
+   - `url` (string, required): 要抓取的 URL
+   - `formats` (array, optional): 输出格式，如 ["markdown", "html"]
+   - `onlyMainContent` (boolean, optional): 是否只抓取主要内容
+   - `waitFor` (number, optional): 等待时间（毫秒）
+   - `mobile` (boolean, optional): 是否使用移动设备模式
+2. `firecrawl_search`: 搜索网页内容
+   - `query` (string, required): 搜索查询
+   - `limit` (number, optional): 结果数量限制
+   - `scrapeOptions` (object, optional): 抓取选项
+3. `firecrawl_map`: 映射网站链接
+   - `url` (string, required): 网站 URL
+   - `search` (string, optional): 搜索关键词
+   - `limit` (number, optional): 链接数量限制
+4. `firecrawl_crawl`: 爬取网站内容
+   - `url` (string, required): 网站 URL
+   - `maxDepth` (number, optional): 最大爬取深度
+   - `limit` (number, optional): 页面数量限制
+   - `allowExternalLinks` (boolean, optional): 是否允许外部链接
+5. `firecrawl_extract`: 提取结构化数据
+   - `urls` (array, required): URL 数组
+   - `prompt` (string, required): 提取提示
+   - `schema` (object, optional): 数据结构定义
+6. `firecrawl_batch_scrape`: 批量抓取
+   - `urls` (array, required): URL 数组
+   - `options` (object, optional): 抓取选项
+
 ## 注意事项
 
-1. 确保系统已安装 Node.js 和 npm (版本 16+)
-2. 网络连接正常，能够访问目标服务
+1. 确保系统已安装 Node.js 和 npm (版本 18+)
+2. 网络连接正常，能够访问各种服务
 3. 遵守各服务的使用条款和限制
-4. Filesystem MCP 限制访问目录为项目内的 `./data` 文件夹
-5. Notion MCP 需要配置 OAuth 凭据
+4. Context7 MCP 需要有效的 API Key
+5. Firecrawl MCP 需要有效的 API Key（从 https://www.firecrawl.dev/app/api-keys 获取）
+6. Filesystem MCP 限制访问目录为项目内的 `./data` 文件夹
+7. Notion MCP 需要配置 OAuth 凭据
 
 ## 故障排查
 
@@ -223,7 +320,16 @@ NOTION_REDIRECT_URI = "$NOTION_REDIRECT_URI"
    - 检查 `config/mcp/mcp.toml` 配置是否正确
    - 确认 MCP 服务器命令可以正常执行
 
-3. **Notion MCP 认证失败**:
+3. **Context7 MCP 认证失败**:
+   - 检查环境变量中的 CONTEXT7_API_KEY
+   - 确认 API Key 有效且有足够权限
+   - 检查网络连接是否正常
+4. **Firecrawl MCP 认证失败**:
+   - 检查环境变量中的 FIRECRAWL_API_KEY
+   - 确认 API Key 有效且有足够权限
+   - 检查网络连接是否正常
+   - 确认 API Key 格式正确（通常以 "fc-" 开头）
+5. **Notion MCP 认证失败**:
    - 检查环境变量中的 Notion 凭据
    - 确认 OAuth 配置正确
    - 首次使用需要完成 OAuth 授权流程
