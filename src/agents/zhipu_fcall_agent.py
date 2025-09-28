@@ -1,7 +1,7 @@
 """
 智谱AI Function Calling Agent
 
-基于智谱AI原生Function Calling API实现的Agent，专门用于glm-4.5模型。
+基于智谱AI原生Function Calling API实现的Agent，支持glm-4.5和glm-4.5-flash模型。
 """
 
 import json
@@ -25,7 +25,7 @@ class ZhipuFunctionCallingAgent:
     
     def __init__(
         self,
-        model: str = "glm-4.5",
+        model: str = "glm-4.5-flash",
         temperature: float = 0.1,
         verbose: bool = False,
         max_iterations: int = 10,
@@ -37,7 +37,7 @@ class ZhipuFunctionCallingAgent:
         初始化智谱AI Function Calling Agent
         
         Args:
-            model: 模型名称，仅支持glm-4.5
+            model: 模型名称，支持glm-4.5和glm-4.5-flash
             temperature: 温度参数
             verbose: 是否显示详细日志
             max_iterations: 最大迭代次数
@@ -45,8 +45,8 @@ class ZhipuFunctionCallingAgent:
             global_memory_manager: 全局记忆管理器
             **kwargs: 其他参数
         """
-        if model != "glm-4.5":
-            raise ValueError("ZhipuFunctionCallingAgent仅支持glm-4.5模型")
+        if model not in ["glm-4.5", "glm-4.5-flash"]:
+            raise ValueError("ZhipuFunctionCallingAgent仅支持glm-4.5和glm-4.5-flash模型")
         
         self.model = model
         self.temperature = temperature
@@ -131,7 +131,7 @@ class ZhipuFunctionCallingAgent:
             self.tools.extend(connector_tools)
             logger.info(f"Connector tools loaded: {len(connector_tools)} tools")
             
-            # 1.1 聚合全局 MCP 工具（如 Notion MCP、Filesystem 等）
+            # 聚合全局 MCP 工具（如 Notion MCP、Filesystem 等）
             try:
                 from ..tools.mcp import GlobalMCPManager
                 await GlobalMCPManager.initialize()

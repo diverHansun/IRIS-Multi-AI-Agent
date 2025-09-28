@@ -3,7 +3,7 @@
   "providers": {
     "ZHIPU": {
       "name": "智谱AI",
-      "default_model": "glm-4.5",
+      "default_model": "glm-4.5-flash",
       "mode_defaults": {
         "llm": {
           "temperature": 0.1,
@@ -61,6 +61,31 @@
             "agent": {
               "max_iterations": 15,
               "max_execution_time": 180
+            }
+          }
+        },
+        "glm-4.5-flash": {
+          "name": "GLM-4.5-Flash",
+          "description": "智谱AI免费闪电版模型，支持128K上下文，提供快速推理和工具调用",
+          "recommended": true,
+          "model_features": [
+            "思考模式",
+            "即时响应模式",
+            "128K长上下文",
+            "免费使用"
+          ],
+          "supports_tools": true,
+          "max_tokens": 96000,
+          "context_window": 128000,
+          "mode_overrides": {
+            "llm": {
+              "thinking_mode": true,
+              "temperature": 0.5
+            },
+            "agent": {
+              "max_iterations": 15,
+              "max_execution_time": 200,
+              "temperature": 0.1
             }
           }
         }

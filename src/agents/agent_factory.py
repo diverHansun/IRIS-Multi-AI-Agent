@@ -93,8 +93,8 @@ class AgentFactory:
         
         try:
             if provider == LLMProvider.ZHIPU:
-                # glm-4.5 使用原生 Function Calling Agent，其余保持 ReAct
-                if model == "glm-4.5":
+                # glm-4.5 和 glm-4.5-flash 使用原生 Function Calling Agent，其余保持 ReAct
+                if model in ["glm-4.5", "glm-4.5-flash"]:
                     from .zhipu_fcall_agent import build_zhipu_fcall_agent
                     agent = await build_zhipu_fcall_agent(
                         model=model,

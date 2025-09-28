@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ZhipuAILLM:
-    """智谱AI语言模型封装类，支持GLM-4.5新特性"""
+    """智谱AI语言模型封装类，支持GLM-4.5/GLM-4.5-Flash系列特性"""
     
     def __init__(self, 
                  model: str = "glm-4-plus",
@@ -55,24 +55,27 @@ class ZhipuAILLM:
         self.thinking_mode = thinking_mode
         self.llm = None  # 添加 llm 属性
         
-        # GLM-4.5优化配置
-        if model == "glm-4.5":
-            # 为GLM-4.5设置更大的默认max_tokens
+        # GLM-4.5/GLM-4.5-Flash优化配置
+        if model in ["glm-4.5", "glm-4.5-flash"]:
+            # 为GLM-4.5系列设置更大的默认max_tokens
             if max_tokens == 2048:  # 如果是默认值，则优化
-                self.max_tokens = 8192  # GLM-4.5默认更大的输出
-            # GLM-4.5自动启用思考模式以获得更好的推理效果
+                if model == "glm-4.5-flash":
+                    self.max_tokens = 96000  # GLM-4.5-Flash支持96K输出
+                else:
+                    self.max_tokens = 8192  # GLM-4.5默认更大的输出
+            # GLM-4.5系列自动启用思考模式以获得更好的推理效果
             if not thinking_mode and 'thinking_mode' not in kwargs:
                 self.thinking_mode = True
-                logger.info("GLM-4.5自动启用思考模式以获得更好的推理效果")
+                logger.info(f"{model}自动启用思考模式以获得更好的推理效果")
         
         # 设置环境变量（备用）
         os.environ["ZHIPU_API_KEY"] = api_key
         
         # 注意: 不再强制删除代理设置，由用户的代理配置决定网络路由
         
-        # 为GLM-4.5准备特殊参数
+        # 为GLM-4.5系列准备特殊参数
         llm_kwargs = kwargs.copy()
-        if model == "glm-4.5" and self.thinking_mode:
+        if model in ["glm-4.5", "glm-4.5-flash"] and self.thinking_mode:
             # GLM-4.5思考模式相关参数 - 注意：具体参数名可能需要根据langchain-community的实现调整
             llm_kwargs.update({
                 "thinking": True,  # 尝试思考模式参数
@@ -146,10 +149,13 @@ def create_zhipu_llm(model: str = "glm-4-plus", streaming: bool = False,
     # 设置环境变量
     os.environ["ZHIPU_API_KEY"] = api_key
     
-    # GLM-4.5优化配置
-    if model == "glm-4.5":
+    # GLM-4.5系列优化配置
+    if model in ["glm-4.5", "glm-4.5-flash"]:
         if 'max_tokens' not in kwargs:
-            kwargs['max_tokens'] = 8192  # GLM-4.5默认更大的输出
+            if model == "glm-4.5-flash":
+                kwargs['max_tokens'] = 96000  # GLM-4.5-Flash支持96K输出
+            else:
+                kwargs['max_tokens'] = 8192  # GLM-4.5默认更大的输出
         if thinking_mode:
             kwargs.update({
                 "thinking": True,
