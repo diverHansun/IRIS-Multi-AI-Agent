@@ -74,6 +74,16 @@
       "deep_crawl_strategy": null,
       "link_preview_config": null,
       "url_matcher": null,
-      "match_mode": "or"
+      "match_mode": "or",
+      "return_format": "markdown",
+      "content_filter_type": null,
+      "pruning_threshold": 0.48,
+      "pruning_threshold_type": "fixed",
+      "min_word_threshold": 30,
+      "bm25_threshold": 1.0,
+      "user_query": null,
+      "max_token_length": null,
+      "prefer_fit_markdown": false,
+      "extract_main_content": false
     }
   }

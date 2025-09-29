@@ -112,6 +112,16 @@ Crawl4AI Docker 服务提供以下 REST 端点：
   - `adjust_viewport_to_content`: 是否根据页面内容维度调整视口
   - `browser_config`: 浏览器配置
   - `crawler_config`: 爬虫配置
+  - **LLM 优化参数**:
+    - `content_filter_type`: 内容过滤器类型（"pruning"、"bm25" 或 "none"）
+    - `pruning_threshold`: pruning 过滤器的内容保留阈值 (0-1)
+    - `pruning_threshold_type`: 阈值类型（"fixed" 或 "dynamic"）
+    - `min_word_threshold`: 内容块的最小词数要求
+    - `bm25_threshold`: BM25 相关性阈值
+    - `user_query`: BM25 内容过滤的查询关键词
+    - `max_token_length`: LLM 处理的最大 token 长度
+    - `prefer_fit_markdown`: 优先使用 fit_markdown 而非 raw_markdown
+    - `extract_main_content`: 仅提取主要内容区域
 
 #### 3.2.2 Crawl4AIStreamTool
 - **工具名称**: `crawl4ai_stream`
@@ -208,7 +218,17 @@ Crawl4AI 连接器支持分层配置系统，优先级从高到低：
       "deep_crawl_strategy": null,
       "link_preview_config": null,
       "url_matcher": null,
-      "match_mode": "or"
+      "match_mode": "or",
+      "return_format": "markdown",
+      "content_filter_type": null,
+      "pruning_threshold": null,
+      "pruning_threshold_type": null,
+      "min_word_threshold": null,
+      "bm25_threshold": null,
+      "user_query": null,
+      "max_token_length": null,
+      "prefer_fit_markdown": null,
+      "extract_main_content": null
     }
   }
 ```
@@ -250,6 +270,23 @@ Crawl4AI 连接器支持分层配置系统，优先级从高到低：
 - `exclude_external_links`: 从结果中排除外部链接
 - `exclude_social_media_links`: 排除社交媒体域名链接
 - `exclude_domains`: 要排除的特定域名列表
+
+#### 4.3.7 LLM 优化参数
+这些参数专为 LLM 使用场景设计，提供智能内容过滤和提取：
+
+- `content_filter_type`: 内容过滤器类型
+  - `"pruning"`: 基于内容密度、链接密度和标签重要性的智能过滤
+  - `"bm25"`: 基于查询关键词的相关性过滤
+  - `null` 或 `"none"`: 不使用智能过滤
+- `pruning_threshold`: pruning 过滤器的保留阈值（0-1，推荐 0.48）
+- `pruning_threshold_type`: 阈值类型（"fixed" 固定阈值，"dynamic" 动态阈值）
+- `min_word_threshold`: 内容块的最小词数要求
+- `bm25_threshold`: BM25 相关性阈值
+- `user_query`: BM25 过滤的查询关键词
+- `max_token_length`: 限制输出内容的最大 token 长度
+- `prefer_fit_markdown`: 优先返回 fit_markdown（过滤后的内容）而非 raw_markdown
+- `extract_main_content`: 专注提取主要内容区域
+- `return_format`: 返回格式（"markdown" 或 "json"）
 
 ## 5. 错误处理 🛡️
 
@@ -312,6 +349,54 @@ crawl_tool = tools[0]  # Crawl4AICrawlTool
 result = await crawl_tool._arun(urls=["https://example.com"], only_text=True)
 ```
 
+### 7.4 LLM 优化用法示例
+
+#### 使用 Pruning 过滤器获取高质量内容
+```python
+result = await crawl_tool._arun(
+    urls=["https://example.com/article"],
+    content_filter_type="pruning",
+    pruning_threshold=0.48,
+    pruning_threshold_type="fixed",
+    min_word_threshold=30,
+    prefer_fit_markdown=True,
+    extract_main_content=True,
+    only_text=True
+)
+```
+
+#### 使用 BM25 过滤器获取查询相关内容
+```python
+result = await crawl_tool._arun(
+    urls=["https://example.com/search-results"],
+    content_filter_type="bm25",
+    user_query="artificial intelligence machine learning",
+    bm25_threshold=1.0,
+    max_token_length=50000,
+    prefer_fit_markdown=True
+)
+```
+
+#### 为 LLM 优化的配置示例
+```python
+llm_optimized_config = {
+    "content_filter_type": "pruning",
+    "pruning_threshold": 0.48,
+    "prefer_fit_markdown": True,
+    "extract_main_content": True,
+    "max_token_length": 100000,
+    "only_text": True,
+    "excluded_tags": ["nav", "footer", "aside", "script", "style", "header"],
+    "remove_overlay_elements": True,
+    "exclude_all_images": True
+}
+
+result = await crawl_tool._arun(
+    urls=["https://example.com"],
+    **llm_optimized_config
+)
+```
+
 ### 7.2 配置连接器
 1. 复制示例配置文件：
    ```bash
@@ -332,12 +417,27 @@ result = await crawl_tool._arun(urls=["https://example.com"], only_text=True)
 ## 8. 最佳实践 🎯
 
 ### 8.1 LLM 友好内容提取
-配置系统启用最佳 LLM 友好内容提取：
+
+#### 基础优化
 - 通过 `only_text: true` 过滤获取干净的文本内容
 - 通过 `excluded_tags` 过滤元素，排除导航、广告和非内容元素
 - 通过 `java_script_enabled: true` 启用 JavaScript 支持以加载动态内容
 - 通过 `wait_for` 设置等待条件，确保内容在提取前完全加载
 - 通过 `scan_full_page: true` 支持单页应用程序的全页滚动
+
+#### 高级 LLM 优化
+- **智能内容过滤**: 使用 `content_filter_type: "pruning"` 自动移除低质量内容
+- **内容质量控制**: 设置 `pruning_threshold: 0.48` 保留高质量内容
+- **主要内容提取**: 启用 `extract_main_content: true` 专注于核心内容
+- **结构化输出**: 设置 `prefer_fit_markdown: true` 获取过滤后的结构化内容
+- **Token 控制**: 配置 `max_token_length` 限制内容长度，避免超出 LLM 上下文窗口
+- **查询相关过滤**: 使用 `content_filter_type: "bm25"` 配合 `user_query` 获取查询相关内容
+
+#### 内容过滤策略选择
+1. **通用场景**: 使用 `pruning` 过滤器进行全面的内容清理
+2. **特定查询**: 使用 `bm25` 过滤器提取与查询相关的内容
+3. **高质量要求**: 结合 `pruning_threshold: 0.48` 和 `min_word_threshold: 30`
+4. **Token 敏感场景**: 设置 `max_token_length` 和 `prefer_fit_markdown: true`
 
 ### 8.2 性能优化
 - 合理设置超时时间，避免长时间等待

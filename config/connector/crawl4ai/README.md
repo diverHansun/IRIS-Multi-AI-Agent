@@ -102,6 +102,27 @@ Crawl4AI 连接器提供对 Crawl4AI Docker 服务 API 的访问，该服务提�
 | `exclude_domains` | array | `[]` | 要排除的特定域名 |
 | `score_links` | boolean | `false` | 计算链接的质量分数 |
 
+### 返回格式配置
+| 参数 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `return_format` | string | `"markdown"` | 返回格式："markdown" 返回清理后的markdown内容，"json" 返回完整的结构化数据 |
+
+### LLM 优化参数
+
+这些参数专为 LLM 使用场景优化，提供更精准的内容过滤和提取：
+
+| 参数 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `content_filter_type` | string or null | `null` | 内容过滤器类型："pruning"、"bm25" 或 "none" |
+| `pruning_threshold` | float or null | `null` | pruning 过滤器的内容保留阈值 (0-1) |
+| `pruning_threshold_type` | string or null | `null` | 阈值类型："fixed" 或 "dynamic" |
+| `min_word_threshold` | int or null | `null` | 内容块的最小词数要求 |
+| `bm25_threshold` | float or null | `null` | BM25 相关性阈值 |
+| `user_query` | string or null | `null` | BM25 内容过滤的查询关键词 |
+| `max_token_length` | int or null | `null` | LLM 处理的最大 token 长度 |
+| `prefer_fit_markdown` | boolean or null | `null` | 优先使用 fit_markdown 而非 raw_markdown |
+| `extract_main_content` | boolean or null | `null` | 仅提取主要内容区域 |
+
 ## 示例配置
 
 完整的配置示例请参考 `config_example.json` 文件，该文件包含了所有可用参数的默认值。
@@ -138,6 +159,41 @@ Crawl4AI 连接器提供对 Crawl4AI Docker 服务 API 的访问，该服务提�
 }
 ```
 
+### LLM 优化配置示例
+
+针对 LLM 使用场景的优化配置：
+
+```json
+{
+  "default": {
+    "base_url": "http://localhost:11235",
+    "timeout": 90,
+    "stream_timeout": 180,
+    "retry_attempts": 3
+  },
+  "crawl": {
+    "word_count_threshold": 100,
+    "only_text": true,
+    "excluded_tags": ["nav", "footer", "aside", "script", "style", "header", "advertisement"],
+    "remove_forms": true,
+    "content_filter_type": "pruning",
+    "pruning_threshold": 0.48,
+    "pruning_threshold_type": "fixed",
+    "min_word_threshold": 30,
+    "prefer_fit_markdown": true,
+    "extract_main_content": true,
+    "max_token_length": 100000,
+    "wait_until": "domcontentloaded",
+    "page_timeout": 60000,
+    "remove_overlay_elements": true,
+    "exclude_all_images": true,
+    "exclude_external_links": true,
+    "cache_mode": "enabled",
+    "return_format": "markdown"
+  }
+}
+```
+
 > **注意**: 实际使用时请复制 `config_example.json` 为 `config.json` 并根据需要调整参数。
 
 ## 运行时使用参数
@@ -159,11 +215,26 @@ result = await crawl4ai_crawl(
 
 为了获得最佳的 LLM 就绪内容提取：
 
+### 基础优化
 1. **内容过滤**: 启用 `only_text: true` 以获得干净的文本内容
 2. **元素移除**: 使用 `excluded_tags` 排除导航、广告和其他非内容元素
 3. **JavaScript**: 保持 `java_script_enabled: true` 以加载动态内容
 4. **等待条件**: 使用 `wait_for` 确保内容在提取前完全加载
 5. **全页滚动**: 对单页应用程序或无限滚动内容启用 `scan_full_page: true`
+
+### 高级 LLM 优化
+6. **智能过滤**: 使用 `content_filter_type: "pruning"` 自动移除低质量内容
+7. **内容质量控制**: 设置 `pruning_threshold: 0.48` 保留高质量内容
+8. **主要内容提取**: 启用 `extract_main_content: true` 专注于核心内容
+9. **Markdown 优化**: 设置 `prefer_fit_markdown: true` 获取结构化的内容
+10. **Token 限制**: 配置 `max_token_length` 控制内容长度
+11. **查询相关过滤**: 使用 `content_filter_type: "bm25"` 和 `user_query` 获取相关内容
+12. **返回格式选择**: 设置 `return_format: "markdown"` 获取LLM友好的文本，或 `"json"` 获取完整结构化数据
+
+### 内容过滤策略
+- **Pruning 过滤器**: 基于内容密度、链接密度和标签重要性自动筛选
+- **BM25 过滤器**: 基于查询关键词的相关性排序和过滤
+- **混合策略**: 先使用 pruning 移除噪音，再用 BM25 提取相关内容
 
 ## 故障排除
 
@@ -173,6 +244,7 @@ result = await crawl4ai_crawl(
 - **JavaScript 未执行**: 确保 `java_script_enabled: true` 和适当的 `wait_until`
 - **动态内容未加载**: 使用 `wait_for` 参数等待特定元素
 - **性能问题**: 调整 `semaphore_count` 和缓存设置
+- **返回格式问题**: 检查 `return_format` 设置，`"markdown"` 返回清理后的文本，`"json"` 返回完整数据
 
 ### 验证配置：
 

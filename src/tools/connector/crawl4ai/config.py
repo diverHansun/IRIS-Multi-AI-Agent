@@ -24,8 +24,6 @@ class Crawl4AIConfig:
         possible_paths = [
             os.getenv("CRAWL4AI_CONFIG_PATH"),
             "config/connector/crawl4ai/config.json",
-            "config/crawl4ai.json",
-            "src/config/crawl4ai.json"
         ]
         
         for path in possible_paths:
@@ -86,6 +84,18 @@ class Crawl4AIConfig:
             self.override_navigator: bool = crawl_config.get("override_navigator", False)
             self.magic: bool = crawl_config.get("magic", False)
             self.adjust_viewport_to_content: bool = crawl_config.get("adjust_viewport_to_content", False)
+            self.return_format: str = crawl_config.get("return_format", "markdown")  # Default to markdown
+
+            # LLM-focused parameters
+            self.content_filter_type: Optional[str] = crawl_config.get("content_filter_type")
+            self.pruning_threshold: Optional[float] = crawl_config.get("pruning_threshold")
+            self.pruning_threshold_type: Optional[str] = crawl_config.get("pruning_threshold_type")
+            self.min_word_threshold: Optional[int] = crawl_config.get("min_word_threshold")
+            self.bm25_threshold: Optional[float] = crawl_config.get("bm25_threshold")
+            self.user_query: Optional[str] = crawl_config.get("user_query")
+            self.max_token_length: Optional[int] = crawl_config.get("max_token_length")
+            self.prefer_fit_markdown: Optional[bool] = crawl_config.get("prefer_fit_markdown")
+            self.extract_main_content: Optional[bool] = crawl_config.get("extract_main_content")
         else:
             # Fallback to environment variables or defaults
             self.base_url: str = os.getenv("CRAWL4AI_BASE_URL", "http://localhost:11235")
@@ -93,6 +103,7 @@ class Crawl4AIConfig:
             self.stream_timeout: int = int(os.getenv("CRAWL4AI_STREAM_TIMEOUT", "120"))
             self.token: Optional[str] = os.getenv("CRAWL4AI_TOKEN")
             self.retry_attempts: int = int(os.getenv("CRAWL4AI_RETRY_ATTEMPTS", "2"))
+            self.return_format: str = os.getenv("CRAWL4AI_RETURN_FORMAT", "markdown")  # Default to markdown
     
     def _apply_env_overrides(self):
         """Override config values with environment variables"""
@@ -101,3 +112,4 @@ class Crawl4AIConfig:
         self.stream_timeout = int(os.getenv("CRAWL4AI_STREAM_TIMEOUT", str(self.stream_timeout)))
         self.token = os.getenv("CRAWL4AI_TOKEN", self.token)
         self.retry_attempts = int(os.getenv("CRAWL4AI_RETRY_ATTEMPTS", str(self.retry_attempts)))
+        self.return_format = os.getenv("CRAWL4AI_RETURN_FORMAT", self.return_format)
