@@ -4,7 +4,10 @@ This module contains the main CLI loop and command routing.
 """
 
 import asyncio
+import logging
 from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 # Import the IRIS logo display function
 from src.ui.logo.logo import display_logo,display_logo_intro
@@ -275,10 +278,30 @@ async def run():
                     command_name = extract_command_name(command)
 
                     if command_name.lower() in {"exit", "quit"}:
+                        # Clean up resources gracefully
+                        ctx.console.print("[dim]Cleaning up resources...[/]")
+
                         # Clean up Dify controller resources
                         if ctx.dify_control:
-                            await ctx.dify_control.cleanup()
-                            ctx.dify_control = None
+                            try:
+                                await ctx.dify_control.cleanup()
+                                ctx.dify_control = None
+                            except Exception as e:
+                                logger.warning(f"Error during Dify cleanup: {e}")
+
+                        # Cancel any pending background tasks
+                        try:
+                            pending = asyncio.all_tasks()
+                            current_task = asyncio.current_task()
+                            # Cancel all tasks except the current one
+                            for task in pending:
+                                if task is not current_task and not task.done():
+                                    task.cancel()
+                            # Wait briefly for tasks to cancel
+                            await asyncio.sleep(0.1)
+                        except Exception as e:
+                            logger.warning(f"Error during task cleanup: {e}")
+
                         ctx.console.print("Goodbye!")
                         break
 
@@ -426,7 +449,12 @@ async def run():
                                 ctx.dify_mode = True
                                 ctx.console.print("[green]Switched to Dify mode[/]")
                                 ctx.console.print("[dim]Features: File upload | Streaming conversation | Cloud AI[/]")
-                                ctx.console.print("[dim]Commands: /upload (upload files) | /reset (reset session)[/]")
+                                ctx.console.print("[dim]Commands:[/]")
+                                ctx.console.print("[dim]  /upload           - Upload files (support multi-select)[/]")
+                                ctx.console.print("[dim]  /files            - List uploaded files[/]")
+                                ctx.console.print("[dim]  /files remove <#> - Remove file by index[/]")
+                                ctx.console.print("[dim]  /files clear      - Clear all files[/]")
+                                ctx.console.print("[dim]  /reset            - Reset conversation[/]")
                             else:
                                 ctx.console.print(f"[red]Switch failed: {result['message']}[/]")
                             continue
@@ -460,11 +488,62 @@ async def run():
                                 await ctx.dify_control.reset_conversation()
                             continue
 
+                        # Enhanced /files command with subcommands
                         if command_name.lower() in {"files", "listfiles"}:
-                            if ctx.dify_control:
+                            if not ctx.dify_control:
+                                ctx.console.print("[yellow]Dify client not initialized[/]")
+                                continue
+
+                            # Parse subcommand
+                            subcommand_parts = args.split() if args else []
+                            subcommand = subcommand_parts[0].lower() if subcommand_parts else "list"
+
+                            if subcommand == "list" or not subcommand_parts:
+                                # List all files
                                 await ctx.dify_control.list_files()
+
+                            elif subcommand == "clear":
+                                # Clear all files
+                                await ctx.dify_control.clear_files()
+
+                            elif subcommand == "remove":
+                                # Remove specific files by index
+                                if len(subcommand_parts) < 2:
+                                    ctx.console.print("[yellow]Usage: /files remove <index> [index2] [index3] ...[/]")
+                                    ctx.console.print("[dim]Example: /files remove 2[/]")
+                                    ctx.console.print("[dim]Example: /files remove 1 3 5[/]")
+                                    continue
+
+                                # Parse indices
+                                indices = []
+                                for idx_str in subcommand_parts[1:]:
+                                    try:
+                                        idx = int(idx_str)
+                                        indices.append(idx)
+                                    except ValueError:
+                                        ctx.console.print(f"[yellow]Invalid index: {idx_str}[/]")
+
+                                if not indices:
+                                    ctx.console.print("[yellow]No valid indices provided[/]")
+                                    continue
+
+                                # Remove files
+                                if len(indices) == 1:
+                                    await ctx.dify_control.remove_file(indices[0])
+                                else:
+                                    await ctx.dify_control.remove_files_by_indices(indices)
+
+                            else:
+                                ctx.console.print(f"[yellow]Unknown subcommand: {subcommand}[/]")
+                                ctx.console.print("[yellow]Usage: /files [list|clear|remove <index>...][/]")
+                                ctx.console.print("[dim]  /files          - List all files[/]")
+                                ctx.console.print("[dim]  /files list     - List all files[/]")
+                                ctx.console.print("[dim]  /files clear    - Clear all files[/]")
+                                ctx.console.print("[dim]  /files remove 2 - Remove file #2[/]")
+
                             continue
 
+                        # Deprecated: kept for backward compatibility
                         if command_name.lower() == "clearfiles":
                             if ctx.dify_control:
                                 await ctx.dify_control.clear_files()
@@ -612,7 +691,14 @@ async def run():
 
 
             except KeyboardInterrupt:
-                ctx.console.print("\n[yellow]Goodbye![/]")
+                ctx.console.print("\n[yellow]Interrupted. Cleaning up...[/]")
+                # Clean up Dify resources on interrupt
+                if ctx.dify_control:
+                    try:
+                        await ctx.dify_control.cleanup()
+                    except Exception as e:
+                        logger.warning(f"Error during interrupt cleanup: {e}")
+                ctx.console.print("Goodbye!")
                 break
             except Exception as e:
                 ctx.console.print(f"[bold red]Error: {e}")
@@ -620,3 +706,10 @@ async def run():
     except Exception as e:
         ctx.console.print(f"[bold red]Agent initialization failed: {e}[/]")
         ctx.console.print("Please check your API keys and network connection")
+    finally:
+        # Final cleanup - ensure Dify resources are released
+        if hasattr(ctx, 'dify_control') and ctx.dify_control:
+            try:
+                await ctx.dify_control.cleanup()
+            except Exception as e:
+                logger.warning(f"Error during final cleanup: {e}")

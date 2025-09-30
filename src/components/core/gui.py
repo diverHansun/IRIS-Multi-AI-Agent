@@ -75,13 +75,24 @@ Cloud AI Features:
 • Built-in conversation memory
 
 Available Commands:
-• /upload - Upload files for analysis (files are used once in next conversation)
-• /files - List currently pending files for next conversation
-• /clearfiles - Clear pending files without using them
-• /reset - Reset conversation (clear memory)
-• /reconnect - Reconnect to Dify service (force reinitialize connection)
-• /info - Show Dify connection status and uploaded files
-• /switch dify - Exit Dify mode and return to local LLM modes
+
+📤 File Management:
+• /upload              - Upload files (support multi-select dialog or command line)
+                         Example: /upload file1.pdf file2.png
+• /files               - List all pending files with details
+• /files remove <#>    - Remove specific file(s) by index number
+                         Example: /files remove 2
+                         Example: /files remove 1 3 5
+• /files clear         - Clear all pending files without using them
+
+💬 Conversation:
+• /reset               - Reset conversation (clear memory and files)
+• /reconnect           - Reconnect to Dify service (force reinitialize)
+• /info                - Show Dify connection status and file list
+
+🔄 Mode Switch:
+• /switch <provider>   - Exit Dify mode and switch to local LLM
+                         Example: /switch openai gpt-4o-mini
 
 File Support:
 • Documents: .txt, .md, .pdf, .docx, .xlsx, .csv, .html, .xml, .epub

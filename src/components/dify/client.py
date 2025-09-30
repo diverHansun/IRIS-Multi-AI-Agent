@@ -296,7 +296,15 @@ class DifyClient:
             return f"文件上传失败: {status_code}, {error_text}"
 
     async def close(self):
-        """关闭客户端"""
-        if self._session and not self._session.closed:
-            await self._session.close()
+        """关闭客户端并清理资源"""
+        try:
+            if self._session and not self._session.closed:
+                # 取消所有挂起的请求
+                await self._session.close()
+                # 等待连接器清理完成
+                await asyncio.sleep(0.1)
+                self._session = None
+                logger.debug("Dify client session closed successfully")
+        except Exception as e:
+            logger.warning(f"Error during client session close: {e}")
             self._session = None

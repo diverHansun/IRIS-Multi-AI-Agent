@@ -7,7 +7,7 @@ Dify 控制模块
 import os
 import json
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional,List
 from pathlib import Path
 from rich.console import Console
 import logging
@@ -282,11 +282,11 @@ class DifyControl:
     async def handle_upload(self, query: str, ctx) -> Dict[str, Any]:
         """
         处理文件上传命令
-        
+
         Args:
             query: 上传命令
             ctx: 应用上下文
-            
+
         Returns:
             处理结果
         """
@@ -295,7 +295,7 @@ class DifyControl:
                 "type": "error",
                 "message": "Dify 客户端未初始化，请先执行 'switch dify'"
             }
-        
+
         result = await handle_upload_command(
             ctx=ctx,
             query=query,
@@ -303,23 +303,41 @@ class DifyControl:
             console=self.console,
             config=self.config
         )
-        
+
         # 如果上传成功，将文件信息添加到列表中
-        if result.get("type") == "success" and "file_info" in result:
-            file_info = result["file_info"]
-            
-            # 根据文件扩展名判断类型
-            file_extension = file_info.get('extension', '').lower()
-            file_type = "image" if file_extension in ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] else "document"
-            
-            # 添加文件到上传列表，格式为 Dify 要求的格式
-            self.uploaded_files.append({
-                "type": file_type,
-                "transfer_method": "remote_url",
-                "upload_file_id": file_info.get("id")
-            })
-            self.console.print(f"[dim]文件已添加到对话上下文: {file_info.get('name', 'Unknown')} (类型: {file_type}) - 将在下次对话中使用[/dim]")
-        
+        if result.get("type") == "success" and "uploaded_files" in result:
+            uploaded_files = result["uploaded_files"]
+
+            for file_result in uploaded_files:
+                file_info = file_result.get('raw_response', {})
+
+                # 根据文件扩展名或返回类型判断类型
+                file_extension = file_info.get('extension', '').lower()
+                file_type = file_result.get('type', 'document')
+
+                if not file_type or file_type == 'file':
+                    file_type = "image" if file_extension in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'] else "document"
+
+                # 添加文件到上传列表，格式为 Dify 要求的格式，并保存文件名用于显示
+                self.uploaded_files.append({
+                    "type": file_type,
+                    "transfer_method": "remote_url",
+                    "upload_file_id": file_info.get("id") or file_result.get('file_id'),
+                    "filename": file_result.get('filename', 'Unknown'),  # 保存文件名
+                    "size": file_result.get('size', 0)  # 保存文件大小
+                })
+
+            # 显示添加结果
+            if len(uploaded_files) == 1:
+                file_name = uploaded_files[0].get('filename', 'Unknown')
+                file_type = self.uploaded_files[-1]['type']
+                self.console.print(f"[dim]文件已添加到对话上下文: {file_name} (类型: {file_type}) - 将在下次对话中使用[/dim]")
+            else:
+                self.console.print(f"[dim]{len(uploaded_files)} 个文件已添加到对话上下文 - 将在下次对话中使用[/dim]")
+
+            # 显示当前待发送文件总数
+            self.console.print(f"[blue]当前共有 {len(self.uploaded_files)} 个文件待发送[/blue]")
+
         return result
     
     async def get_status(self) -> Dict[str, Any]:
@@ -388,13 +406,100 @@ class DifyControl:
         if not self.uploaded_files:
             self.console.print("[dim]当前没有待发送的文件[/dim]")
             return
-        
+
         self.console.print(f"[blue]当前有 {len(self.uploaded_files)} 个文件待发送：[/blue]")
+
+        total_size = 0
         for i, file_info in enumerate(self.uploaded_files, 1):
             file_type = file_info.get("type", "unknown")
             file_id = file_info.get("upload_file_id", "unknown")
-            self.console.print(f"  {i}. 类型: {file_type} | ID: {file_id}")
-        self.console.print("[dim]这些文件将在下次对话中一次性使用[/dim]")
+            filename = file_info.get("filename", "Unknown")
+            file_size = file_info.get("size", 0)
+            total_size += file_size
+
+            # 格式化文件大小
+            if file_size > 1024 * 1024:
+                size_str = f"{file_size / (1024 * 1024):.1f}MB"
+            elif file_size > 1024:
+                size_str = f"{file_size / 1024:.1f}KB"
+            else:
+                size_str = f"{file_size}B"
+
+            # 使用不同颜色区分文件类型
+            type_color = "cyan" if file_type == "image" else "yellow"
+            self.console.print(f"  [{i}] [{type_color}]{file_type:8}[/{type_color}] {filename} ({size_str})")
+            self.console.print(f"      [dim]ID: {file_id}[/dim]")
+
+        # 显示总大小
+        if total_size > 1024 * 1024:
+            total_size_str = f"{total_size / (1024 * 1024):.1f}MB"
+        elif total_size > 1024:
+            total_size_str = f"{total_size / 1024:.1f}KB"
+        else:
+            total_size_str = f"{total_size}B"
+
+        self.console.print(f"[dim]总大小: {total_size_str}[/dim]")
+        self.console.print("[dim]💡 这些文件将在下次对话中一次性使用，使用后自动清空[/dim]")
+        self.console.print("[dim]💡 使用 '/files remove <序号>' 可以移除指定文件[/dim]")
+
+    async def remove_file(self, index: int) -> bool:
+        """
+        从待发送列表中移除指定序号的文件
+
+        Args:
+            index: 文件序号（从1开始）
+
+        Returns:
+            是否成功移除
+        """
+        if not self.uploaded_files:
+            self.console.print("[yellow]当前没有待发送的文件[/yellow]")
+            return False
+
+        if index < 1 or index > len(self.uploaded_files):
+            self.console.print(f"[red]无效的序号: {index}，有效范围: 1-{len(self.uploaded_files)}[/red]")
+            return False
+
+        # 移除文件（序号从1开始，索引从0开始）
+        removed_file = self.uploaded_files.pop(index - 1)
+        filename = removed_file.get("filename", "Unknown")
+        self.console.print(f"[green]✓ 已移除文件: {filename}[/green]")
+        self.console.print(f"[dim]剩余 {len(self.uploaded_files)} 个文件待发送[/dim]")
+        return True
+
+    async def remove_files_by_indices(self, indices: List[int]) -> Dict[str, Any]:
+        """
+        批量移除多个文件
+
+        Args:
+            indices: 文件序号列表（从1开始）
+
+        Returns:
+            移除结果
+        """
+        if not self.uploaded_files:
+            self.console.print("[yellow]当前没有待发送的文件[/yellow]")
+            return {"removed": 0, "failed": 0}
+
+        # 按降序排序，避免删除时索引错位
+        sorted_indices = sorted(set(indices), reverse=True)
+
+        removed_count = 0
+        failed_count = 0
+
+        for index in sorted_indices:
+            if 1 <= index <= len(self.uploaded_files):
+                removed_file = self.uploaded_files.pop(index - 1)
+                filename = removed_file.get("filename", "Unknown")
+                self.console.print(f"[green] 已移除: {filename}[/green]")
+                removed_count += 1
+            else:
+                self.console.print(f"[yellow] 无效序号: {index}[/yellow]")
+                failed_count += 1
+
+        self.console.print(f"[dim]成功移除 {removed_count} 个文件，剩余 {len(self.uploaded_files)} 个文件待发送[/dim]")
+
+        return {"removed": removed_count, "failed": failed_count}
     
     async def cleanup(self):
         """清理资源"""
