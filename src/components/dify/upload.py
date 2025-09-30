@@ -394,14 +394,14 @@ async def handle_upload_command(
         result = await uploader.upload_file(file_path, user_id)
 
         if result['success']:
-            console.print(f"[green]✅ 上传成功: {result['filename']}[/green]")
+            console.print(f"[green]上传成功: {result['filename']}[/green]")
             console.print(f"[dim]文件ID: {result['file_id']}[/dim]")
 
             # 如果是图片，显示额外信息
             if result.get('type') == 'image':
-                console.print("[dim]💡 图片已上传，可在对话中引用[/dim]")
+                console.print("[dim]提示: 图片已上传，可在对话中引用[/dim]")
             else:
-                console.print("[dim]📄 文档已上传，可在对话中引用[/dim]")
+                console.print("[dim]提示: 文档已上传，可在对话中引用[/dim]")
 
             return {
                 "type": "success",

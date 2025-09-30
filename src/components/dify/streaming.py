@@ -335,13 +335,13 @@ class DifyStreaming:
             
             # 根据错误类型提供具体的解决建议
             if "ConnectionError" in error_type or "TimeoutError" in error_type:
-                self.console.print("[yellow]💡 建议: 检查网络连接或 Dify 服务状态[/yellow]")
+                self.console.print("[yellow]建议: 检查网络连接或 Dify 服务状态[/yellow]")
             elif "JSONDecodeError" in error_type:
-                self.console.print("[yellow]💡 建议: Dify API 响应格式异常，请检查配置[/yellow]")
+                self.console.print("[yellow]建议: Dify API 响应格式异常，请检查配置[/yellow]")
             elif "KeyError" in error_type:
-                self.console.print("[yellow]💡 建议: Dify API 响应字段缺失，可能是版本不兼容[/yellow]")
+                self.console.print("[yellow]建议: Dify API 响应字段缺失，可能是版本不兼容[/yellow]")
             else:
-                self.console.print("[yellow]💡 建议: 请检查 Dify 配置和网络连接[/yellow]")
+                self.console.print("[yellow]建议: 请检查 Dify 配置和网络连接[/yellow]")
             
             logger.error(f"流式输出处理错误: {error_type} - {error_msg}", exc_info=True)
             return None

@@ -157,7 +157,7 @@ async def run():
                 # Dynamic prompt showing current mode
                 if ctx.dify_mode:
                     mode_indicator = "Dify"
-                    stream_indicator = "☁️"
+                    stream_indicator = "[Cloud]"
                 else:
                     mode_indicator = "LLM" if ctx.llm_mode else "Agent"
                     stream_indicator = "[S]" if (ctx.llm_mode and ctx.streaming_enabled) else ""
@@ -562,6 +562,11 @@ async def run():
 
                     # Session commands
                     if command_name.lower() == "clear":
+                        if ctx.dify_mode:
+                            ctx.console.print("[yellow]/clear is not available in Dify mode[/]")
+                            ctx.console.print("[dim]Dify uses cloud-based conversation management. Use '/reset' to reset Dify conversation[/]")
+                            continue
+
                         result = session_control.clear_session(ctx)
                         if result["type"] == "success":
                             ctx.console.print("[green]Current session memory cleared[/]")
@@ -570,6 +575,11 @@ async def run():
                         continue
 
                     if command_name.lower() == "new":
+                        if ctx.dify_mode:
+                            ctx.console.print("[yellow]/new is not available in Dify mode[/]")
+                            ctx.console.print("[dim]Dify uses cloud-based conversation management. Use '/reset' to start a new conversation[/]")
+                            continue
+
                         result = session_control.new_session(ctx)
                         if result["type"] == "success":
                             ctx.console.print(f"[green]{result['message']}[/]")
@@ -577,6 +587,11 @@ async def run():
                         continue
 
                     if command_name.lower() == "delete_session":
+                        if ctx.dify_mode:
+                            ctx.console.print("[yellow]/delete_session is not available in Dify mode[/]")
+                            ctx.console.print("[dim]Dify uses cloud-based conversation management. Session management is handled by Dify platform[/]")
+                            continue
+
                         if args:
                             result = session_control.delete_session(ctx, args)
                             if result["type"] == "success":
@@ -588,6 +603,11 @@ async def run():
                         continue
 
                     if command_name.lower() == "cleanup":
+                        if ctx.dify_mode:
+                            ctx.console.print("[yellow]/cleanup is not available in Dify mode[/]")
+                            ctx.console.print("[dim]Dify uses cloud-based conversation management. No local session files to clean[/]")
+                            continue
+
                         result = session_control.cleanup_sessions(ctx)
                         if result["type"] == "success":
                             ctx.console.print(f"[green]{result['message']}[/]")
@@ -596,12 +616,22 @@ async def run():
                         continue
 
                     if command_name.lower() in {"sessions", "ls"}:
+                        if ctx.dify_mode:
+                            ctx.console.print("[yellow]/sessions is not available in Dify mode[/]")
+                            ctx.console.print("[dim]Dify uses cloud-based conversation management. Sessions are managed on Dify platform[/]")
+                            continue
+
                         result = session_control.list_sessions(ctx)
                         if result["type"] == "list":
                             gui.render_sessions(ctx.console, result["payload"]["sessions"], result["payload"]["current_session_id"])
                         continue
 
                     if command_name.lower() == "restore":
+                        if ctx.dify_mode:
+                            ctx.console.print("[yellow]/restore is not available in Dify mode[/]")
+                            ctx.console.print("[dim]Dify uses cloud-based conversation management. Switch to local mode to restore sessions[/]")
+                            continue
+
                         if args:
                             result = session_control.restore_session(ctx, args)
                             if result["type"] == "success":

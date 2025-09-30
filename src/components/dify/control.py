@@ -439,8 +439,8 @@ class DifyControl:
             total_size_str = f"{total_size}B"
 
         self.console.print(f"[dim]总大小: {total_size_str}[/dim]")
-        self.console.print("[dim]💡 这些文件将在下次对话中一次性使用，使用后自动清空[/dim]")
-        self.console.print("[dim]💡 使用 '/files remove <序号>' 可以移除指定文件[/dim]")
+        self.console.print("[dim]提示: 这些文件将在下次对话中一次性使用，使用后自动清空[/dim]")
+        self.console.print("[dim]提示: 使用 '/files remove <序号>' 可以移除指定文件[/dim]")
 
     async def remove_file(self, index: int) -> bool:
         """
@@ -463,7 +463,7 @@ class DifyControl:
         # 移除文件（序号从1开始，索引从0开始）
         removed_file = self.uploaded_files.pop(index - 1)
         filename = removed_file.get("filename", "Unknown")
-        self.console.print(f"[green]✓ 已移除文件: {filename}[/green]")
+        self.console.print(f"[green]已移除文件: {filename}[/green]")
         self.console.print(f"[dim]剩余 {len(self.uploaded_files)} 个文件待发送[/dim]")
         return True
 
