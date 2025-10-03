@@ -1,286 +1,442 @@
-# Crawl4AI 连接器配置指南
+# Crawl4AI 配置参考手册
 
-本文档介绍了 Crawl4AI 连接器可用的配置选项，该连接器与 Crawl4AI Docker 服务进行交互。
+> 本文档是配置参数的快速参考手册。完整使用教程请参考 [crawl4ai_guide.md](..\..\..\tutorials\connector\crawl4ai\crawl4ai_guide.md)
 
-## 概述
+## 📁 配置文件
 
-Crawl4AI 连接器提供对 Crawl4AI Docker 服务 API 的访问，该服务提供专为 LLM 使用优化的高级网络爬虫功能。连接器允许您配置浏览器和爬虫行为，以获得用于 RAG（检索增强生成）和 AI 代理的干净、结构化内容。
+- **config.json** - 实际使用的配置文件
+- **config_example.json** - 完整配置示例(包含所有参数)
+- **config.template.json** - 简化配置模板(只包含常用参数)
+- **config.json.commented** - 带详细注释的配置说明
 
-## 配置结构
+## 🔄 配置优先级
 
-连接器配置通过以下文件组织：
+参数按以下优先级生效(从高到低):
 
-- `config_example.json`: 示例配置文件，包含所有可用参数的默认值
-- `config.json`: 实际运行时使用的配置文件（需要用户自行创建）
+1. **Agent 调用参数** - 运行时传递的 `browser_config` / `crawler_config` 字典
+2. **config.json** - 配置文件中的设置
+3. **环境变量** - `CRAWL4AI_*` 开头的环境变量
+4. **默认值** - 代码中的默认配置
 
-配置文件包含两个主要部分：
+## 📦 配置结构
 
-- `default`: 基本连接和常规设置
-- `crawl`: 详细的爬虫行为参数
+所有参数通过配置类字典传递:
 
-### 配置设置步骤
+| 配置字典 | 说明 | 状态 | 基于SDK类 |
+|---------|------|------|----------|
+| `default` | 连接配置 | ✅ 使用中 | - |
+| `browser` | 浏览器配置 | ✅ 使用中 | BrowserConfig |
+| `crawler` | 爬虫配置 | ✅ 使用中 | CrawlerRunConfig |
+| `http` | HTTP配置 | 🔄 预留 | HTTPCrawlerConfig |
+| `geolocation` | 地理位置 | 🔄 预留 | GeolocationConfig |
+| `proxy` | 代理配置 | 🔄 预留 | ProxyConfig |
+| `virtual_scroll` | 虚拟滚动 | 🔄 预留 | VirtualScrollConfig |
+| `link_preview` | 链接预览 | 🔄 预留 | LinkPreviewConfig |
+| `llm` | LLM配置 | 🔄 预留 | LLMConfig |
+| `seeding` | 种子配置 | 🔄 预留 | SeedingConfig |
 
-1. 复制 `config_example.json` 为 `config.json`
-2. 根据您的需求修改 `config.json` 中的参数
-3. `config.json` 文件加入 `.gitignore`，不会被提交到版本控制
+## 📊 参数速查表
 
-## 默认配置参数
+### Default 配置
 
-这些参数控制与 Crawl4AI 服务的基本连接：
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `base_url` | string | Docker服务地址 | `http://localhost:11235` |
+| `timeout` | int | 请求超时(秒) | `60` |
+| `stream_timeout` | int | 流式请求超时(秒) | `120` |
+| `retry_attempts` | int | 重试次数 | `2` |
+| `token` | string | 认证令牌 | `null` |
 
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `base_url` | string | `"http://localhost:11235"` | Crawl4AI Docker 服务的 URL |
-| `timeout` | int | `60` | 请求超时时间（秒） |
-| `stream_timeout` | int | `120` | 流式请求超时时间（秒） |
-| `retry_attempts` | int | `2` | 失败请求的重试次数 |
-| `token` | string or null | `null` | 认证令牌（如需要） |
+### Browser Config (浏览器配置)
 
-## 爬虫特定参数
+#### 基础参数
 
-这些参数控制爬虫过程和内容提取的行为：
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `browser_type` | string | 浏览器类型 | `chromium` |
+| `headless` | bool | 无头模式 | `true` |
+| `viewport_width` | int | 视口宽度 | `1080` |
+| `viewport_height` | int | 视口高度 | `600` |
+| `user_agent` | string | 用户代理 | Chrome UA |
+| `ignore_https_errors` | bool | 忽略HTTPS错误 | `true` |
+| `java_script_enabled` | bool | 启用JavaScript | `true` |
 
-### 核心爬虫配置
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `word_count_threshold` | int | `200` | 处理内容前的最小词数阈值 |
-| `only_text` | boolean | `true` | 尽可能提取纯文本内容 |
-| `css_selector` | string or null | `null` | 提取页面特定部分的 CSS 选择器 |
-| `target_elements` | array | `[]` | 要提取的特定元素的 CSS 选择器列表 |
-| `excluded_tags` | array | `["nav", "footer", "aside", "script", "style"]` | 要从处理中排除的 HTML 标签 |
-| `excluded_selector` | string | `""` | 要从处理中排除的 CSS 选择器 |
-| `remove_forms` | boolean | `false` | 从 HTML 中移除 `<form>` 元素 |
-| `prettiify` | boolean | `false` | 美化 HTML 输出 |
+#### 高级参数
 
-### 浏览器和页面配置
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `browser_type` | string | `"chromium"` | 使用的浏览器："chromium"、"firefox"、"webkit" |
-| `headless` | boolean | `true` | 以无头模式运行浏览器 |
-| `ignore_https_errors` | boolean | `true` | 忽略 HTTPS 证书错误 |
-| `java_script_enabled` | boolean | `true` | 启用 JavaScript 执行 |
-| `wait_until` | string | `"domcontentloaded"` | 何时认为页面已加载："domcontentloaded"、"load"、"networkidle" |
-| `page_timeout` | int | `60000` | 页面操作超时时间（毫秒） |
-| `locale` | string or null | `null` | 浏览器上下文的语言环境（如 "en-US"） |
-| `timezone_id` | string or null | `null` | 时区标识符（如 "America/New_York"） |
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `enable_stealth` | bool | 反检测模式 | `false` |
+| `browser_mode` | string | 浏览器模式 | `dedicated` |
+| `proxy` | string | 代理服务器 | `null` |
+| `text_mode` | bool | 文本模式(禁用图片) | `false` |
+| `light_mode` | bool | 轻量模式 | `false` |
+| `extra_args` | list | 额外启动参数 | `[]` |
 
-### 内容和交互配置
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `scan_full_page` | boolean | `false` | 滚动整个页面以加载所有内容 |
-| `scroll_delay` | float | `0.2` | 滚动步骤之间的延迟（秒） |
-| `process_iframes` | boolean | `false` | 处理并内联 iframe 内容 |
-| `remove_overlay_elements` | boolean | `false` | 在提取 HTML 前移除覆盖层/弹窗 |
-| `simulate_user` | boolean | `false` | 模拟用户交互以绕过反机器人措施 |
-| `js_code` | string/array or null | `null` | 在页面上执行的 JavaScript 代码 |
-| `wait_for` | string or null | `null` | 等待的 CSS 选择器或 JS 条件 |
-| `wait_for_timeout` | int or null | `null` | wait_for 条件的超时时间 |
+### Crawler Config (爬虫配置)
 
-### 媒体处理配置
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `screenshot` | boolean | `false` | 爬虫后截图 |
-| `screenshot_wait_for` | float or null | `null` | 截图前的等待时间 |
-| `pdf` | boolean | `false` | 生成页面的 PDF |
-| `image_score_threshold` | int | `5` | 处理图像的最小分数 |
-| `exclude_external_images` | boolean | `false` | 排除外部图像的处理 |
-| `exclude_all_images` | boolean | `false` | 排除所有图像的处理 |
+#### 内容处理
 
-### 缓存和性能配置
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `cache_mode` | string | `"bypass"` | 缓存行为："enabled"、"bypass"、"disabled"、"read_only"、"write_only" |
-| `mean_delay` | float | `0.1` | 爬取多个 URL 时请求间的基础延迟 |
-| `max_range` | float | `0.3` | 最大随机附加延迟范围 |
-| `semaphore_count` | int | `5` | 允许的并发操作数 |
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `word_count_threshold` | int | 最小字数 | `200` |
+| `only_text` | bool | 仅文本 | `false` |
+| `excluded_tags` | list | 排除标签 | `["nav","footer"...]` |
+| `css_selector` | string | CSS选择器 | `null` |
+| `target_elements` | list | 目标元素 | `[]` |
+| `excluded_selector` | string | 排除选择器 | `""` |
 
-### 链接和域名配置
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `exclude_external_links` | boolean | `false` | 从结果中排除外部链接 |
-| `exclude_social_media_links` | boolean | `false` | 排除社交媒体域名链接 |
-| `exclude_domains` | array | `[]` | 要排除的特定域名 |
-| `score_links` | boolean | `false` | 计算链接的质量分数 |
+#### 页面加载
 
-### 返回格式配置
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `return_format` | string | `"markdown"` | 返回格式："markdown" 返回清理后的markdown内容，"json" 返回完整的结构化数据 |
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `wait_until` | string | 等待条件 | `domcontentloaded` |
+| `page_timeout` | int | 超时(毫秒) | `60000` |
+| `wait_for` | string | 等待元素 | `null` |
+| `delay_before_return_html` | float | 返回前延迟(秒) | `0.1` |
 
-### LLM 优化参数
+#### 交互行为
 
-这些参数专为 LLM 使用场景优化，提供更精准的内容过滤和提取：
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `scan_full_page` | bool | 滚动整页 | `false` |
+| `scroll_delay` | float | 滚动延迟(秒) | `0.2` |
+| `max_scroll_steps` | int | 最大滚动次数 | `null` |
+| `simulate_user` | bool | 模拟用户 | `false` |
+| `remove_overlay_elements` | bool | 移除遮罩 | `false` |
+| `magic` | bool | 自动处理弹窗 | `false` |
+| `js_code` | string/list | JavaScript代码 | `null` |
 
-| 参数 | 类型 | 默认值 | 描述 |
-|------|------|--------|------|
-| `content_filter_type` | string or null | `null` | 内容过滤器类型："pruning"、"bm25" 或 "none" |
-| `pruning_threshold` | float or null | `null` | pruning 过滤器的内容保留阈值 (0-1) |
-| `pruning_threshold_type` | string or null | `null` | 阈值类型："fixed" 或 "dynamic" |
-| `min_word_threshold` | int or null | `null` | 内容块的最小词数要求 |
-| `bm25_threshold` | float or null | `null` | BM25 相关性阈值 |
-| `user_query` | string or null | `null` | BM25 内容过滤的查询关键词 |
-| `max_token_length` | int or null | `null` | LLM 处理的最大 token 长度 |
-| `prefer_fit_markdown` | boolean or null | `null` | 优先使用 fit_markdown 而非 raw_markdown |
-| `extract_main_content` | boolean or null | `null` | 仅提取主要内容区域 |
+#### 媒体处理
 
-## 示例配置
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `screenshot` | bool | 截图(base64) | `false` |
+| `pdf` | bool | 生成PDF(base64) | `false` |
+| `exclude_external_images` | bool | 排除外部图片 | `false` |
+| `exclude_all_images` | bool | 排除所有图片 | `false` |
 
-完整的配置示例请参考 `config_example.json` 文件，该文件包含了所有可用参数的默认值。
+#### LLM 优化参数 ⭐
 
-以下是一个常用的自定义配置示例：
+| 参数 | 类型 | 说明 | 推荐值 |
+|------|------|------|--------|
+| `return_format` | string | 返回格式 | `markdown` |
+| `content_filter_type` | string | 过滤类型 | `pruning` / `bm25` |
+| `pruning_threshold` | float | 修剪阈值 | `0.48` |
+| `pruning_threshold_type` | string | 阈值类型 | `fixed` |
+| `min_word_threshold` | int | 最小词数 | `30` |
+| `bm25_threshold` | float | BM25阈值 | `1.0` |
+| `user_query` | string | 查询关键词 | 相关词 |
+| `max_token_length` | int | 最大token | 根据需要 |
+| `prefer_fit_markdown` | bool | 优先fit | `true` |
+| `extract_main_content` | bool | 主要内容 | `true` |
 
+#### 链接控制
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `exclude_external_links` | bool | 排除外链 | `false` |
+| `exclude_internal_links` | bool | 排除内链 | `false` |
+| `exclude_social_media_links` | bool | 排除社交媒体 | `false` |
+| `exclude_domains` | list | 排除域名 | `[]` |
+
+#### 缓存和性能
+
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `cache_mode` | string | 缓存模式 | `bypass` |
+| `semaphore_count` | int | 并发限制 | `5` |
+| `verbose` | bool | 详细日志 | `true` |
+
+## 特定使用场景配置示例
+
+### 1. 基础网页爬取
 ```json
 {
   "default": {
     "base_url": "http://localhost:11235",
-    "timeout": 60,
-    "stream_timeout": 120,
-    "retry_attempts": 2,
-    "token": null
+    "timeout": 60
   },
-  "crawl": {
-    "word_count_threshold": 200,
-    "only_text": true,
-    "excluded_tags": ["nav", "footer", "aside", "script", "style", "header"],
-    "remove_forms": true,
-    "wait_until": "domcontentloaded",
-    "page_timeout": 60000,
-    "scan_full_page": false,
-    "process_iframes": false,
-    "remove_overlay_elements": true,
-    "simulate_user": false,
-    "screenshot": false,
-    "pdf": false,
-    "exclude_external_images": true,
-    "cache_mode": "bypass",
-    "exclude_external_links": true,
-    "verbose": true
-  }
-}
-```
-
-### LLM 优化配置示例
-
-针对 LLM 使用场景的优化配置：
-
-```json
-{
-  "default": {
-    "base_url": "http://localhost:11235",
-    "timeout": 90,
-    "stream_timeout": 180,
-    "retry_attempts": 3
+  "browser": {
+    "headless": true,
+    "viewport_width": 1280,
+    "viewport_height": 720
   },
-  "crawl": {
+  "crawler": {
     "word_count_threshold": 100,
-    "only_text": true,
-    "excluded_tags": ["nav", "footer", "aside", "script", "style", "header", "advertisement"],
-    "remove_forms": true,
-    "content_filter_type": "pruning",
-    "pruning_threshold": 0.48,
-    "pruning_threshold_type": "fixed",
-    "min_word_threshold": 30,
-    "prefer_fit_markdown": true,
-    "extract_main_content": true,
-    "max_token_length": 100000,
-    "wait_until": "domcontentloaded",
-    "page_timeout": 60000,
-    "remove_overlay_elements": true,
-    "exclude_all_images": true,
-    "exclude_external_links": true,
-    "cache_mode": "enabled",
+    "cache_mode": "bypass",
+    "verbose": true,
     "return_format": "markdown"
   }
 }
 ```
 
-> **注意**: 实际使用时请复制 `config_example.json` 为 `config.json` 并根据需要调整参数。
-
-## 运行时使用参数
-
-在调用 `crawl4ai_crawl` 或 `crawl4ai_stream` 工具时，您可以覆盖特定参数：
-
-```python
-# 使用自定义参数的示例调用
-result = await crawl4ai_crawl(
-    urls=["https://example.com"],
-    only_text=True,
-    excluded_tags=["nav", "footer", "advertisement"],
-    wait_for="#content",
-    scan_full_page=True
-)
+### 2. 新闻内容提取
+```json
+{
+  "default": {
+    "base_url": "http://localhost:11235",
+    "timeout": 60
+  },
+  "browser": {
+    "headless": true
+  },
+  "crawler": {
+    "word_count_threshold": 300,
+    "only_text": true,
+    "excluded_tags": ["nav", "footer", "aside", "script", "style", "header", "advertisement"],
+    "css_selector": "article",
+    "exclude_external_images": true,
+    "verbose": false,
+    "prefer_fit_markdown": true,
+    "content_filter_type": "pruning",
+    "pruning_threshold": 0.5
+  }
+}
 ```
 
-## LLM 就绪内容的最佳实践
-
-为了获得最佳的 LLM 就绪内容提取：
-
-### 基础优化
-1. **内容过滤**: 启用 `only_text: true` 以获得干净的文本内容
-2. **元素移除**: 使用 `excluded_tags` 排除导航、广告和其他非内容元素
-3. **JavaScript**: 保持 `java_script_enabled: true` 以加载动态内容
-4. **等待条件**: 使用 `wait_for` 确保内容在提取前完全加载
-5. **全页滚动**: 对单页应用程序或无限滚动内容启用 `scan_full_page: true`
-
-### 高级 LLM 优化
-6. **智能过滤**: 使用 `content_filter_type: "pruning"` 自动移除低质量内容
-7. **内容质量控制**: 设置 `pruning_threshold: 0.48` 保留高质量内容
-8. **主要内容提取**: 启用 `extract_main_content: true` 专注于核心内容
-9. **Markdown 优化**: 设置 `prefer_fit_markdown: true` 获取结构化的内容
-10. **Token 限制**: 配置 `max_token_length` 控制内容长度
-11. **查询相关过滤**: 使用 `content_filter_type: "bm25"` 和 `user_query` 获取相关内容
-12. **返回格式选择**: 设置 `return_format: "markdown"` 获取LLM友好的文本，或 `"json"` 获取完整结构化数据
-
-### 内容过滤策略
-- **Pruning 过滤器**: 基于内容密度、链接密度和标签重要性自动筛选
-- **BM25 过滤器**: 基于查询关键词的相关性排序和过滤
-- **混合策略**: 先使用 pruning 移除噪音，再用 BM25 提取相关内容
-
-## 故障排除
-
-### 常见问题：
-
-- **超时错误**: 增加 `crawler_config` 中的 `page_timeout` 或 `default` 中的 `timeout`
-- **JavaScript 未执行**: 确保 `java_script_enabled: true` 和适当的 `wait_until`
-- **动态内容未加载**: 使用 `wait_for` 参数等待特定元素
-- **性能问题**: 调整 `semaphore_count` 和缓存设置
-- **返回格式问题**: 检查 `return_format` 设置，`"markdown"` 返回清理后的文本，`"json"` 返回完整数据
-
-### 验证配置：
-
-您可以通过访问 Crawl4AI 服务的 `/schema` 端点来检查当前配置：
-```
-GET http://localhost:11235/schema
+### 3. 电商产品信息提取
+```json
+{
+  "default": {
+    "base_url": "http://localhost:11235",
+    "timeout": 120
+  },
+  "browser": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "viewport_width": 1920,
+    "viewport_height": 1080,
+    "simulate_user": true
+  },
+  "crawler": {
+    "word_count_threshold": 50,
+    "only_text": false,
+    "target_elements": [".product-price", ".product-title", ".product-description", ".product-image"],
+    "cache_mode": "bypass",
+    "wait_until": "networkidle",
+    "scan_full_page": true,
+    "scroll_delay": 0.5,
+    "remove_overlay_elements": true,
+    "verbose": true,
+    "prefer_fit_markdown": true,
+    "exclude_external_links": false
+  }
+}
 ```
 
-这将返回服务器中的默认 `BrowserConfig` 和 `CrawlerRunConfig` 配置。
+### 4. 反爬虫网站处理
+```json
+{
+  "default": {
+    "base_url": "http://localhost:11235",
+    "timeout": 180
+  },
+  "browser": {
+    "user_agent_mode": "random",
+    "enable_stealth": true,
+    "ignore_https_errors": true,
+    "headless": true
+  },
+  "crawler": {
+    "word_count_threshold": 100,
+    "simulate_user": true,
+    "wait_for_images": true,
+    "delay_before_return_html": 2.0,
+    "mean_delay": 1.0,
+    "max_range": 2.0,
+    "cache_mode": "bypass",
+    "wait_until": "networkidle",
+    "remove_overlay_elements": true,
+    "magic": true,
+    "js_code": ["window.scrollTo(0, document.body.scrollHeight);", "await new Promise(r => setTimeout(r, 2000));"],
+    "verbose": true
+  }
+}
+```
 
-## 快速开始
+### 5. PDF报告生成
+```json
+{
+  "default": {
+    "base_url": "http://localhost:11235",
+    "timeout": 90
+  },
+  "browser": {
+    "viewport_width": 1200,
+    "viewport_height": 1600
+  },
+  "crawler": {
+    "word_count_threshold": 100,
+    "pdf": true,
+    "screenshot": false,
+    "prettiify": true,
+    "parser_type": "lxml",
+    "verbose": false,
+    "prefer_fit_markdown": true
+  }
+}
+```
+
+### 6. 社交媒体内容爬取
+```json
+{
+  "default": {
+    "base_url": "http://localhost:11235",
+    "timeout": 180
+  },
+  "browser": {
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X)",
+    "viewport_width": 375,
+    "viewport_height": 667,
+    "simulate_user": true
+  },
+  "crawler": {
+    "word_count_threshold": 10,
+    "scan_full_page": true,
+    "max_scroll_steps": 20,
+    "scroll_delay": 1.0,
+    "wait_until": "networkidle",
+    "remove_overlay_elements": true,
+    "magic": true,
+    "exclude_external_links": false,
+    "exclude_internal_links": false,
+    "verbose": true,
+    "prefer_fit_markdown": true,
+    "content_filter_type": "pruning",
+    "pruning_threshold": 0.3
+  }
+}
+```
+
+## 获取 fit_markdown 和控制链接的参数配置
+
+### 控制 Markdown 类型的参数：
+- `prefer_fit_markdown`: 设置为 `true` 优先返回 fit_markdown
+- `content_filter_type`: 设置为 `"pruning"` 使用内容修剪算法生成 fit_markdown
+- `pruning_threshold`: 控制内容修剪的阈值，值越高保留的内容越少（建议 0.3-0.7）
+
+### 控制链接保留的参数：
+- `exclude_external_links`: 
+  - `false`: 保留外部链接（默认）
+  - `true`: 移除外部链接
+- `exclude_internal_links`:
+  - `false`: 保留内部链接（默认）
+  - `true`: 移除内部链接
+- `exclude_social_media_links`:
+  - `false`: 保留社交媒体链接（默认）
+  - `true`: 移除社交媒体链接
+- `only_text`: 如果设置为 `true` 会移除链接等富媒体内容
+
+### 获取 fit_markdown 并保留链接的配置示例：
+```json
+{
+  "crawler": {
+    "prefer_fit_markdown": true,
+    "content_filter_type": "pruning",
+    "pruning_threshold": 0.5,
+    "min_word_threshold": 30,
+    "exclude_external_links": false,
+    "exclude_internal_links": false,
+    "exclude_social_media_links": false,
+    "only_text": false
+  }
+}
+```
+
+## 🚀 快速开始
 
 ### 1. 创建配置文件
 
 ```bash
-# 复制示例配置文件
-cp config/connector/crawl4ai/config_example.json config/connector/crawl4ai/config.json
+# 使用简化模板(推荐)
+cp config.template.json config.json
+
+# 或使用完整示例
+cp config_example.json config.json
 ```
 
-### 2. 编辑配置文件
+### 2. 编辑配置
 
-根据您的需求修改 `config.json` 中的参数。常用的修改包括：
+```json
+{
+  "default": {
+    "base_url": "http://localhost:11235"
+  },
+  "browser": {
+    "viewport_width": 1920,
+    "enable_stealth": false
+  },
+  "crawler": {
+    "word_count_threshold": 200,
+    "prefer_fit_markdown": true,
+    "verbose": true
+  }
+}
+```
 
-- 修改 `base_url` 以指向您的 Crawl4AI 服务地址
-- 调整 `timeout` 和 `page_timeout` 以适应您的网络环境
-- 根据需要启用/禁用 `screenshot`、`pdf` 等功能
+### 3. 使用配置
 
-### 3. 验证配置
+**Agent 自动调用(推荐):**
+```
+User: 请帮我爬取 https://example.com 的内容
+```
 
-启动 Crawl4AI 服务后，可以通过以下方式验证配置：
+**程序化调用:**
+```python
+from src.tools.connector.crawl4ai import get_tools
+
+tools = get_tools()
+crawl_tool = tools[0]
+
+# 使用配置文件参数
+result = await crawl_tool._arun(urls=["https://example.com"])
+
+# 覆盖部分参数
+result = await crawl_tool._arun(
+    urls=["https://example.com"],
+    crawler_config={"verbose": False}
+)
+```
+
+## ✅ 配置验证
+
+### 检查服务状态
 
 ```bash
-# 检查服务是否运行
-curl http://localhost:11235/schema
+# 使用 CLI 命令
+:connector status
+
+# 或使用 curl
+curl http://localhost:11235/health
 ```
 
-### 4. 开始使用
+### 验证配置加载
 
-配置文件设置完成后，您就可以在应用程序中使用 Crawl4AI 连接器了。
+```python
+from src.tools.connector.crawl4ai.config import Crawl4AIConfig
+
+config = Crawl4AIConfig()
+print(f"Base URL: {config.base_url}")
+print(f"Browser Config: {config.browser_config}")
+print(f"Crawler Config: {config.crawler_config}")
+```
+
+### 常见问题
+
+**问题: 配置参数不生效**
+- ✅ 检查 config.json 是否存在
+- ✅ 检查 JSON 语法是否正确
+- ✅ 确认参数名称拼写正确
+- ✅ 查看日志确认参数传递
+
+**问题: Docker 服务连接失败**
+- ✅ 检查 Docker 容器是否运行: `docker ps`
+- ✅ 确认端口映射: `11235:11235`
+- ✅ 测试连接: `curl http://localhost:11235/health`
+
+## 📚 相关文档
+
+- **[crawl4ai_guide.md](../../../tutorials/connector/crawl4ai/crawl4ai_guide.md)** - 完整使用教程
+- **[crawl4ai_fix.md](../../../tutorials/connector/crawl4ai/crawl4ai_fix.md)** - 参数传递流程和技术细节
+- **[config_example.json](./config_example.json)** - 完整配置示例
+- **[config.template.json](./config.template.json)** - 简化配置模板
+- **[config.json.commented](./config.json.commented)** - 带注释的配置说明
