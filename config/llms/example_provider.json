@@ -1,12 +1,19 @@
 {
-  "_comment": "这是一个示例配置文件，展示如何添加新的LLM提供商。新增字段：max_tokens（最大输出tokens）和context_window（上下文窗口大小）",
+  "_comment": "LLM Provider Configuration Example - Complete Reference Template",
+  "_usage": "This file demonstrates all available configuration options for adding new LLM providers",
+  "_reference": "See schema.json for field definitions and validation rules",
+  "_note": "Remove comments (lines starting with '_') when creating actual config files",
+
   "schema_version": "1.0",
+
   "providers": {
+
     "ANTHROPIC": {
       "name": "Anthropic",
-      "default_model": "claude-3-sonnet",
+      "default_model": "claude-3-5-sonnet",
       "api_key_env": "ANTHROPIC_API_KEY",
       "class": "AnthropicLLM",
+
       "mode_defaults": {
         "llm": {
           "temperature": 0.1,
@@ -20,30 +27,33 @@
           "streaming": false
         }
       },
+
       "models": {
-        "claude-3-sonnet": {
-          "name": "Claude 3 Sonnet",
-          "description": "平衡性能和速度的Claude 3模型",
+
+        "claude-3-5-sonnet": {
+          "name": "Claude 3.5 Sonnet",
+          "description": "Most intelligent model with balanced speed and capabilities",
           "recommended": true,
           "model_features": [
-            "高质量推理",
-            "快速响应",
-            "工具调用",
-            "长上下文"
+            "Advanced reasoning",
+            "Fast response",
+            "Tool calling",
+            "200K context window"
           ],
           "supports_tools": true,
-          "max_tokens": 4096,
+          "max_tokens": 8192,
           "context_window": 200000
         },
+
         "claude-3-opus": {
           "name": "Claude 3 Opus",
-          "description": "最强性能的Claude 3模型",
+          "description": "Most powerful Claude model for complex tasks",
           "recommended": true,
           "model_features": [
-            "最强推理能力",
-            "复杂任务处理",
-            "精准工具调用",
-            "长上下文"
+            "Strongest reasoning",
+            "Complex task handling",
+            "Precise tool calling",
+            "Long context"
           ],
           "supports_tools": true,
           "max_tokens": 8192,
@@ -54,8 +64,220 @@
               "max_execution_time": 600
             }
           }
+        },
+
+        "claude-3-haiku": {
+          "name": "Claude 3 Haiku",
+          "description": "Fastest model for simple tasks and testing",
+          "recommended": false,
+          "model_features": [
+            "Fast response",
+            "Cost-effective",
+            "Testing friendly"
+          ],
+          "supports_tools": true,
+          "max_tokens": 4096,
+          "context_window": 200000
         }
       }
+    },
+
+    "CUSTOM_CLOUD": {
+      "name": "Custom Cloud Provider",
+      "default_model": "custom-pro",
+      "api_key_env": "CUSTOM_API_KEY",
+      "class": "CustomLLM",
+
+      "mode_defaults": {
+        "llm": {
+          "temperature": 0.1,
+          "streaming": true,
+          "thinking_mode": false
+        },
+        "agent": {
+          "temperature": 0.0,
+          "memory_enabled": true,
+          "max_iterations": 10,
+          "max_execution_time": 300,
+          "streaming": false
+        }
+      },
+
+      "models": {
+
+        "custom-pro": {
+          "name": "Custom Pro Model",
+          "description": "Full-featured example with all optional fields",
+          "recommended": true,
+          "model_features": [
+            "Thinking mode support",
+            "Advanced reasoning",
+            "Multi-modal support",
+            "128K context window",
+            "Tool calling optimized"
+          ],
+          "supports_tools": true,
+          "default_temperature": 0.7,
+          "temperature_fixed": false,
+          "max_tokens": 8192,
+          "context_window": 128000,
+          "parameters": {
+            "top_p": 0.9,
+            "frequency_penalty": 0.0,
+            "presence_penalty": 0.0,
+            "stop_sequences": ["\n\nHuman:", "\n\nAssistant:"]
+          },
+          "mode_overrides": {
+            "llm": {
+              "thinking_mode": true,
+              "temperature": 0.5
+            },
+            "agent": {
+              "temperature": 0.1,
+              "max_iterations": 15,
+              "max_execution_time": 600
+            }
+          }
+        },
+
+        "custom-lite": {
+          "name": "Custom Lite Model",
+          "description": "Lightweight model with fixed temperature for consistent output",
+          "recommended": true,
+          "model_features": [
+            "Fast inference",
+            "Cost-effective",
+            "Consistent output",
+            "Fixed temperature"
+          ],
+          "supports_tools": true,
+          "default_temperature": 1.0,
+          "temperature_fixed": true,
+          "max_tokens": 4096,
+          "context_window": 32768,
+          "parameters": {
+            "top_p": 1.0,
+            "seed": 42
+          },
+          "mode_overrides": {
+            "llm": {
+              "temperature": 1.0
+            },
+            "agent": {
+              "temperature": 1.0,
+              "max_iterations": 8
+            }
+          }
+        },
+
+        "custom-code": {
+          "name": "Custom Code Model",
+          "description": "Specialized model for code generation and analysis",
+          "recommended": true,
+          "model_features": [
+            "Code generation",
+            "Code understanding",
+            "Multiple languages",
+            "16K output tokens"
+          ],
+          "supports_tools": false,
+          "max_tokens": 16384,
+          "context_window": 65536,
+          "parameters": {
+            "top_p": 0.95,
+            "language": "auto-detect"
+          }
+        },
+
+        "custom-nano": {
+          "name": "Custom Nano Model",
+          "description": "Minimal model for testing and debugging",
+          "recommended": false,
+          "model_features": [
+            "Low cost",
+            "Fast response",
+            "Testing only"
+          ],
+          "supports_tools": true,
+          "max_tokens": 2048,
+          "context_window": 8192
+        }
+      }
+    },
+
+    "LOCAL_OLLAMA": {
+      "name": "Local Ollama Models",
+      "default_model": "auto",
+      "api_key_env": null,
+      "class": null,
+
+      "mode_defaults": {
+        "llm": {
+          "temperature": 0.1,
+          "streaming": true
+        },
+        "agent": {
+          "temperature": 0.0,
+          "memory_enabled": true,
+          "max_iterations": 5,
+          "max_execution_time": 60,
+          "streaming": false
+        }
+      },
+
+      "models": {}
+    }
+
+  },
+
+  "_field_descriptions": {
+    "_provider_level": {
+      "name": "Display name of the provider",
+      "default_model": "Model to use when not specified (required)",
+      "api_key_env": "Environment variable name for API key (null for local models)",
+      "class": "Python class name for custom implementations (null to use default)",
+      "mode_defaults": "Default parameters for llm and agent modes"
+    },
+    "_model_level": {
+      "_required_fields": [
+        "name: Display name of the model",
+        "description: Brief description of model capabilities",
+        "supports_tools: Whether model supports function/tool calling (boolean)"
+      ],
+      "_optional_fields": [
+        "recommended: Whether to recommend this model to users (boolean)",
+        "model_features: Array of feature descriptions (array of strings)",
+        "default_temperature: Default temperature if not specified (number 0-2)",
+        "temperature_fixed: Whether temperature cannot be changed (boolean)",
+        "max_tokens: Maximum output tokens (integer)",
+        "context_window: Maximum context window size (integer)",
+        "parameters: Custom model-specific parameters (object)",
+        "size: Model size info for local models (string)",
+        "modified_at: Last modification date for local models (string)",
+        "mode_overrides: Override mode_defaults for specific model (object)"
+      ]
+    },
+    "_mode_defaults_and_overrides": {
+      "llm": {
+        "temperature": "Sampling temperature (0-2, lower is more deterministic)",
+        "streaming": "Enable streaming responses (boolean)",
+        "thinking_mode": "Enable chain-of-thought reasoning (boolean)"
+      },
+      "agent": {
+        "temperature": "Sampling temperature for agent mode",
+        "memory_enabled": "Enable conversation memory (boolean)",
+        "max_iterations": "Maximum tool call iterations (integer)",
+        "max_execution_time": "Maximum execution time in seconds (integer)",
+        "streaming": "Enable streaming in agent mode (boolean)"
+      }
+    },
+    "_usage_examples": {
+      "basic_provider": "See ANTHROPIC configuration",
+      "full_featured": "See CUSTOM_CLOUD with all optional fields",
+      "local_model": "See LOCAL_OLLAMA for local model configuration",
+      "fixed_temperature": "See custom-lite model with temperature_fixed",
+      "thinking_mode": "See custom-pro model with thinking_mode enabled",
+      "no_tool_support": "See custom-code model with supports_tools: false"
     }
   }
 }

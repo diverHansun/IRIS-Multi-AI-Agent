@@ -190,13 +190,13 @@
           "max_tokens": 16384,
           "context_window": 131072
         },
-        "gpt-4-turbo": {
-          "name": "GPT-4-Turbo",
-          "description": "高性能GPT-4版本",
+        "gpt-4.1-nano": {
+          "name": "GPT-4.1-nano",
+          "description": "低成本GPT，易于调试",
           "recommended": false,
           "model_features": [
-            "高性能",
-            "稳定"
+            "低成本",
+            "测试便捷"
           ],
           "supports_tools": true,
           "max_tokens": 4096,
