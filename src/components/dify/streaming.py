@@ -191,7 +191,7 @@ class DifyStreaming:
                 # 防止处理过多数据块导致内存问题
                 if chunk_count > max_chunks:
                     logger.warning(f"流式数据块数量超过限制: {max_chunks}")
-                    self.console.print(f"\n[yellow]⚠️ 响应内容过长，已截断处理[/yellow]")
+                    self.console.print(f"\n[yellow]警告: 响应内容过长，已截断处理[/yellow]")
                     break
                 
                 parsed_data = self.parse_stream_data(raw_data)
@@ -219,7 +219,7 @@ class DifyStreaming:
                         total_content_length = sum(len(c) for c in content_buffer)
                         if total_content_length > self.max_content_length:
                             logger.warning(f"响应内容过长: {total_content_length} 字符")
-                            self.console.print(f"\n[yellow]⚠️ 响应内容超过限制 ({self.max_content_length} 字符)，已截断显示[/yellow]")
+                            self.console.print(f"\n[yellow]警告: 响应内容超过限制 ({self.max_content_length} 字符)，已截断显示[/yellow]")
                             break
                         
                         # 应用速率限制
@@ -282,7 +282,7 @@ class DifyStreaming:
                         first_content_received = True
                     
                     filename = parsed_data.get('filename', 'Unknown file')
-                    self.console.print(f"\n[blue]📎 文件: {filename}[/blue]")
+                    self.console.print(f"\n[blue]文件: {filename}[/blue]")
             
             # 确保停止状态显示
             if show_typing and not first_content_received:
@@ -302,7 +302,7 @@ class DifyStreaming:
                 if stats:
                     try:
                         self.console.print(
-                            f"[dim]✅ 响应完成 | "
+                            f"[dim]响应完成 | "
                             f"{stats['elapsed_time']:.2f}s | "
                             f"{stats['total_chars']} 字符 | "
                             f"{stats['chars_per_second']:.1f} 字符/秒 | "
@@ -310,9 +310,9 @@ class DifyStreaming:
                         )
                     except Exception as stats_e:
                         logger.debug(f"显示性能统计失败: {stats_e}")
-                        self.console.print(f"[dim]✅ 响应完成 (共 {len(content_buffer)} 个片段)[/dim]")
+                        self.console.print(f"[dim]响应完成 (共 {len(content_buffer)} 个片段)[/dim]")
                 else:
-                    self.console.print(f"[dim]✅ 响应完成 (共 {len(content_buffer)} 个片段)[/dim]")
+                    self.console.print(f"[dim]响应完成 (共 {len(content_buffer)} 个片段)[/dim]")
             
             # 缓存当前会话信息
             self._current_message_id = message_id

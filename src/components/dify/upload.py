@@ -412,7 +412,7 @@ async def handle_upload_command(
                 "uploaded_files": [result]  # 统一返回格式
             }
         else:
-            console.print(f"[red]❌ 上传失败: {result['error']}[/red]")
+            console.print(f"[red]上传失败: {result['error']}[/red]")
             return {"type": "error", "message": result['error']}
 
     # 多文件批量上传
@@ -435,7 +435,7 @@ async def handle_upload_command(
 
         # 显示验证结果
         if invalid_files:
-            console.print(f"[yellow]⚠️  {len(invalid_files)} 个文件验证失败，将被跳过：[/yellow]")
+            console.print(f"[yellow]警告: {len(invalid_files)} 个文件验证失败，将被跳过：[/yellow]")
             for item in invalid_files:
                 console.print(f"  [dim]{os.path.basename(item['path'])}: {item['error']}[/dim]")
 
@@ -454,14 +454,14 @@ async def handle_upload_command(
         failed_count = len(batch_result['failed'])
 
         if success_count > 0:
-            console.print(f"[green]✅ 成功上传 {success_count} 个文件[/green]")
+            console.print(f"[green]成功上传 {success_count} 个文件[/green]")
             for item in batch_result['success']:
                 filename = item['result']['filename']
                 file_id = item['result']['file_id']
                 console.print(f"  [dim]• {filename} (ID: {file_id})[/dim]")
 
         if failed_count > 0:
-            console.print(f"[red]❌ {failed_count} 个文件上传失败[/red]")
+            console.print(f"[red]{failed_count} 个文件上传失败[/red]")
             for item in batch_result['failed']:
                 filename = os.path.basename(item['file_path'])
                 console.print(f"  [dim]• {filename}: {item['error']}[/dim]")

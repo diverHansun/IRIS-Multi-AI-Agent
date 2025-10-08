@@ -55,10 +55,8 @@ class DifyClient:
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """获取HTTP会话"""
-        if not self._session or self._session.closed:
-            # 如果之前有会话，先关闭它
-            if self._session and not self._session.closed:
-                await self._session.close()
+        # 检查会话是否存在且未关闭
+        if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=self.timeout)
             )
@@ -142,7 +140,16 @@ class DifyClient:
             async with session.post(url, json=payload, headers=self.headers, timeout=timeout) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    raise DifyClientError(f"聊天请求失败: {response.status}, {error_text}")
+                    # 尝试解析错误信息获取更详细的内容
+                    try:
+                        error_json = json.loads(error_text)
+                        error_message = error_json.get('message', error_text)
+                        error_code = error_json.get('code', 'unknown')
+                        logger.error(f"Dify API错误 - 状态码: {response.status}, 错误码: {error_code}, 消息: {error_message}")
+                        raise DifyClientError(f"聊天请求失败 [{error_code}]: {error_message}")
+                    except json.JSONDecodeError:
+                        logger.error(f"Dify API错误 - 状态码: {response.status}, 原始响应: {error_text}")
+                        raise DifyClientError(f"聊天请求失败: {response.status}, {error_text}")
                 
                 if streaming:
                     # 处理流式响应，使用缓冲机制减少处理频率
@@ -215,36 +222,34 @@ class DifyClient:
         
         session = await self._get_session()
         
+        # 使用with语句确保文件正确关闭
         try:
-            # 创建表单数据（根据 API 文档只需要 file 和 user 字段）
-            data = aiohttp.FormData()
-            data.add_field('file', 
-                          open(file_path, 'rb'),
-                          filename=filename,
-                          content_type=content_type)
-            data.add_field('user', user_id)
-            
-            # 上传文件
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-            async with session.post(url, data=data, headers=headers) as response:
-                if response.status in (200, 201):  # 200 OK 或 201 Created 都表示成功
-                    result = await response.json()
-                    if progress_callback:
-                        progress_callback(100)  # 完成
-                    return result
-                else:
-                    error_text = await response.text()
-                    error_message = self._parse_upload_error(response.status, error_text)
-                    raise DifyClientError(error_message)
-                    
+            with open(file_path, 'rb') as file_obj:
+                # 创建表单数据（根据 API 文档只需要 file 和 user 字段）
+                data = aiohttp.FormData()
+                data.add_field('file',
+                              file_obj,
+                              filename=filename,
+                              content_type=content_type)
+                data.add_field('user', user_id)
+
+                # 上传文件
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                async with session.post(url, data=data, headers=headers) as response:
+                    if response.status in (200, 201):  # 200 OK 或 201 Created 都表示成功
+                        result = await response.json()
+                        if progress_callback:
+                            progress_callback(100)  # 完成
+                        return result
+                    else:
+                        error_text = await response.text()
+                        error_message = self._parse_upload_error(response.status, error_text)
+                        raise DifyClientError(error_message)
+
         except aiohttp.ClientError as e:
             raise DifyClientError(f"文件上传网络错误: {str(e)}")
-        finally:
-            # 确保文件句柄被关闭
-            try:
-                data._fields[0][2].close()
-            except:
-                pass
+        except OSError as e:
+            raise DifyClientError(f"文件读取错误: {str(e)}")
     
     def _parse_upload_error(self, status_code: int, error_text: str) -> str:
         """

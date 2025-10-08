@@ -236,8 +236,18 @@ class DifyControl:
         
         try:
             # 准备当前查询使用的文件列表（一次性使用）
-            current_files = self.uploaded_files.copy() if self.uploaded_files else None
-            
+            # 过滤掉本地显示字段（以下划线开头的字段）
+            current_files = None
+            if self.uploaded_files:
+                current_files = [
+                    {k: v for k, v in f.items() if not k.startswith('_')}
+                    for f in self.uploaded_files
+                ]
+
+                # 调试输出：显示实际发送的files参数
+                logger.debug(f"发送的files参数: {current_files}")
+                self.console.print(f"[dim]调试信息 - 发送files参数: {current_files}[/dim]")
+
             # 发送查询并处理流式响应
             stream = self.client.chat_message(
                 query=query,
@@ -313,6 +323,10 @@ class DifyControl:
 
                 # 根据文件扩展名或返回类型判断类型
                 file_extension = file_info.get('extension', '').lower()
+                # 确保扩展名以点号开头
+                if file_extension and not file_extension.startswith('.'):
+                    file_extension = '.' + file_extension
+
                 file_type = file_result.get('type', 'document')
 
                 if not file_type or file_type == 'file':
@@ -321,10 +335,10 @@ class DifyControl:
                 # 添加文件到上传列表，格式为 Dify 要求的格式，并保存文件名用于显示
                 self.uploaded_files.append({
                     "type": file_type,
-                    "transfer_method": "remote_url",
+                    "transfer_method": "local_file",
                     "upload_file_id": file_info.get("id") or file_result.get('file_id'),
-                    "filename": file_result.get('filename', 'Unknown'),  # 保存文件名
-                    "size": file_result.get('size', 0)  # 保存文件大小
+                    "_filename": file_result.get('filename', 'Unknown'),  # 本地显示字段
+                    "_size": file_result.get('size', 0)  # 本地显示字段
                 })
 
             # 显示添加结果
@@ -413,8 +427,8 @@ class DifyControl:
         for i, file_info in enumerate(self.uploaded_files, 1):
             file_type = file_info.get("type", "unknown")
             file_id = file_info.get("upload_file_id", "unknown")
-            filename = file_info.get("filename", "Unknown")
-            file_size = file_info.get("size", 0)
+            filename = file_info.get("_filename", "Unknown")
+            file_size = file_info.get("_size", 0)
             total_size += file_size
 
             # 格式化文件大小
@@ -462,7 +476,7 @@ class DifyControl:
 
         # 移除文件（序号从1开始，索引从0开始）
         removed_file = self.uploaded_files.pop(index - 1)
-        filename = removed_file.get("filename", "Unknown")
+        filename = removed_file.get("_filename", "Unknown")
         self.console.print(f"[green]已移除文件: {filename}[/green]")
         self.console.print(f"[dim]剩余 {len(self.uploaded_files)} 个文件待发送[/dim]")
         return True
@@ -490,7 +504,7 @@ class DifyControl:
         for index in sorted_indices:
             if 1 <= index <= len(self.uploaded_files):
                 removed_file = self.uploaded_files.pop(index - 1)
-                filename = removed_file.get("filename", "Unknown")
+                filename = removed_file.get("_filename", "Unknown")
                 self.console.print(f"[green] 已移除: {filename}[/green]")
                 removed_count += 1
             else:
