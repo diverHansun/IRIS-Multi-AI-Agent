@@ -1,28 +1,93 @@
-# Multi-AI-Agent 
+# Multi-AI-Agent 🤖
 基于LangChain和多LLM的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎、高德地图、OKX加密货币和Notion知识管理功能。
 
-## 功能特性
+## ✨ 功能特性
 
-- **多LLM支持**: 智谱AI GLM-4.5/GLM-4-Plus、OpenAI GPT-5/GPT-5-mini/GPT-4o系列、Ollama本地模型，支持动态切换
-- **Dify Cloud Agent**: 集成云端AI平台，支持文件上传、多模态理解、流式对话
-- **双模式智能对话**: 
-  - ReAct推理框架（GLM-4-Plus等）：基于经典ReAct框架的自然语言交互
-  - Function Calling模式（GLM-4.5）：基于智谱AI原生Function Calling API的高效工具调用
-- **全局记忆系统**: 基于LangChain 2025最佳实践的统一记忆管理
-- **工具调用**: 支持数学计算、网络搜索、地图导航、加密货币分析、Notion知识管理等多种工具
-- **Dify文件处理**: 支持文档分析、图片识别、多模态对话，文件一次性使用机制
-- **多搜索引擎**: 集成Tavily搜索API + DuckDuckGo备用搜索
-- **高德地图集成**: 支持地点搜索、附近查询、驾车导航、步行导航、公共交通规划
-- **OKX加密货币**: 实时行情、K线分析、价格预警、市场洞察
-- **Notion集成**: 智能搜索、页面管理、数据库操作，支持Direct API访问
-- **MCP工具支持**: 支持Model Context Protocol扩展工具，包括文件系统访问、网页内容获取等
-- **JSON ReAct补丁**: 自定义解析器解决MCP工具JSON格式输入问题
+### 核心架构
+- **双模式运行架构**:
+  - **本地模式**: Agent模式（工具调用+复杂推理）、LLM模式（快速对话+流式输出）
+  - **Dify云端模式**: 云端AI平台，支持文件上传、多模态理解、流式对话
+- **多LLM提供商**: 智谱AI、OpenAI、Ollama本地模型，支持动态热切换
+- **灵活配置系统**: JSON配置文件 + 环境变量，支持热重载（`/reload`命令）
+
+### 智能Agent能力
+- **双Agent框架**:
+  - **Function Calling模式**（GLM-4.5）：基于智谱AI原生API的高效工具调用
+  - **ReAct推理框架**（GLM-4-Plus等）：基于经典ReAct的多步骤任务处理
+- **全局记忆系统**: 基于LangChain 2025最佳实践的统一记忆管理，支持会话隔离和持久化
+- **工具生态系统**:
+  - **MCP工具**: Model Context Protocol扩展工具（文件系统、网页获取、Notion等）
+  - **Connector工具**: 外部服务连接器（Crawl4AI智能爬虫等）
+  - **SDK工具**: 数学计算、Tavily搜索、高德地图、OKX加密货币等
+
+### 增强功能
+- **Dify文件处理**: 支持文档分析、图片识别，文件一次性使用机制
+- **多搜索引擎**: Tavily搜索API + DuckDuckGo备用降级
+- **高德地图集成**: 地点搜索、路线规划（驾车/步行/公交）
+- **OKX加密货币**: 实时行情、K线分析、市场洞察
+- **Notion集成**: 智能搜索、页面管理、数据库操作
 - **中文优化**: 针对中文场景优化的提示词和交互体验
-- **异步支持**: 支持同步和异步调用模式
-- **多用户支持**: 支持会话隔离和持久化存储
 - **智能降级**: 自动降级到备用方案保证服务可用性
 
-## 快速开始
+## 🎯 工作模式说明
+
+本项目支持三种工作模式，可通过命令动态切换：
+
+### 本地模式
+
+#### 1. Agent模式（推荐）
+- **特点**: 完整功能，支持工具调用和复杂推理
+- **适用场景**: 需要搜索、计算、地图导航等工具的复杂任务
+- **切换命令**: `/mode agent`
+- **示例**:
+  ```
+  你 > 搜索北京最新的天气预报
+  AI Agent > [调用搜索工具] 为您查询到...
+  ```
+
+#### 2. LLM模式
+- **特点**: 快速响应，支持流式输出，纯对话无工具调用
+- **适用场景**: 快速问答、创意写作、代码生成等纯对话任务
+- **切换命令**: `/mode llm`
+- **流式输出**: `/stream on` 开启，`/stream off` 关闭
+- **示例**:
+  ```
+  你 > 写一首关于春天的诗
+  AI > [流式输出] 春风拂面...
+  ```
+
+### Dify云端模式
+
+- **特点**: 集成Dify云端AI平台，支持文件上传和多模态理解
+- **适用场景**: 文档分析、图片识别、多模态对话
+- **切换命令**: `/switch dify`
+- **文件支持**:
+  - 文档类：`.pdf`、`.docx`、`.xlsx`、`.txt`、`.md`等
+  - 图片类：`.jpg`、`.png`、`.gif`、`.webp`等
+  - 最大文件：10MB/文件
+- **示例**:
+  ```
+  你 > /upload document.pdf
+  你 > 这个文档主要讲了什么？
+  AI > [分析文档] 该文档主要介绍了...
+  ```
+
+### 模式切换示例
+```bash
+# 切换到本地Agent模式（智谱AI）
+/switch zhipu glm-4-plus
+
+# 切换到本地LLM模式（OpenAI）
+/switch openai gpt-4o-mini
+
+# 切换到Ollama本地模型
+/switch ollama qwen3:8b
+
+# 切换到Dify云端模式
+/switch dify
+```
+
+## 🚀 快速开始
 
 ### 1. 环境准备
 
@@ -100,255 +165,176 @@ DEFAULT_LLM_MODEL=glm-4-plus OR gpt-4o
 ```bash
 # 启动交互式CLI
 python main.py
-
-# 查看帮助信息
-python main.py --help
 ```
 
-## 支持的LLM模型
+## 💬 常用命令速查
 
-### 智谱AI (推荐)
+### 基础命令
+| 命令 | 说明 |
+|------|------|
+| `/help` | 查看帮助信息 |
+| `/info` | 查看系统状态和配置信息 |
+| `/llms` | 查看所有可用的LLM模型列表 |
+| `/exit` 或 `/quit` | 退出程序 |
 
-#### GLM-4.5 ⭐
-新一代MoE架构模型，支持128K上下文，专精代码推理和工具调用
-- ✅ 支持思考模式，复杂推理能力更强
-- ✅ 96K输出token，128K上下文窗口
-- ✅ 专精代码生成和工具调用
-- 🚀 **Function Calling模式**: 使用智谱AI原生Function Calling API，工具调用更高效准确
+### 模式和模型切换
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/switch <provider> [model]` | 切换LLM提供商和模型 | `/switch zhipu glm-4-plus` |
+| `/switch dify` | 切换到Dify云端模式 | `/switch dify` |
+| `/mode llm` | 切换到LLM模式（快速对话） | `/mode llm` |
+| `/mode agent` | 切换到Agent模式（工具调用） | `/mode agent` |
+| `/stream on/off` | 开启/关闭流式输出（仅LLM模式） | `/stream on` |
+| `/reload` | 热重载LLM配置文件 | `/reload` |
 
-#### GLM-4-Plus ⭐
-最新旗舰模型，综合能力强
-- ✅ 8K输出token，综合性能优秀
-- ✅ 适合通用对话和任务处理
-- 🧠 **ReAct模式**: 使用经典的ReAct推理框架，支持复杂的多步骤任务
+### 会话管理
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/clear` | 清空当前会话记忆 | `/clear` |
+| `/new` | 创建新会话 | `/new` |
+| `/sessions` | 查看历史会话列表 | `/sessions` |
+| `/restore <session_id>` | 恢复指定会话 | `/restore session_20250101_120000` |
+| `/delete_session <session_id>` | 删除指定会话 | `/delete_session session_20250101_120000` |
+| `/cleanup` | 清理孤立的会话文件 | `/cleanup` |
 
-### OpenAI
+### 文件管理（Dify模式）
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/upload [文件路径]` | 上传文件（支持多选对话框） | `/upload report.pdf` |
+| `/files` | 查看待发送文件列表 | `/files` |
+| `/files remove <序号>` | 移除指定文件 | `/files remove 2` |
+| `/files clear` | 清空所有待发送文件 | `/files clear` |
+| `/reset` | 重置Dify会话（清除记忆和文件） | `/reset` |
 
-#### GPT-5 ⭐
-新一代语言模型，推理和创造能力显著提升
-- ✅ 8K输出token，先进推理能力
-- ✅ 增强创造性和工具调用
+### 工具管理
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/mcp status [-v]` | 查看MCP工具状态 | `/mcp status -v` |
+| `/mcp tools [--json]` | 列出MCP工具列表 | `/mcp tools` |
+| `/mcp reload` | 重载MCP配置 | `/mcp reload` |
+| `/connector status [-v]` | 查看Connector工具状态 | `/connector status` |
+| `/connector tools [--json]` | 列出Connector工具列表 | `/connector tools` |
+| `/connector reload` | 重载Connector配置 | `/connector reload` |
 
-#### GPT-5-mini ⭐
-成本优化版本，速度快成本低
-- ✅ 32K输出token，快速推理
-- ✅ 成本效益优秀
+### 使用提示
+- 所有命令都以 `/` 开头
+- 命令不区分大小写
+- 在Dify模式下，部分命令（如`/mcp`、`/connector`）不可用
+- 使用 `/help` 查看当前模式下可用的所有命令
 
-#### GPT-4o ⭐
-最新GPT-4优化版本，性能和成本平衡
-- ✅ 4K输出token，平衡性能
+## 📊 支持的LLM模型
 
-#### GPT-4o-mini ⭐
-轻量级版本，速度快成本低
-- ✅ 16K输出token，快速响应
+本项目支持多个LLM提供商，可通过 `/switch <provider> [model]` 命令动态切换。
 
-#### GPT-4-turbo
-高性能版本
-- ✅ 4K输出token，稳定可靠
+### 模型概览
 
-### Ollama本地模型
+| Provider | 推荐模型 | 核心特性 | 适用场景 |
+|----------|----------|----------|----------|
+| **智谱AI** | `glm-4.5-flash` ⭐ | 免费、128K上下文、思考模式 | 通用任务、成本敏感场景 |
+| | `glm-4.5` | 96K输出、Function Calling | 代码生成、复杂推理 |
+| | `glm-4-plus` | ReAct框架、综合能力强 | 多步骤任务、通用对话 |
+| **OpenAI** | `gpt-5` ⭐ | 高级推理、温度固定(1.0) | 创意写作、复杂推理 |
+| | `gpt-5-mini` | 快速推理、32K输出 | 快速响应、成本优化 |
+| | `gpt-4o-mini` | 多模态、16K输出 | 通用任务、长上下文 |
+| **Ollama** | `qwen3:8b` ⭐ | 本地部署、中文优化 | 离线场景、隐私优先 |
+| | `gpt-oss:20b` | 工具调用、开源GPT | 复杂推理、本地Agent |
 
-支持所有Ollama兼容的本地模型，用户需要自行使用Ollama下载和管理模型。
-
-#### 推荐模型（需自行下载）
-
-| 模型 | 参数量 | 特点 | 适用场景 |
-|------|--------|------|----------|
-| **gpt-oss:20b** | 20B | 开源GPT，支持工具调用 | 复杂推理任务 |
-| **qwen3:8b** | 8B | 通义千问3.0，中文优化 | 中文对话优先 |
-| **gemma3:latest** | - | Google Gemma3最新版 | 性能稳定 |
-| **deepseek-r1:1.5b** | 1.5B | DeepSeek推理模型 | 轻量快速 |
-
-#### 使用方法
+### 快速切换示例
 
 ```bash
-# 1. 安装Ollama
-# 访问 https://ollama.com/ 下载安装
+# 智谱AI - 免费闪电版（推荐入门）
+/switch zhipu glm-4.5-flash
 
-# 2. 下载模型（示例）
+# 智谱AI - Function Calling模式
+/switch zhipu glm-4.5
+
+# OpenAI - GPT-5
+/switch openai gpt-5
+
+# Ollama - 本地模型
+/switch ollama qwen3:8b
+```
+
+### Ollama本地模型使用
+
+Ollama支持完全离线运行，需要自行下载模型：
+
+```bash
+# 1. 安装Ollama（访问 https://ollama.com/）
+# 2. 下载模型
 ollama pull qwen3:8b
-ollama pull deepseek-r1:1.5b
+ollama pull gpt-oss:20b
 
 # 3. 在项目中使用
-switch ollama qwen3:8b
+/switch ollama qwen3:8b
 ```
 
-> **💡 网络配置建议**: 使用规则代理模式可以实现最佳网络兼容性，本地Ollama服务走直连，外部API服务（如搜索、地图等）通过代理访问，确保所有功能正常工作。
-
-### 模型特性对比
-
-| 特性 | GLM-4.5 | GLM-4-Plus | GPT-5 | GPT-5-mini | GPT-4o | GPT-4o-mini |
-|------|---------|------------|-------|------------|--------|-------------|
-| 输出Token | 96K | 8K | 8K | 32K | 4K | 16K |
-| 上下文窗口 | 128K | 32K | 8K | 32K | 128K | 128K |
-| 思考模式 | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
-| 逻辑推理 | 专精 | 优秀 | 优秀 | 优秀 | 良好 | 良好 |
-| 工具调用 | 专精 | 优秀 | 优秀 | 优秀 | 良好 | 良好 |
-| 代码生成 | 专精 | 优秀 | 优秀 | 优秀 | 良好 | 良好 |
-| 成本效益 | 中等 | 优秀 | 中等 | 优秀 | 优秀 | 优秀 |
-
-### 模型特性详细说明
-
-#### GLM-4.5 (智谱AI最新旗舰)
-- **上下文窗口**: 128K tokens - 支持超长文档处理
-- **输出Token**: 96K tokens - 适合长文本生成
-- **思考模式**: ✅ 自动启用，提供深度推理能力
-- **架构**: 混合专家模型(MoE) - 更高效的参数利用
-- **专精领域**: 代码生成、复杂推理、工具调用
-- **适用场景**: 复杂编程任务、长文档分析、深度推理
-- **Agent模式**: Function Calling模式，使用智谱AI原生API
-
-#### GLM-4-Plus (智谱AI综合旗舰)
-- **上下文窗口**: 32K tokens - 平衡性能和成本
-- **输出Token**: 8K tokens - 适合一般对话和任务
-- **架构**: Transformer - 经典架构，稳定可靠
-- **适用场景**: 日常对话、创意写作、一般任务处理
-- **Agent模式**: ReAct模式，使用经典的ReAct推理框架
-
-### 智谱AI Provider架构说明
-
-智谱AI Provider支持两种不同的Agent模式：
-
-1. **Function Calling模式 (GLM-4.5)**
-   - 使用智谱AI原生Function Calling API
-   - 工具调用由API直接返回，无需解析LLM输出
-   - 支持结构化的工具调用和参数传递
-   - 集成完整的MCP工具支持
-   - 更高效的工具调用性能
-
-2. **ReAct模式 (GLM-4-Plus及其他模型)**
-   - 使用经典的ReAct推理框架
-   - 通过解析LLM输出提取工具调用指令
-   - 支持复杂的多步骤任务处理
-   - 通过JSON ReAct补丁支持MCP工具
+> **💡 提示**:
+> - 详细配置参见 `config/llms/providers.json`
+> - 使用 `/llms` 命令查看所有可用模型
+> - OpenAI的GPT-5系列温度固定为1.0，无法调整
 
 
-## 使用示例
+## ⚙️ 配置说明
 
-### CLI基本操作
+### 配置优先级
 
-```bash
-# 基础命令
-输入 'help' 查看帮助信息
+项目支持多层级配置，优先级从高到低：
 
-# 切换LLM模型
-你 > switch zhipu glm-4-plus  
-AI Agent > 已切换到 智谱AI GLM-4-Plus
+1. **环境变量** (`.env` 文件) - API密钥、默认模型等
+2. **JSON配置文件** (`config/llms/providers.json`) - 模型参数、特性等
+3. **代码默认值** - 兜底配置
 
-你 > switch zhipu glm-4.5
-AI Agent > 已切换到 智谱AI GLM-4.5 (思考模式已启用)
-```
+### 核心配置项
 
-### 模型选择建议
+| 配置项 | 说明 | 示例 | 必需 |
+|--------|------|------|------|
+| `ZHIPU_API_KEY` | 智谱AI API密钥 | `abcd1234.efgh5678...` | ✅ 二选一 |
+| `OPENAI_API_KEY` | OpenAI API密钥 | `sk-xxxxxxxx...` | ✅ 二选一 |
+| `OLLAMA_BASE_URL` | Ollama服务地址 | `http://localhost:11434` | ❌ |
+| `DEFAULT_LLM_PROVIDER` | 默认提供商 | `zhipu` / `openai` / `ollama` | ❌ |
+| `DEFAULT_LLM_MODEL` | 默认模型 | `glm-4.5-flash` / `gpt-4o-mini` | ❌ |
+| `DIFY_API_KEY` | Dify云端API密钥 | `app-xxxxxxxx...` | ❌ |
+| `TAVILY_API_KEY` | Tavily搜索API密钥 | `tvly-xxxxxxxx...` | ❌ 推荐 |
+| `AMAP_API_KEY` | 高德地图API密钥 | `xxxxxxxx...` | ❌ 推荐 |
+| `NOTION_TOKEN` | Notion集成Token | `ntn_xxxxxxxx...` | ❌ |
 
-#### 智谱AI模型选择建议
-- **GLM-4.5**: 适合复杂推理、代码生成、长文档处理
-  - 支持128K上下文，可处理超长文档
-  - 思考模式提供更好的推理能力
-  - 专精代码生成和工具调用
-  - **Function Calling模式**: 工具调用更高效准确，适合需要频繁工具调用的场景
-- **GLM-4-Plus**: 适合日常对话、创意写作、一般任务
-  - 综合性能优秀，响应速度快
-  - 成本效益好，适合频繁使用
-  - **ReAct模式**: 支持复杂的多步骤任务，适合需要深度推理的场景
+### 高级配置
 
-#### OpenAI模型选择建议
-- **GPT-5**: 适合复杂推理、创意写作、高级任务
-  - 最新一代模型，推理能力最强
-  - 适合需要深度思考的场景
-- **GPT-5-mini**: 适合快速响应、日常对话、成本敏感场景
-  - 32K输出token，适合长文本生成
-  - 成本效益优秀
-- **GPT-4o**: 适合平衡性能和成本的场景
-- **GPT-4o-mini**: 适合快速响应和成本敏感场景
+使用 `config/llms/providers.json` 自定义模型参数：
 
-#### 模型切换最佳实践
-```bash
-# 查看所有可用模型
-llms
+- **模型参数覆盖**: `mode_overrides` 字段可针对LLM/Agent模式设置不同参数
+- **温度固定**: 部分模型（如GPT-5）的温度参数固定，无法通过配置修改
+- **工具支持**: `supports_tools` 字段控制模型是否启用工具调用
 
-# 根据任务类型切换模型
-switch zhipu glm-4.5    # 复杂推理任务
-switch zhipu glm-4-plus # 日常对话任务
-switch openai gpt-5     # 创意写作任务
-switch openai gpt-5-mini # 快速响应任务
-```
+详细配置说明请参考：
+- 配置文件：`config/llms/providers.json`
+- 配置模板：`.env.example`
+- 示例配置：`config/llms/example_provider.json`
 
-#### Dify云端AI使用
-```bash
-# 切换到Dify云端AI模式
-switch dify
+> **💡 配置热重载**: 修改 `providers.json` 后，使用 `/reload` 命令即可生效，无需重启程序
 
-# 上传文件进行分析
-upload
+## 📝 更新日志
 
-# 查看待发送文件
-files
-
-# 清空待发送文件
-clearfiles
-
-# 重置对话
-reset
-
-# 查看连接状态
-info
-
-# 退出Dify模式
-switch dify
-```
-
-## 配置选项
-
-创建 `.env` 文件进行配置参见.env.example：
-
-### LLM配置
-- `ZHIPU_API_KEY`: 智谱AI API密钥 (必需，用于GLM-4.5和GLM-4-Plus)
-- `OPENAI_API_KEY`: OpenAI API密钥 (必需，用于GPT-5、GPT-5-mini、GPT-4o等)
-- `OPENAI_BASE_URL`: OpenAI API基础URL(可选，用于自定义API端点)
-- `DEFAULT_LLM_PROVIDER`: 默认LLM提供商(`zhipu`/`openai`)，默认为`zhipu`
-- `DEFAULT_LLM_MODEL`: 默认模型名称，如`glm-4-plus`、`gpt-4o-mini`等
-
-#### LLM配置示例
-```bash
-# 智谱AI配置
-ZHIPU_API_KEY=your_zhipu_api_key_here
-DEFAULT_LLM_PROVIDER=zhipu
-DEFAULT_LLM_MODEL=glm-4-plus
-
-# OpenAI配置
-OPENAI_API_KEY=your_openai_api_key_here
-DEFAULT_LLM_PROVIDER=openai
-DEFAULT_LLM_MODEL=gpt-4o-mini
-
-# 自定义OpenAI端点(可选)
-OPENAI_BASE_URL=https://api.openai.com/v1
-```
-
-### Dify配置
-- `DIFY_API_KEY`: Dify API密钥 (可选，用于云端AI功能)
-- `DIFY_BASE_URL`: Dify API基础URL (可选，默认为 https://api.dify.ai/v1)
-
-#### Dify配置示例
-```bash
-# Dify云端AI配置
-DIFY_API_KEY=your_dify_api_key_here
-DIFY_BASE_URL=https://api.dify.ai/v1
-```
-
-### 工具配置
-- `TAVILY_API_KEY`: Tavily搜索API密钥(推荐)
-- `AMAP_API_KEY`: 高德地图API密钥(推荐)
-- `NOTION_TOKEN`: Notion集成Token(可选)
-- `OKX_API_KEY`: OKX API密钥(可选)
-- `OKX_SECRET_KEY`: OKX Secret密钥(可选)  
-- `OKX_PASSPHRASE`: OKX Passphrase(可选)
-
-### 模型参数
-- `TEMPERATURE`: 温度参数，控制输出随机性，默认为 `0.1`
-- `MAX_TOKENS`: 最大输出token数，默认为 `2048`
-
-## 更新日志
+### v2.11.0 (2025-10-04)
+- **Crawl4AI配置系统完善**: 完整的网页爬取工具配置方案
+  - 修复参数传递断层：解决config.json配置无法传递到Docker API的问题
+  - 清晰的配置结构：browser/crawler分离，避免参数冗余和混淆
+  - 完整的文档体系：
+    - `tutorials/connector/crawl4ai/crawl4ai_guide.md` - 详细使用指南和开发目标
+    - `config/connector/crawl4ai/README.md` - 配置参考手册和参数速查表
+    - `config/connector/crawl4ai/config.template.json` - 简洁配置模板
+    - `config/connector/crawl4ai/config.json.commented` - 完整注释配置
+  - 参数分层管理：Agent参数 → config.json → 环境变量 → 默认值
+  - 代码优化：
+    - `src/tools/connector/crawl4ai/config.py` - 简化冗余属性，使用字典结构
+    - `src/tools/connector/crawl4ai/adapter.py` - 修复配置字典复制和合并逻辑
+  - 完整测试验证：参数传递已验证可用，Agent可正常调用crawl4ai工具
+- **LLM配置文件优化**: 改进示例配置文件
+  - 完善 `config/llms/example_provider.json` - 涵盖所有schema字段的完整示例
+  - 新增3个provider示例（ANTHROPIC、CUSTOM_CLOUD、LOCAL_OLLAMA）
+  - 7个model配置示例，覆盖temperature_fixed、parameters、mode_overrides等高级特性
+  - 详细的字段说明和使用示例
 
 ### v2.10.0 (2025-09-26)
 - **工具函数架构重构**: 完善工具函数的组织架构

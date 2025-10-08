@@ -1,38 +1,35 @@
 # 核心框架
 langchain==0.3.27
-langchain-community==0.3.27
-langchain-core==0.3.74
-langchain-text-splitters==0.3.9
+langchain-community==0.3.30
+langchain-core==0.3.78
+langchain-text-splitters==0.3.11
 
 # LLM集成
-zhipuai==2.1.5.20250726
-langchain-ollama==0.3.7
-langchain-openai==0.3.31
-openai==1.101.0
+zhipuai==2.1.5.20250825
+langchain-ollama==0.3.10
+langchain-openai==0.3.34
+openai==1.106.1
 ollama==0.5.3
 
 # 配置管理
 python-dotenv==1.1.1
 pydantic==2.11.7
-pydantic-core==2.33.2
 pydantic-settings==2.10.1
 
 # 搜索功能
 requests==2.32.5
-requests-toolbelt==1.0.0
 beautifulsoup4==4.13.5
 urllib3==2.5.0
+langchain-tavily==0.2.11
 
 # HTTP客户端和异步支持
 aiohttp==3.12.15
 httpx==0.28.1
 httpx-sse==0.4.1
-httpcore==1.0.9
 anyio==4.10.0
-sniffio==1.3.1
 
-# Notion集成相关
-# (使用aiohttp进行HTTP请求)
+# 网页爬取
+Crawl4AI==0.7.4
 
 # 命令行界面
 rich==14.1.0
@@ -45,16 +42,14 @@ sympy==1.14.0
 # 数据处理
 PyYAML==6.0.2
 Jinja2==3.1.6
-MarkupSafe==3.0.2
 
-
- 
-# MCP integration (optional, used if configured)
-langchain-mcp-adapters==0.1.9
+# MCP集成
+langchain-mcp-adapters==0.1.11
+mcp==1.13.1
 tomli==2.2.1
 
 # 时间处理
 pytz==2025.2
- 
-# ASCII 艺术
-pyfiglet==0.8.post1
+
+# ASCII艺术
+pyfiglet==1.0.4
