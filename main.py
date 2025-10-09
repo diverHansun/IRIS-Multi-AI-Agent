@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 # Import and run CLI
-from src.components.core.cli import run
+from src.components.process.cli import run
 
 
 def main():

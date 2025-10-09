@@ -99,7 +99,7 @@ class LLMConfigLoader:
             from pathlib import Path
             
             # 直接加载validation模块，避免src包的初始化问题
-            validation_path = Path(__file__).parent / "components" / "core" / "validation.py"
+            validation_path = Path(__file__).parent / "components" / "process" / "validation.py"
             spec = importlib.util.spec_from_file_location("validation_module", validation_path)
             validation_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(validation_module)
