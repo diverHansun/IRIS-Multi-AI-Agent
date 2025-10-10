@@ -17,7 +17,7 @@ from ....components.langchain.prompts.registry import PromptRegistry
 from ....components.langchain.prompts.tooling import serialize_tools
 
 from ....llm.langchain.instances.zhipu_llm import create_zhipu_llm
-from ....llm.langchain.llm_manager import get_llm_info
+from ....llm.langchain.managers import get_llm_info
 
 from .base_agent import BaseAgent
 

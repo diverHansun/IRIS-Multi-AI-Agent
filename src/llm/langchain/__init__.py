@@ -6,7 +6,8 @@
 架构说明：
 - instances/: LLM具体实现（ZhipuLLM, OpenAILLM, OllamaLLM）
 - adapters/: 适配器模式（LLMAdapter, ZhipuAdapter, OpenAIAdapter, OllamaAdapter）
-- llm_manager.py: LLM管理器
+- managers/: LLM管理器
+- utils/: 工具函数集合
 """
 
 # LLM Instances
@@ -16,7 +17,7 @@ from .instances import (
     OllamaLLM,
 )
 
-# Adapter Pattern (NEW)
+# Adapter Pattern
 from .adapters import (
     LLMAdapter,
     ZhipuAdapter,
@@ -25,26 +26,44 @@ from .adapters import (
 )
 
 # LLM Manager
-from .llm_manager import (
+from .managers import (
     LLMManager,
     LLMProvider,
     get_llm_info,
 )
 
+# Utilities
+from .utils import (
+    # Ollama
+    list_ollama_models,
+    OllamaHttpClient,
+    # Streaming
+    StreamingLLM,
+    create_streaming_llm,
+    stream_llm_response,
+)
+
 __all__ = [
-    # LLM Instances
+    # Instances
     "ZhipuLLM",
     "OpenAILLM",
     "OllamaLLM",
 
-    # Adapter Pattern (NEW)
+    # Adapters
     "LLMAdapter",
     "ZhipuAdapter",
     "OpenAIAdapter",
     "OllamaAdapter",
 
-    # LLM Manager
+    # Managers
     "LLMManager",
     "LLMProvider",
     "get_llm_info",
+
+    # Utils
+    "list_ollama_models",
+    "OllamaHttpClient",
+    "StreamingLLM",
+    "create_streaming_llm",
+    "stream_llm_response",
 ] 

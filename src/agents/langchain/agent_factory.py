@@ -17,7 +17,7 @@ from enum import Enum
 from .instances.zhipu_agent import build_zhipu_agent, ZhipuAgent
 from .instances.openai_agent import build_openai_agent, OpenAIAgent
 from .instances.ollama_agent import build_ollama_agent, OllamaAgent
-from ...llm.langchain.llm_manager import LLMManager, LLMProvider
+from ...llm.langchain.managers import LLMManager, LLMProvider
 from ...config import settings
 
 # 导入Factory Registry
@@ -218,7 +218,7 @@ class AgentFactory:
             # auto模型选择
             if model == "auto":
                 try:
-                    from ...llm.langchain.ollama_utils import list_ollama_models
+                    from ...llm.langchain.utils import list_ollama_models
                     local_models = await list_ollama_models(base_url, timeout=5)
                     if local_models:
                         model = local_models[0]

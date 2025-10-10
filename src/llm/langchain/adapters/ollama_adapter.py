@@ -87,7 +87,7 @@ class OllamaAdapter(LLMAdapter):
 
         try:
             # 动态导入避免循环依赖
-            from ...ollama_utils import list_ollama_models
+            from ..utils import list_ollama_models
 
             local_models = await list_ollama_models(base_url, timeout=5)
 
