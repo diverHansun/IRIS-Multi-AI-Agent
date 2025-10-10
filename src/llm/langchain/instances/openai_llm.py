@@ -67,7 +67,7 @@ class OpenAILLM:
         """从配置文件获取模型配置"""
         try:
             # 延迟导入避免循环导入
-            from .llm_manager import get_llm_info
+            from src.llm.langchain.managers import get_llm_info
             model_info = get_llm_info("openai", model)
             return model_info
         except Exception as e:
@@ -172,7 +172,7 @@ class OpenAILLM:
         """获取支持的模型列表"""
         try:
             # 延迟导入避免循环导入
-            from .llm_manager import get_provider_models
+            from src.llm.langchain.managers import get_provider_models
             return get_provider_models("openai")
         except Exception as e:
             logger.warning(f"获取支持的模型列表失败: {e}")

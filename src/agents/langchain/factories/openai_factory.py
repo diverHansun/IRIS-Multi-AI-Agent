@@ -43,7 +43,7 @@ class OpenAIAgentFactory(BaseAgentFactory):
         Returns:
             OpenAIAgent实例
         """
-        from ..instances.openai_agent import build_openai_agent
+        from src.agents.langchain.instances.openai_agent import build_openai_agent
 
         logger.info(f"创建OpenAI Agent: {model}")
 

@@ -4,7 +4,7 @@
 提供各种LLM提供商的封装和管理。
 
 架构说明：
-- instances/: LLM具体实现（ZhipuLLM, OpenAILLM, OllamaLLM）
+- instances/: LLM具体实现（ZhipuAILLM, OpenAILLM, OllamaLLM）
 - adapters/: 适配器模式（LLMAdapter, ZhipuAdapter, OpenAIAdapter, OllamaAdapter）
 - managers/: LLM管理器
 - utils/: 工具函数集合
@@ -12,7 +12,7 @@
 
 # LLM Instances
 from .instances import (
-    ZhipuLLM,
+    ZhipuAILLM,
     OpenAILLM,
     OllamaLLM,
 )
@@ -39,13 +39,12 @@ from .utils import (
     OllamaHttpClient,
     # Streaming
     StreamingLLM,
-    create_streaming_llm,
     stream_llm_response,
 )
 
 __all__ = [
     # Instances
-    "ZhipuLLM",
+    "ZhipuAILLM",
     "OpenAILLM",
     "OllamaLLM",
 
@@ -64,6 +63,5 @@ __all__ = [
     "list_ollama_models",
     "OllamaHttpClient",
     "StreamingLLM",
-    "create_streaming_llm",
     "stream_llm_response",
 ] 

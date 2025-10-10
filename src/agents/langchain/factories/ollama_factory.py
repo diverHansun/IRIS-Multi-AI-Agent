@@ -48,8 +48,8 @@ class OllamaAgentFactory(BaseAgentFactory):
         Returns:
             OllamaAgent实例
         """
-        from ..instances.ollama_agent import build_ollama_agent
-        from ....config import settings
+        from src.agents.langchain.instances.ollama_agent import build_ollama_agent
+        from src.config import settings
 
         # 处理base_url
         if base_url is None:
@@ -59,7 +59,7 @@ class OllamaAgentFactory(BaseAgentFactory):
         actual_model = model
         if model == "auto":
             try:
-                from ....llm.langchain.utils import list_ollama_models
+                from src.llm.langchain.utils import list_ollama_models
                 local_models = await list_ollama_models(base_url, timeout=5)
 
                 if local_models:

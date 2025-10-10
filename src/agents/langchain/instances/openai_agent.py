@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional, Iterable
 from langchain.agents import create_openai_tools_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from ....llm.langchain.instances.openai_llm import build_openai_chat
+from src.llm.langchain.instances.openai_llm import build_openai_chat
 
 from .base_agent import BaseAgent
 
@@ -96,7 +96,7 @@ class OpenAIAgent(BaseAgent):
         logger.info("Creating OpenAI LLM...")
 
         # Check for custom base_url
-        from ...config import settings
+        from src.config import settings
         base_url = self.kwargs.get('base_url') or settings.openai_base_url
 
         # Log API endpoint

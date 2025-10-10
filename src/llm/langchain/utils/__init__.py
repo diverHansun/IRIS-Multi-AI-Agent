@@ -18,7 +18,6 @@ from .ollama_http_client import OllamaHttpClient
 from .streaming_llm import (
     StreamingLLM,
     StreamingCallbackHandler,
-    create_streaming_llm,
     stream_llm_response,
 )
 
@@ -34,6 +33,5 @@ __all__ = [
     # 流式输出
     "StreamingLLM",
     "StreamingCallbackHandler",
-    "create_streaming_llm",
     "stream_llm_response",
 ]

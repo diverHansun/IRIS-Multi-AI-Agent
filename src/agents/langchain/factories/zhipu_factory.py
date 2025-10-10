@@ -76,7 +76,7 @@ class ZhipuAgentFactory(BaseAgentFactory):
         **kwargs
     ) -> Any:
         """创建Function Calling Agent"""
-        from ..instances.zhipu_fcall_agent import build_zhipu_fcall_agent
+        from src.agents.langchain.instances.zhipu_fcall_agent import build_zhipu_fcall_agent
 
         logger.info(f"创建智谱AI Function Calling Agent: {model}")
 
@@ -102,7 +102,7 @@ class ZhipuAgentFactory(BaseAgentFactory):
         **kwargs
     ) -> Any:
         """创建ReAct Agent"""
-        from ..instances.zhipu_agent import build_zhipu_agent
+        from src.agents.langchain.instances.zhipu_agent import build_zhipu_agent
 
         logger.info(f"创建智谱AI ReAct Agent: {model}")
 

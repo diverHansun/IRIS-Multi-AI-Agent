@@ -12,8 +12,8 @@ from typing import Dict, Any, List, Optional
 
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
-from ....components.shared.tools.unified_manager import UnifiedToolManager
-from ....components.shared.memory.global_memory import GlobalMemoryManager
+from src.components.shared.tools.unified_manager import UnifiedToolManager
+from src.components.shared.memory.global_memory import GlobalMemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +361,7 @@ class BaseAgent(ABC):
         Returns:
             Agent metadata including model, tools, and memory status
         """
-        from ...llm.langchain.llm_manager import get_llm_info
+        from src.llm.langchain.managers import get_llm_info
 
         # Get model info
         provider = self._get_provider_name()

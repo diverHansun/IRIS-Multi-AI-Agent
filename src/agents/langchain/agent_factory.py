@@ -17,8 +17,8 @@ from enum import Enum
 from .instances.zhipu_agent import build_zhipu_agent, ZhipuAgent
 from .instances.openai_agent import build_openai_agent, OpenAIAgent
 from .instances.ollama_agent import build_ollama_agent, OllamaAgent
-from ...llm.langchain.managers import LLMManager, LLMProvider
-from ...config import settings
+from src.llm.langchain.managers import LLMManager, LLMProvider
+from src.config import settings
 
 # 导入Factory Registry
 from .factories import get_global_registry
@@ -218,7 +218,7 @@ class AgentFactory:
             # auto模型选择
             if model == "auto":
                 try:
-                    from ...llm.langchain.utils import list_ollama_models
+                    from src.llm.langchain.utils import list_ollama_models
                     local_models = await list_ollama_models(base_url, timeout=5)
                     if local_models:
                         model = local_models[0]
@@ -246,7 +246,7 @@ class AgentFactory:
     
     def get_available_configurations(self) -> Dict[str, Any]:
         """获取可用的Agent配置"""
-        from ...config import settings
+        from src.config import settings
         
         providers = self.llm_manager.get_available_providers()
         

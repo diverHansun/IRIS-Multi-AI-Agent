@@ -12,10 +12,10 @@ from typing import List, Dict, Any, Optional, Union
 from langchain_core.tools import BaseTool
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-from ....llm.langchain.instances.zhipu_llm import create_zhipu_llm
-from ....components.shared.memory.global_memory import GlobalMemoryManager
-from ....components.shared.tools.adapters import convert_tool_to_function, execute_tool_with_arguments, execute_tool_with_arguments_async
-from ....config import settings
+from src.llm.langchain.instances.zhipu_llm import create_zhipu_llm
+from src.components.shared.memory.global_memory import GlobalMemoryManager
+from src.components.shared.tools.adapters import convert_tool_to_function, execute_tool_with_arguments, execute_tool_with_arguments_async
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -119,13 +119,13 @@ class ZhipuFunctionCallingAgent:
         """初始化工具"""
         try:
             # 导入工具适配器中的工具获取函数
-            from ....components.shared.tools.adapters.functioncalling_adapter import get_all_available_tools
+            from src.components.shared.tools.adapters.functioncalling_adapter import get_all_available_tools
             
             # 获取所有可用工具
             self.tools = get_all_available_tools()
             
             # Load connector tools
-            from ...components.shared.tools import ConnectorToolManager
+            from src.components.shared.tools import ConnectorToolManager
             connector_manager = ConnectorToolManager()
             connector_tools = connector_manager.get_all_tools()
             self.tools.extend(connector_tools)
@@ -133,7 +133,7 @@ class ZhipuFunctionCallingAgent:
             
             # 聚合全局 MCP 工具（如 Notion MCP、Filesystem 等）
             try:
-                from ...components.shared.tools.mcp import GlobalMCPManager
+                from src.components.shared.tools.mcp import GlobalMCPManager
                 await GlobalMCPManager.initialize()
                 mcp_tools = GlobalMCPManager.get_tools()
                 if mcp_tools:
@@ -425,7 +425,7 @@ class ZhipuFunctionCallingAgent:
     
     def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
-        from ....llm.langchain.managers import get_llm_info
+        from src.llm.langchain.managers import get_llm_info
         
         # 获取模型信息
         try:
@@ -487,3 +487,7 @@ async def build_zhipu_fcall_agent(
     
     await agent.initialize()
     return agent
+
+
+# 别名，保持向后兼容
+ZhipuFCallAgent = ZhipuFunctionCallingAgent

@@ -9,7 +9,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from langchain_core.tools import BaseTool
 
-from ..factories import get_global_registry
+from src.agents.langchain.factories import get_global_registry
 
 logger = logging.getLogger(__name__)
 

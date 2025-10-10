@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional, List
 from langchain_ollama import ChatOllama
 from langchain_core.language_models import BaseChatModel
 
-from ...config import settings
+from src.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -350,7 +350,7 @@ class OllamaLLM:
         try:
             import aiohttp
             import asyncio
-            from ...config import settings
+            from src.config import settings
             
             async def fetch_local_models():
                 base_url = settings.ollama_base_url
