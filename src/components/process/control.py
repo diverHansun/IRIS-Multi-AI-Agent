@@ -3,8 +3,8 @@ Control module for the Multi-AI-Agent project.
 This module contains general control commands.
 """
 
-from src.agents.agent_factory import agent_factory
-from src.llm.llm_manager import reload_llm_config
+from src.agents.langchain.agent_factory import agent_factory
+from src.llm.langchain.llm_manager import reload_llm_config
 
 
 async def switch_llm(ctx, provider: str, model: str = None):
