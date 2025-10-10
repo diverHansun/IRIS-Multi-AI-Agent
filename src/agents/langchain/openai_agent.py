@@ -339,7 +339,7 @@ class OpenAIAgent:
     
     def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
-        from ...llm.llm_manager import get_llm_info
+        from ...llm.langchain.llm_manager import get_llm_info
         
         # 获取模型信息
         try:
