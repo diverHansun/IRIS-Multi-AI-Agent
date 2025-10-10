@@ -10,7 +10,7 @@ import logging
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 
-from ...llm.langchain.ollama_llm import OllamaLLM
+from ....llm.langchain.instances.ollama_llm import OllamaLLM
 
 from .base_agent import BaseAgent
 

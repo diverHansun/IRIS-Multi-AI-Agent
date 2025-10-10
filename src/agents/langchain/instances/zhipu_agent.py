@@ -12,12 +12,12 @@ from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 
 # 导入自定义的 JSON ReAct 输出解析器
-from ...components.langchain.parsers.json_react_output_parser import JSONReActSingleInputOutputParser
-from ...components.langchain.prompts.registry import PromptRegistry
-from ...components.langchain.prompts.tooling import serialize_tools
+from ....components.langchain.parsers.json_react_output_parser import JSONReActSingleInputOutputParser
+from ....components.langchain.prompts.registry import PromptRegistry
+from ....components.langchain.prompts.tooling import serialize_tools
 
-from ...llm.langchain.zhipu_llm import create_zhipu_llm
-from ...llm.langchain.llm_manager import get_llm_info
+from ....llm.langchain.instances.zhipu_llm import create_zhipu_llm
+from ....llm.langchain.llm_manager import get_llm_info
 
 from .base_agent import BaseAgent
 

@@ -3,6 +3,10 @@ Agent Factory - 智能Agent工厂
 
 统一创建和管理不同LLM提供商的Agent实例
 支持动态切换和配置管理
+
+重构说明：
+- 内部使用FactoryRegistry实现抽象工厂模式
+- 保持所有现有API和行为向后兼容
 """
 
 import logging
@@ -10,21 +14,35 @@ import asyncio
 from typing import Dict, Any, Optional, Union
 from enum import Enum
 
-from .zhipu_agent import build_zhipu_agent, ZhipuAgent
-from .openai_agent import build_openai_agent, OpenAIAgent
-from .ollama_agent import build_ollama_agent, OllamaAgent
+from .instances.zhipu_agent import build_zhipu_agent, ZhipuAgent
+from .instances.openai_agent import build_openai_agent, OpenAIAgent
+from .instances.ollama_agent import build_ollama_agent, OllamaAgent
 from ...llm.langchain.llm_manager import LLMManager, LLMProvider
 from ...config import settings
+
+# 导入Factory Registry
+from .factories import get_global_registry
 
 logger = logging.getLogger(__name__)
 
 class AgentFactory:
-    """Agent工厂类"""
-    
-    def __init__(self):
-        """初始化Agent工厂"""
+    """Agent工厂类（使用Registry模式重构）"""
+
+    def __init__(self, use_registry: bool = True):
+        """
+        初始化Agent工厂
+
+        Args:
+            use_registry: 是否使用工厂注册表（默认True）
+        """
         self.llm_manager = LLMManager()
         self._cached_agents = {}  # Agent缓存
+        self.use_registry = use_registry
+
+        # 获取全局Registry
+        if self.use_registry:
+            self._registry = get_global_registry()
+            logger.debug("AgentFactory使用Registry模式")
         
     async def create_agent(
         self,
@@ -88,103 +106,143 @@ class AgentFactory:
                 config = self.llm_manager.SUPPORTED_LLMS[provider]
                 raise ValueError(f"未找到{config['name']}的API密钥，请设置环境变量 {config['api_key_env']}")
         
-        # 创建Agent
+        # 创建Agent（使用Registry模式）
         logger.info(f"正在创建{provider.value} Agent: {model}")
-        
+
         try:
-            if provider == LLMProvider.ZHIPU:
-                # glm-4.5 和 glm-4.5-flash 使用原生 Function Calling Agent，其余保持 ReAct
-                if model in ["glm-4.5", "glm-4.5-flash"]:
-                    from .zhipu_fcall_agent import build_zhipu_fcall_agent
-                    agent = await build_zhipu_fcall_agent(
-                        model=model,
-                        verbose=verbose,
-                        temperature=temperature,
-                        enable_memory=enable_memory,
-                        global_memory_manager=global_memory_manager,
-                        **kwargs
-                    )
-                    if use_cache:
-                        self._cached_agents[cache_key] = agent
-                    logger.info(f"成功创建{provider.value} Agent: {model}")
-                    return agent
-                agent = await build_zhipu_agent(
+            if self.use_registry:
+                # 使用Registry创建Agent
+                factory = self._registry.get_factory(provider.value)
+
+                if factory is None:
+                    raise ValueError(f"不支持的LLM提供商: {provider}")
+
+                # 准备factory参数
+                factory_kwargs = kwargs.copy()
+                if api_key:
+                    factory_kwargs['api_key'] = api_key
+
+                agent = await factory.create_agent(
                     model=model,
                     verbose=verbose,
                     temperature=temperature,
                     enable_memory=enable_memory,
                     global_memory_manager=global_memory_manager,
-                    # 基于提供商选择模板：ZHIPU 对应 GLM 模板族
-                    prompt_provider="glm",
-                    **kwargs
+                    **factory_kwargs
                 )
-            
-            elif provider == LLMProvider.OPENAI:
-                # GPT-5模型特殊处理：使用固定temperature=1.0
-                if model.startswith("gpt-5"):
-                    logger.info(f"GPT-5模型({model})使用默认temperature=1.0")
-                    actual_temperature = 1.0
-                else:
-                    actual_temperature = temperature
-                
-                agent = await build_openai_agent(
-                    api_key=api_key,
-                    model=model,
-                    verbose=verbose,
-                    temperature=actual_temperature,
-                    enable_memory=enable_memory,
-                    global_memory_manager=global_memory_manager,
-                    **kwargs
-                )
-            
-            elif provider == LLMProvider.OLLAMA:
-                # Ollama模型参数处理 - 针对Agent模式优化
-                base_url = kwargs.get('base_url', settings.ollama_base_url)
-                
-                # 如果model为"auto"，则使用本地第一个可用模型
-                if model == "auto":
-                    try:
-                        from ...llm.langchain.ollama_utils import list_ollama_models
-                        local_models = await list_ollama_models(base_url, timeout=5)
-                        if local_models:
-                            model = local_models[0]  # 使用第一个本地模型
-                            logger.info(f"自动选择Ollama模型: {model}")
-                        else:
-                            # 如果没有本地模型，使用默认值
-                            model = "gpt-oss:20b"
-                            logger.warning("未找到本地Ollama模型，使用默认模型: gpt-oss:20b")
-                    except Exception as e:
-                        # 出错时回退到默认模型
-                        model = "gpt-oss:20b"
-                        logger.warning(f"获取Ollama模型列表失败，使用默认模型: gpt-oss:20b, 错误: {e}")
-                
-                # Agent模式强制使用低温度，除非用户显式指定
-                agent_temperature = 0.0 if temperature == 0.1 else temperature
-                
-                agent = await build_ollama_agent(
-                    model=model,
-                    base_url=base_url,
-                    verbose=verbose,
-                    temperature=agent_temperature,  # 使用优化的温度
-                    enable_memory=enable_memory,
-                    global_memory_manager=global_memory_manager,
-                    disable_thinking_mode=kwargs.get('disable_thinking_mode', True),  # 默认关闭思考模式
-                    **{k: v for k, v in kwargs.items() if k != 'disable_thinking_mode'}
-                )
-            
+
             else:
-                raise ValueError(f"不支持的LLM提供商: {provider}")
-            
+                # 回退到原始if-else逻辑（向后兼容）
+                agent = await self._create_agent_legacy(
+                    provider=provider,
+                    model=model,
+                    verbose=verbose,
+                    temperature=temperature,
+                    enable_memory=enable_memory,
+                    global_memory_manager=global_memory_manager,
+                    api_key=api_key,
+                    **kwargs
+                )
+
             # 缓存Agent
             if use_cache:
                 self._cached_agents[cache_key] = agent
-            
+
             logger.info(f"成功创建{provider.value} Agent: {model}")
             return agent
-            
+
         except Exception as e:
             logger.error(f"创建{provider.value} Agent失败: {str(e)}")
             raise
+
+    async def _create_agent_legacy(
+        self,
+        provider: LLMProvider,
+        model: str,
+        verbose: bool,
+        temperature: float,
+        enable_memory: bool,
+        global_memory_manager,
+        api_key: Optional[str],
+        **kwargs
+    ):
+        """
+        Legacy Agent创建逻辑（保留用于回退）
+
+        这是原始的if-else创建逻辑，用于向后兼容
+        """
+        if provider == LLMProvider.ZHIPU:
+            # glm-4.5 和 glm-4.5-flash 使用原生 Function Calling Agent
+            if model in ["glm-4.5", "glm-4.5-flash"]:
+                from .instances.zhipu_fcall_agent import build_zhipu_fcall_agent
+                return await build_zhipu_fcall_agent(
+                    model=model,
+                    verbose=verbose,
+                    temperature=temperature,
+                    enable_memory=enable_memory,
+                    global_memory_manager=global_memory_manager,
+                    **kwargs
+                )
+            else:
+                return await build_zhipu_agent(
+                    model=model,
+                    verbose=verbose,
+                    temperature=temperature,
+                    enable_memory=enable_memory,
+                    global_memory_manager=global_memory_manager,
+                    prompt_provider="glm",
+                    **kwargs
+                )
+
+        elif provider == LLMProvider.OPENAI:
+            # GPT-5模型特殊处理
+            if model.startswith("gpt-5"):
+                logger.info(f"GPT-5模型({model})使用默认temperature=1.0")
+                actual_temperature = 1.0
+            else:
+                actual_temperature = temperature
+
+            return await build_openai_agent(
+                api_key=api_key,
+                model=model,
+                verbose=verbose,
+                temperature=actual_temperature,
+                enable_memory=enable_memory,
+                global_memory_manager=global_memory_manager,
+                **kwargs
+            )
+
+        elif provider == LLMProvider.OLLAMA:
+            base_url = kwargs.get('base_url', settings.ollama_base_url)
+
+            # auto模型选择
+            if model == "auto":
+                try:
+                    from ...llm.langchain.ollama_utils import list_ollama_models
+                    local_models = await list_ollama_models(base_url, timeout=5)
+                    if local_models:
+                        model = local_models[0]
+                        logger.info(f"自动选择Ollama模型: {model}")
+                    else:
+                        model = "gpt-oss:20b"
+                        logger.warning("未找到本地Ollama模型，使用默认模型: gpt-oss:20b")
+                except Exception as e:
+                    model = "gpt-oss:20b"
+                    logger.warning(f"获取Ollama模型列表失败，使用默认模型: gpt-oss:20b, 错误: {e}")
+
+            # Agent模式温度优化
+            agent_temperature = 0.0 if temperature == 0.1 else temperature
+
+            return await build_ollama_agent(
+                model=model,
+                base_url=base_url,
+                verbose=verbose,
+                temperature=agent_temperature,
+                enable_memory=enable_memory,
+                global_memory_manager=global_memory_manager,
+                disable_thinking_mode=kwargs.get('disable_thinking_mode', True),
+                **{k: v for k, v in kwargs.items() if k != 'disable_thinking_mode'}
+            )
     
     def get_available_configurations(self) -> Dict[str, Any]:
         """获取可用的Agent配置"""

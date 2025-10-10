@@ -12,8 +12,8 @@ from typing import Dict, Any, List, Optional
 
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
-from ...components.shared.tools.unified_manager import UnifiedToolManager
-from ...components.shared.memory.global_memory import GlobalMemoryManager
+from ....components.shared.tools.unified_manager import UnifiedToolManager
+from ....components.shared.memory.global_memory import GlobalMemoryManager
 
 logger = logging.getLogger(__name__)
 

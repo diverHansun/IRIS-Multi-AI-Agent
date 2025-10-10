@@ -1,9 +1,87 @@
 """
 智能代理模块
 
-提供基于智谱AI的智能代理实现。
+提供各种Agent提供商的实现。
+
+架构说明：
+- instances/: Agent具体实现（BaseAgent, ZhipuAgent, OpenAIAgent, OllamaAgent）
+- factories/: 抽象工厂模式（FactoryRegistry, ZhipuFactory, OpenAIFactory, OllamaFactory）
+- builders/: 建造者模式（AgentBuilder, AgentPresets）
+- agent_factory.py: 统一工厂入口（内部使用Registry，保持向后兼容）
 """
 
-from .zhipu_agent import build_zhipu_agent, build_simple_zhipu_chat
+# Agent Instances
+from .instances import (
+    BaseAgent,
+    ZhipuAgent,
+    build_zhipu_agent,
+    ZhipuFCallAgent,
+    build_zhipu_fcall_agent,
+    OpenAIAgent,
+    build_openai_agent,
+    OllamaAgent,
+    build_ollama_agent,
+)
 
-__all__ = ["build_zhipu_agent", "build_simple_zhipu_chat"] 
+# Factory Pattern
+from .agent_factory import (
+    AgentFactory,
+    agent_factory,
+    create_agent,
+    create_default_agent,
+    create_zhipu_agent,
+    create_openai_agent,
+    create_ollama_agent,
+    get_available_configurations,
+)
+
+# Abstract Factory Pattern (NEW)
+from .factories import (
+    BaseAgentFactory,
+    ZhipuAgentFactory,
+    OpenAIAgentFactory,
+    OllamaAgentFactory,
+    FactoryRegistry,
+    get_global_registry,
+)
+
+# Builder Pattern (NEW)
+from .builders import (
+    AgentBuilder,
+    AgentPresets,
+)
+
+__all__ = [
+    # Agent instances
+    "BaseAgent",
+    "ZhipuAgent",
+    "build_zhipu_agent",
+    "ZhipuFCallAgent",
+    "build_zhipu_fcall_agent",
+    "OpenAIAgent",
+    "build_openai_agent",
+    "OllamaAgent",
+    "build_ollama_agent",
+
+    # Factory (Legacy API - backward compatible)
+    "AgentFactory",
+    "agent_factory",
+    "create_agent",
+    "create_default_agent",
+    "create_zhipu_agent",
+    "create_openai_agent",
+    "create_ollama_agent",
+    "get_available_configurations",
+
+    # Abstract Factory Pattern (NEW)
+    "BaseAgentFactory",
+    "ZhipuAgentFactory",
+    "OpenAIAgentFactory",
+    "OllamaAgentFactory",
+    "FactoryRegistry",
+    "get_global_registry",
+
+    # Builder Pattern (NEW)
+    "AgentBuilder",
+    "AgentPresets",
+] 

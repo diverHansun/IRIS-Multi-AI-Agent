@@ -9,8 +9,8 @@ import logging
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 
-from .zhipu_llm import ZhipuAILLM
-from .openai_llm import OpenAILLM, build_openai_chat
+from .instances.zhipu_llm import ZhipuAILLM
+from .instances.openai_llm import OpenAILLM, build_openai_chat
 from ...config import settings, config_loader
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ class LLMManager:
         models = dict(config.get("models", {}))
         if provider == LLMProvider.OLLAMA:
             try:
-                from .ollama_llm import OllamaLLM  # 动态导入避免循环依赖
+                from .instances.ollama_llm import OllamaLLM  # 动态导入避免循环依赖
                 # 使用动态检测方法获取本地已安装的模型
                 dynamic_models = OllamaLLM.get_supported_models()
                 models.update(dynamic_models)
@@ -354,7 +354,7 @@ class LLMManager:
         elif provider == LLMProvider.OLLAMA:
             # 动态导入Ollama LLM类
             try:
-                from .ollama_llm import OllamaLLM
+                from .instances.ollama_llm import OllamaLLM
                 llm_wrapper = OllamaLLM(model=model, **kwargs)
                 return llm_wrapper.create_llm()
             except ImportError as e:

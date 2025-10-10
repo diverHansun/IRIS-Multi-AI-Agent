@@ -11,7 +11,7 @@ from typing import Dict, Any, Optional, Iterable
 from langchain.agents import create_openai_tools_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from ...llm.langchain.openai_llm import build_openai_chat
+from ....llm.langchain.instances.openai_llm import build_openai_chat
 
 from .base_agent import BaseAgent
 
