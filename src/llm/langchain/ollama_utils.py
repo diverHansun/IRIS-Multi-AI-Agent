@@ -14,7 +14,7 @@ from typing import List, Dict, Any
 
 import aiohttp
 
-from ..config import settings
+from ...config import settings
 
 logger = logging.getLogger(__name__)
 

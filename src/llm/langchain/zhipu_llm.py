@@ -8,7 +8,7 @@ from langchain_community.chat_models import ChatZhipuAI
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, BaseMessage
 from typing import AsyncGenerator, Optional, Callable, List, Union
-from ..config import settings
+from ...config import settings
 # 移除不存在的导入
 import os
 import logging

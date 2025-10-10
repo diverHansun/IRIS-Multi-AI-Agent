@@ -11,7 +11,7 @@ from typing import Dict, Any, List
 from langchain_core.tools import BaseTool
 
 # 导入工具模块
-from ..tools import SDKToolManager
+from ...components.shared.tools import SDKToolManager
 
 logger = logging.getLogger(__name__)
 

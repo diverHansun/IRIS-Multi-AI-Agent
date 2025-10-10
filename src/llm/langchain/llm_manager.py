@@ -11,7 +11,7 @@ from enum import Enum
 
 from .zhipu_llm import ZhipuAILLM
 from .openai_llm import OpenAILLM, build_openai_chat
-from ..config import settings, config_loader
+from ...config import settings, config_loader
 
 logger = logging.getLogger(__name__)
 
@@ -347,7 +347,7 @@ class LLMManager:
             
         elif provider == LLMProvider.OPENAI:
             # 检查是否有自定义base_url
-            from ..config import settings
+            from ...config import settings
             base_url = settings.openai_base_url or kwargs.get('base_url')
             return build_openai_chat(api_key=api_key, model=model, base_url=base_url, **kwargs)
         

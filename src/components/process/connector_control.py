@@ -4,9 +4,9 @@ Connector control commands for CLI
 
 import asyncio
 from typing import Dict, Any, List
-from ...tools.connector import ConnectorToolManager
-from ...tools.connector.crawl4ai.client import Crawl4AIClient
-from ...tools.connector.crawl4ai.config import Crawl4AIConfig
+from ..shared.tools.connector import ConnectorToolManager
+from ..shared.tools.connector.crawl4ai.client import Crawl4AIClient
+from ..shared.tools.connector.crawl4ai.config import Crawl4AIConfig
 
 
 async def connector_status(verbose: bool = False):

@@ -13,14 +13,14 @@ from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 
 # 导入自定义的 JSON ReAct 输出解析器
-from ..parsers.json_react_output_parser import JSONReActSingleInputOutputParser
-from ..prompts.registry import PromptRegistry
-from ..prompts.tooling import serialize_tools
+from ...components.langchain.parsers.json_react_output_parser import JSONReActSingleInputOutputParser
+from ...components.langchain.prompts.registry import PromptRegistry
+from ...components.langchain.prompts.tooling import serialize_tools
 
-from ..llm.zhipu_llm import create_zhipu_llm
-from ..llm.llm_manager import get_llm_info
-from ..tools import SDKToolManager, ConnectorToolManager
-from ..memory.global_memory import GlobalMemoryManager
+from ...llm.langchain.zhipu_llm import create_zhipu_llm
+from ...llm.langchain.llm_manager import get_llm_info
+from ...components.shared.tools import SDKToolManager, ConnectorToolManager
+from ...components.shared.memory.global_memory import GlobalMemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ class ZhipuAgent:
     async def _load_mcp_tools(self):
         """加载MCP工具"""
         try:
-            from ..tools.mcp import GlobalMCPManager
+            from ...components.shared.tools.mcp import GlobalMCPManager
             await GlobalMCPManager.initialize()
             mcp_tools = GlobalMCPManager.get_tools()
             if mcp_tools:

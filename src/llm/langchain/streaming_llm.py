@@ -20,7 +20,7 @@ from langchain_core.callbacks import AsyncCallbackHandler, BaseCallbackHandler
 
 # 导入配置
 try:
-    from ..config import settings
+    from ...config import settings
 except ImportError:
     # 如果作为独立模块运行，创建一个简单的配置
     class Settings:

@@ -14,9 +14,9 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.language_models import BaseChatModel
 
-from ..llm.ollama_llm import OllamaLLM
-from ..memory.global_memory import GlobalMemoryManager
-from ..tools import SDKToolManager, ConnectorToolManager
+from ...llm.langchain.ollama_llm import OllamaLLM
+from ...components.shared.memory.global_memory import GlobalMemoryManager
+from ...components.shared.tools import SDKToolManager, ConnectorToolManager
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ class OllamaAgent:
 
         # Append global MCP tools if available
         try:
-            from ..tools.mcp import GlobalMCPManager
+            from ...components.shared.tools.mcp import GlobalMCPManager
             await GlobalMCPManager.initialize()
             mcp_tools = GlobalMCPManager.get_tools()
             if mcp_tools:
@@ -369,7 +369,7 @@ Question: {input}
     
     def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
-        from ..llm.llm_manager import get_llm_info
+        from ...llm.llm_manager import get_llm_info
         
         # 获取模型信息
         try:

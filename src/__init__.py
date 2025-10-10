@@ -13,10 +13,10 @@ from pathlib import Path
 
 # 直接从当前包导入config
 from .config import settings
-from .agents.zhipu_agent import build_zhipu_agent, build_simple_zhipu_chat
+from .agents.langchain.zhipu_agent import build_zhipu_agent, build_simple_zhipu_chat
 
 # 导出 patch 模块中的解析器
-from .parsers.json_react_output_parser import JSONReActSingleInputOutputParser
+from .components.langchain.parsers.json_react_output_parser import JSONReActSingleInputOutputParser
 
 __all__ = [
     "settings",

@@ -14,9 +14,9 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.language_models import BaseChatModel
 
-from ..llm.openai_llm import build_openai_chat, OpenAILLM
-from ..memory.global_memory import GlobalMemoryManager
-from ..tools import SDKToolManager, ConnectorToolManager
+from ...llm.langchain.openai_llm import build_openai_chat, OpenAILLM
+from ...components.shared.memory.global_memory import GlobalMemoryManager
+from ...components.shared.tools import SDKToolManager, ConnectorToolManager
 
 __all__ = [
     # 数学工具
@@ -107,7 +107,7 @@ class OpenAIAgent:
             logger.info("Creating OpenAI LLM...")
             
             # 检查是否有自定义base_url，优先级：构造函数参数 > 环境变量配置
-            from ..config import settings
+            from ...config import settings
             base_url = self.kwargs.get('base_url') or settings.openai_base_url
             
             # 记录使用的API端点
@@ -178,7 +178,7 @@ class OpenAIAgent:
         
         # Append global MCP tools if available
         try:
-            from ..tools.mcp import GlobalMCPManager
+            from ...components.shared.tools.mcp import GlobalMCPManager
             await GlobalMCPManager.initialize()
             mcp_tools = GlobalMCPManager.get_tools()
             if mcp_tools:
@@ -339,7 +339,7 @@ class OpenAIAgent:
     
     def get_agent_info(self) -> Dict[str, Any]:
         """获取Agent信息"""
-        from ..llm.llm_manager import get_llm_info
+        from ...llm.llm_manager import get_llm_info
         
         # 获取模型信息
         try:
