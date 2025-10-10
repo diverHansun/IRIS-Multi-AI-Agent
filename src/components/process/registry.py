@@ -3,8 +3,8 @@ Registry module for the Multi-AI-Agent project.
 This module contains provider/model catalog and validation.
 """
 
-from src.agents.agent_factory import get_available_configurations
-from src.llm.ollama_utils import list_ollama_models
+from src.agents.langchain.agent_factory import get_available_configurations
+from src.llm.langchain.ollama_utils import list_ollama_models
 
 
 async def get_catalog():
