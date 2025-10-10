@@ -1,0 +1,77 @@
+"""
+Connector Tool Provider
+
+Provides tools from the connector tool manager.
+"""
+
+import logging
+from typing import List
+
+from langchain_core.tools import BaseTool
+
+from .base import ToolProvider
+from ..connector import ConnectorToolManager
+
+logger = logging.getLogger(__name__)
+
+
+class ConnectorToolProvider(ToolProvider):
+    """Tool provider for connector tools."""
+
+    def __init__(self):
+        """Initialize connector tool provider."""
+        super().__init__(name="connector")
+        self._connector_manager = None
+
+    async def initialize(self) -> None:
+        """
+        Initialize connector tools.
+
+        Connector tools are loaded from the ConnectorToolManager.
+        """
+        if self._initialized:
+            logger.debug(f"{self.name} provider already initialized")
+            return
+
+        try:
+            logger.info(f"Initializing {self.name} tool provider...")
+
+            # Create connector manager
+            self._connector_manager = ConnectorToolManager()
+
+            # Get tools
+            self._tools = self._connector_manager.get_all_tools()
+            self._initialized = True
+
+            logger.info(f"{self.name} provider initialized: {len(self._tools)} tools loaded")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize {self.name} provider: {e}")
+            raise
+
+    def get_tools(self) -> List[BaseTool]:
+        """
+        Get connector tools.
+
+        Returns:
+            List of connector tools
+
+        Raises:
+            RuntimeError: If provider not initialized
+        """
+        if not self._initialized:
+            raise RuntimeError(f"{self.name} provider not initialized. Call initialize() first.")
+
+        return self._tools
+
+    async def reload(self) -> None:
+        """
+        Reload connector tools.
+
+        Note: Connector tools are typically static and don't need reloading,
+        but this method is provided for interface compatibility.
+        """
+        logger.info(f"Reloading {self.name} tools...")
+        self._initialized = False
+        await self.initialize()
+        logger.info(f"{self.name} tools reloaded: {len(self._tools)} tools")

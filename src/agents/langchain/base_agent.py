@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional
 
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
-from ...components.shared.tools import SDKToolManager, ConnectorToolManager
+from ...components.shared.tools.unified_manager import UnifiedToolManager
 from ...components.shared.memory.global_memory import GlobalMemoryManager
 
 logger = logging.getLogger(__name__)
@@ -133,42 +133,30 @@ class BaseAgent(ABC):
 
     async def _load_tools(self):
         """
-        Load all tools (common logic for all agents).
+        Load all tools using UnifiedToolManager (common logic for all agents).
 
-        Loads tools from:
-        1. SDK Tool Manager
-        2. Connector Tool Manager
-        3. MCP Manager (if available)
+        Uses the strategy pattern to load tools from all registered providers:
+        1. SDK Tool Provider
+        2. MCP Tool Provider
+        3. Connector Tool Provider
         """
-        self.tools = []
+        logger.info("Loading tools using UnifiedToolManager...")
 
-        # Load SDK tools
-        sdk_tools = SDKToolManager.get_all_tools()
-        self.tools.extend(sdk_tools)
-        logger.info(f"SDK tools loaded: {len(sdk_tools)}")
+        # Create and initialize tool manager
+        tool_manager = UnifiedToolManager(auto_register_defaults=True)
+        await tool_manager.initialize_all()
 
-        # Load connector tools
-        connector_manager = ConnectorToolManager()
-        connector_tools = connector_manager.get_all_tools()
-        self.tools.extend(connector_tools)
-        logger.info(f"Connector tools loaded: {len(connector_tools)}")
-
-        # Load MCP tools
-        await self._load_mcp_tools()
+        # Get all tools
+        self.tools = tool_manager.get_all_tools()
 
         logger.info(f"Total tools loaded: {len(self.tools)}")
 
-    async def _load_mcp_tools(self):
-        """Load MCP tools if available."""
-        try:
-            from ...components.shared.tools.mcp import GlobalMCPManager
-            await GlobalMCPManager.initialize()
-            mcp_tools = GlobalMCPManager.get_tools()
-            if mcp_tools:
-                self.tools.extend(mcp_tools)
-                logger.info(f"MCP tools loaded: {len(mcp_tools)}")
-        except Exception as e:
-            logger.warning(f"MCP tools loading failed: {e}")
+        # Log tool counts by provider
+        status = tool_manager.get_status()
+        for provider_name, provider_status in status["providers"].items():
+            logger.debug(
+                f"  {provider_name}: {provider_status['tool_count']} tools"
+            )
 
     def _init_memory(self, config: Dict[str, Any]) -> None:
         """
