@@ -12,13 +12,13 @@ logger = logging.getLogger(__name__)
 # Import the IRIS logo display function
 from src.ui.logo.logo import display_logo,display_logo_intro
 
-from src.agents.agent_factory import create_default_agent, get_available_configurations
-from src.llm.streaming_llm import stream_llm_response
-from src.memory import GlobalMemoryManager, SessionManager
+from src.agents.langchain.agent_factory import create_default_agent, get_available_configurations
+from src.llm.langchain.streaming_llm import stream_llm_response
+from src.components.global.memory import GlobalMemoryManager, SessionManager
 
 # Try to import MCP manager
 try:
-    from src.tools.mcp import GlobalMCPManager
+    from src.components.global.tools.mcp import GlobalMCPManager
     MCP_AVAILABLE = True
 except Exception:
     GlobalMCPManager = None
