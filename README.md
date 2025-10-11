@@ -316,6 +316,23 @@ ollama pull gpt-oss:20b
 
 ## 📝 更新日志
 
+### v3.0.0 (2025-10-11) 🎉
+- **架构全面升级**: 基于GoF设计模式的企业级架构重构
+  - Provider模块化：新增 `src/llm/langchain/providers/` 目录，清晰分离通用与专属工具
+  - Ollama迁移：`ollama_http_client.py` → `providers/ollama/client.py`，`OllamaHttpClient` → `OllamaClient`
+  - 预留扩展：`providers/zhipu/` 和 `providers/openai/` 为未来专属工具预留空间
+- **导入路径优化**: 统一使用绝对导入 (`from src.xxx`)
+  - 更新4处关键引用路径（adapter、factory、registry、streaming）
+  - 通过6轮导入测试确保架构正确性
+- **代码规范化**:
+  - 移除部分代码emoji
+- **设计模式应用**:
+  - Factory: Agent工厂系统 + Registry注册表
+  - Adapter: LLM适配器统一provider接口
+  - Strategy: 工具管理策略化（SDK/MCP/Connector）
+  - Template Method: BaseAgent消除重复代码
+- 向后兼容：所有外部API保持不变
+
 ### v2.11.0 (2025-10-04)
 - **Crawl4AI配置系统完善**: 完整的网页爬取工具配置方案
   - 修复参数传递断层：解决config.json配置无法传递到Docker API的问题

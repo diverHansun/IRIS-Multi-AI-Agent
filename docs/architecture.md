@@ -2,19 +2,21 @@
 
 > **版本**: v3.0.0
 > **作者**: diverHansun
-> **最后更新**: 2025-10-10
+> **最后更新**: 2025-10-11
 > **目标**: 基于 GoF 设计模式的架构优化，为 LangGraph 集成做准备
+> **状态**: ✅ Phase 1 完成（Provider模块化 + 导入优化）
 
 ---
 
 ## 📑 目录
 
 1. [架构概览](#架构概览)
-2. [当前架构分析](#当前架构分析)
-3. [设计模式应用](#设计模式应用)
-4. [优化建议](#优化建议)
-5. [LangGraph 集成准备](#langgraph-集成准备)
-6. [实施路线图](#实施路线图)
+2. [v3.0.0 重构进展](#v300-重构进展) ⭐ 新增
+3. [当前架构分析](#当前架构分析)
+4. [设计模式应用](#设计模式应用)
+5. [优化建议](#优化建议)
+6. [LangGraph 集成准备](#langgraph-集成准备)
+7. [实施路线图](#实施路线图)
 
 ---
 
@@ -50,12 +52,113 @@
 
 | 模块 | 路径 | 职责 | 设计模式 |
 |------|------|------|----------|
-| **Agent Factory** | `src/agents/langchain/agent_factory.py` | Agent 创建与管理 | 工厂模式 |
-| **LLM Manager** | `src/llm/langchain/llm_manager.py` | LLM 实例管理 | 单例 + 工厂 |
-| **Memory Manager** | `src/components/shared/memory/global_memory.py` | 会话记忆管理 | 单例 + 策略 |
+| **Agent Factory** | `src/agents/langchain/factories/` | Agent 创建与管理 | 工厂模式 |
+| **LLM Adapters** | `src/llm/langchain/adapters/` | LLM 适配器 | 适配器模式 |
+| **LLM Providers** 🆕 | `src/llm/langchain/providers/` | Provider专属工具 | 模块化设计 |
+| **LLM Manager** | `src/llm/langchain/managers/` | LLM 实例管理 | 单例 + 工厂 |
+| **Memory Manager** | `src/components/shared/memory/` | 会话记忆管理 | 单例 + 策略 |
 | **Tool Managers** | `src/components/shared/tools/` | 工具加载与适配 | 策略 + 适配器 |
 | **Config Loader** | `src/config/` | 配置加载与验证 | 单例 |
-| **Prompt Registry** | `src/components/langchain/prompts/registry.py` | 提示词模板管理 | 注册表模式 |
+| **Prompt Registry** | `src/components/langchain/prompts/` | 提示词模板管理 | 注册表模式 |
+
+---
+
+## 🚀 v3.0.0 重构进展
+
+### Phase 1: Provider模块化 ✅ 已完成
+
+#### 📦 新增 Provider 目录结构
+
+```
+src/llm/langchain/
+├── providers/                    # 🆕 Provider专属工具模块
+│   ├── __init__.py
+│   ├── ollama/                   # Ollama专属
+│   │   ├── __init__.py
+│   │   ├── client.py             # 移动自: utils/ollama_http_client.py
+│   │   └── utils.py              # 移动自: utils/ollama_utils.py
+│   ├── zhipu/                    # 预留: 智谱AI专属
+│   │   └── __init__.py
+│   └── openai/                   # 预留: OpenAI专属
+│       └── __init__.py
+├── adapters/                     # LLM适配器（v2.10）
+├── instances/                    # LLM实例（v2.10）
+├── managers/                     # LLM管理器（v2.10）
+└── utils/                        # 🔄 通用工具（仅保留streaming.py）
+    ├── __init__.py
+    └── streaming.py              # 重命名自: streaming_llm.py
+```
+
+#### 🎯 核心改进
+
+1. **职责分离** 📐
+   - `providers/`：Provider专属工具（HTTP客户端、模型发现等）
+   - `utils/`：通用跨provider工具（streaming输出等）
+   - 清晰的模块边界，符合单一职责原则
+
+2. **Ollama工具迁移** 🔄
+   ```python
+   # 之前
+   src/llm/langchain/utils/ollama_http_client.py  # ❌ 混在通用工具中
+   src/llm/langchain/utils/ollama_utils.py        # ❌ 混在通用工具中
+
+   # 现在
+   src/llm/langchain/providers/ollama/client.py   # ✅ 专属目录
+   src/llm/langchain/providers/ollama/utils.py    # ✅ 专属目录
+   ```
+
+3. **类重命名** 📝
+   ```python
+   # 之前
+   from src.llm.langchain.utils import OllamaHttpClient
+
+   # 现在
+   from src.llm.langchain.providers.ollama import OllamaClient  # 更简洁
+   ```
+
+4. **预留扩展** 🔮
+   - `providers/zhipu/`：为未来智谱AI专属工具预留
+   - `providers/openai/`：为未来OpenAI专属工具预留
+   - 统一模式，易于扩展
+
+#### 🔗 导入路径优化
+
+统一使用**绝对导入**，避免循环依赖：
+
+| 文件 | 更新前 | 更新后 |
+|------|--------|--------|
+| [streaming.py](../src/llm/langchain/utils/streaming.py#L315) | `from .ollama_http_client import` | `from src.llm.langchain.providers.ollama import` |
+| [ollama_adapter.py](../src/llm/langchain/adapters/ollama_adapter.py#L90) | `from src.llm.langchain.utils import` | `from src.llm.langchain.providers.ollama import` |
+| [ollama_factory.py](../src/agents/langchain/factories/ollama_factory.py#L62) | `from src.llm.langchain.utils import` | `from src.llm.langchain.providers.ollama import` |
+| [registry.py](../src/components/process/registry.py#L7) | `from src.llm.langchain.utils import` | `from src.llm.langchain.providers.ollama import` |
+
+#### ✅ 验证测试
+
+所有导入测试通过：
+```bash
+✅ Provider模块导入测试通过
+✅ Utils模块导入测试通过
+✅ 主模块导入测试通过
+✅ Adapter导入测试通过
+✅ Factory导入测试通过
+✅ Registry导入测试通过
+```
+
+#### 🎨 代码规范化
+
+- 移除代码中的emoji（3处）
+- `streaming_llm.py` → `streaming.py`（移除冗余命名）
+- 统一模块文档和注释风格
+
+#### 📊 重构成果
+
+| 指标 | 数值 |
+|------|------|
+| 新增目录 | 4个 (`providers/`, `ollama/`, `zhipu/`, `openai/`) |
+| 文件迁移 | 2个 (`client.py`, `utils.py`) |
+| 文件重命名 | 1个 (`streaming.py`) |
+| 导入路径更新 | 4处 |
+| Git commits | 5个 |
 
 ---
 
