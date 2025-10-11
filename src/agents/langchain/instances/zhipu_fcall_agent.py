@@ -21,50 +21,94 @@ logger = logging.getLogger(__name__)
 
 
 class ZhipuFunctionCallingAgent:
-    """智谱AI Function Calling Agent"""
-    
+    """
+    智谱AI Function Calling Agent
+
+    v2更新: 支持配置驱动（通过Adapter），同时保持向后兼容
+    """
+
     def __init__(
         self,
-        model: str = "glm-4.5-flash",
-        temperature: float = 0.1,
-        verbose: bool = False,
-        max_iterations: int = 10,
-        enable_memory: bool = True,
+        model: str = None,
+        provider: str = None,
+        llm_adapter = None,
+        agent_adapter = None,
+        # 以下为旧接口参数（向后兼容）
+        temperature: float = None,
+        verbose: bool = None,
+        max_iterations: int = None,
+        enable_memory: bool = None,
         global_memory_manager=None,
         **kwargs
     ):
         """
         初始化智谱AI Function Calling Agent
-        
-        Args:
+
+        新方式（推荐）:
+            provider: Provider名称
+            model: 模型名称
+            llm_adapter: LLM参数适配器
+            agent_adapter: Agent参数适配器
+            **kwargs: 用户参数（可覆盖配置）
+
+        旧方式（兼容）:
             model: 模型名称，支持glm-4.5和glm-4.5-flash
             temperature: 温度参数
             verbose: 是否显示详细日志
             max_iterations: 最大迭代次数
             enable_memory: 是否启用记忆功能
             global_memory_manager: 全局记忆管理器
-            **kwargs: 其他参数
         """
-        if model not in ["glm-4.5", "glm-4.5-flash"]:
+        if model and model not in ["glm-4.5", "glm-4.5-flash"]:
             raise ValueError("ZhipuFunctionCallingAgent仅支持glm-4.5和glm-4.5-flash模型")
-        
-        self.model = model
-        self.temperature = temperature
-        self.verbose = verbose
-        self.max_iterations = max_iterations
-        self.enable_memory = enable_memory
+
+        self.model = model or "glm-4.5-flash"
+        self.provider = provider or "ZHIPU"
+        self.llm_adapter = llm_adapter
+        self.agent_adapter = agent_adapter
+
+        # 判断使用新方式还是旧方式
+        self._use_adapters = (llm_adapter is not None and agent_adapter is not None)
+
+        if self._use_adapters:
+            # 新方式: 从Agent Adapter获取参数（配置驱动）
+            agent_params = agent_adapter.get_agent_params(**kwargs)
+
+            self.temperature = agent_params.get("temperature", 0.1)
+            self.verbose = agent_params.get("verbose", False)
+            self.max_iterations = agent_params.get("max_iterations", 10)
+            self.enable_memory = agent_params.get("memory_enabled", True)
+            self.max_execution_time = agent_params.get("max_execution_time")
+
+            logger.info(
+                f"ZhipuFCallAgent初始化(新方式): {model}, "
+                f"max_iterations={self.max_iterations} (从配置)"
+            )
+        else:
+            # 旧方式: 直接使用传入的参数（向后兼容）
+            self.temperature = temperature if temperature is not None else 0.1
+            self.verbose = verbose if verbose is not None else False
+            self.max_iterations = max_iterations if max_iterations is not None else 10
+            self.enable_memory = enable_memory if enable_memory is not None else True
+            self.max_execution_time = None
+
+            logger.info(
+                f"ZhipuFCallAgent初始化(旧方式): {model}, "
+                f"max_iterations={self.max_iterations} (硬编码)"
+            )
+
         self.global_memory_manager = global_memory_manager
         self.kwargs = kwargs
-        
+
         # 组件
         self.llm = None
         self.zhipu_client = None
         self.tools = []
         self.is_initialized = False
-        
+
         # 记忆管理
         self.chat_memory = None
-        if enable_memory:
+        if self.enable_memory:
             self._init_memory()
     
     def _init_memory(self) -> None:
@@ -439,11 +483,13 @@ class ZhipuFunctionCallingAgent:
             "model": self.model,
             "temperature": self.temperature,
             "max_iterations": self.max_iterations,
+            "max_execution_time": getattr(self, 'max_execution_time', None),
             "initialized": self.is_initialized,
             "tool_count": len(self.tools),
             "tools": [tool.name for tool in self.tools] if self.tools else [],
             "memory_enabled": self.enable_memory,
             "mode": "function_calling",  # 标识使用Function Calling模式
+            "use_adapters": getattr(self, '_use_adapters', False),
             # 合并模型信息
             **model_info
         }
