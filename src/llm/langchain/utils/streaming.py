@@ -1,15 +1,26 @@
 """
-流式输出工具模块
+Streaming Utility Module
 
-提供LLM流式输出的统一接口和管理功能
-支持智谱AI和OpenAI的流式调用
+Provides unified interface and management for LLM streaming output.
+Supports streaming from Zhipu AI, OpenAI, and Ollama.
+
+IMPORTANT: This module is designed for direct LLM chat only.
+Agents should NOT use streaming as they need complete responses for tool calling.
+
+Usage:
+    # For LLM direct chat (CLI mode)
+    result = await stream_llm_response(provider="zhipu", prompt="Hello", llm=llm_instance)
+
+    # For Agent (use non-streaming methods instead)
+    result = await agent.ainvoke(query)  # Correct
 """
 
 import asyncio
 import logging
 import time
-from typing import AsyncGenerator, Dict, Any, Optional, Union, Callable
+from typing import AsyncGenerator, Dict, Any, Optional, Union, Callable, Literal
 from abc import ABC, abstractmethod
+from functools import wraps
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -30,6 +41,27 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+
+# ========== Decorator for LLM-only functions ==========
+
+def for_llm_only(func):
+    """
+    Decorator to mark functions that should only be used with LLMs, not Agents.
+
+    This is a documentation decorator - it doesn't enforce restrictions,
+    but serves as a clear signal to developers.
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        return await func(*args, **kwargs)
+
+    # Add marker attribute
+    wrapper.__llm_only__ = True
+    return wrapper
+
+
+# ========== Streaming Callback Handler ==========
 
 class StreamingCallbackHandler(AsyncCallbackHandler):
     """流式输出回调处理器"""
@@ -128,38 +160,57 @@ class StreamingDisplay:
         return self.content
 
 class StreamingLLM(ABC):
-    """流式LLM抽象基类"""
-    
+    """
+    Abstract base class for streaming LLM providers.
+
+    This class defines the interface for all streaming LLM implementations.
+    Each provider (Zhipu, OpenAI, Ollama, etc.) should implement this interface.
+
+    Design Pattern: Strategy Pattern - allows easy addition of new providers.
+
+    For adding new providers:
+        1. Subclass StreamingLLM
+        2. Implement stream_generate method
+        3. Register in StreamingManager
+    """
+
+    def __init__(self, llm: BaseChatModel):
+        """
+        Initialize streaming LLM provider.
+
+        Args:
+            llm: LangChain ChatModel instance
+        """
+        self.llm = llm
+
     @abstractmethod
     async def stream_generate(
-        self, 
-        prompt: str, 
+        self,
+        prompt: str,
         on_token: Optional[Callable[[str], None]] = None
     ) -> AsyncGenerator[str, None]:
         """
-        流式生成文本
-        
+        Stream generate text from LLM.
+
         Args:
-            prompt: 输入提示
-            on_token: token回调函数
-            
+            prompt: Input prompt text
+            on_token: Optional callback function called for each token
+
         Yields:
-            生成的文本片段
+            Text chunks from the LLM stream
+
+        Raises:
+            Exception: If streaming fails
         """
         pass
 
 class ZhipuStreamingLLM(StreamingLLM):
-    """智谱AI流式LLM实现"""
-    
-    def __init__(self, llm: BaseChatModel):
-        """
-        初始化智谱流式LLM
-        
-        Args:
-            llm: LangChain ChatModel实例
-        """
-        self.llm = llm
-    
+    """
+    Zhipu AI streaming LLM implementation.
+
+    Supports streaming for GLM-4, GLM-4-Plus, and other Zhipu models.
+    """
+
     async def stream_generate(
         self, 
         prompt: str, 
@@ -183,17 +234,12 @@ class ZhipuStreamingLLM(StreamingLLM):
             yield f"流式生成错误: {str(e)}"
 
 class OpenAIStreamingLLM(StreamingLLM):
-    """OpenAI流式LLM实现"""
-    
-    def __init__(self, llm: BaseChatModel):
-        """
-        初始化OpenAI流式LLM
-        
-        Args:
-            llm: LangChain ChatModel实例
-        """
-        self.llm = llm
-    
+    """
+    OpenAI streaming LLM implementation.
+
+    Supports streaming for GPT-4, GPT-3.5, and other OpenAI models.
+    """
+
     async def stream_generate(
         self, 
         prompt: str, 
@@ -217,17 +263,13 @@ class OpenAIStreamingLLM(StreamingLLM):
             yield f"流式生成错误: {str(e)}"
 
 class OllamaStreamingLLM(StreamingLLM):
-    """Ollama流式LLM实现"""
-    
-    def __init__(self, llm: BaseChatModel):
-        """
-        初始化Ollama流式LLM
-        
-        Args:
-            llm: LangChain ChatModel实例
-        """
-        self.llm = llm
-    
+    """
+    Ollama streaming LLM implementation.
+
+    Supports streaming for local Ollama models.
+    Includes HTTP fallback for 502 errors and concurrent request handling.
+    """
+
     async def stream_generate(
         self, 
         prompt: str, 
@@ -270,15 +312,15 @@ class OllamaStreamingLLM(StreamingLLM):
                     
                     # 使用直接HTTP客户端作为fallback
                     try:
-                        from .ollama_http_client import OllamaHttpClient
-                        
+                        from src.llm.langchain.providers.ollama import OllamaClient
+
                         base_url = getattr(self.llm, 'base_url', 'http://localhost:11434')
                         model = getattr(self.llm, 'model', 'unknown')
                         temperature = getattr(self.llm, 'temperature', 0.1)
-                        
+
                         logger.error(f"[DEBUG] 使用HTTP fallback: {base_url}, 模型: {model}")
-                        
-                        http_client = OllamaHttpClient(base_url=base_url, timeout=300)
+
+                        http_client = OllamaClient(base_url=base_url, timeout=300)
                         
                         chunk_count = 0
                         async for chunk in http_client.stream_chat(model, prompt, temperature):
@@ -346,33 +388,67 @@ class OllamaStreamingLLM(StreamingLLM):
             yield f"流式生成错误: {str(e)}"
 
 class StreamingManager:
-    """流式输出管理器"""
-    
+    """
+    Streaming output manager.
+
+    Manages registration and dispatching of streaming LLM providers.
+    Supports multiple providers and easy extension for new LLMs.
+
+    Design Pattern: Registry Pattern - centralizes provider management.
+
+    Usage:
+        manager = StreamingManager()
+        manager.register_llm("zhipu", llm_instance)
+        result = await manager.stream_chat("zhipu", "Hello")
+
+    For adding new providers:
+        1. Create a new StreamingLLM subclass
+        2. Add provider mapping in _PROVIDER_MAP
+        3. Register and use immediately
+    """
+
+    # Provider class mapping - add new providers here
+    _PROVIDER_MAP = {
+        "zhipu": ZhipuStreamingLLM,
+        "openai": OpenAIStreamingLLM,
+        "ollama": OllamaStreamingLLM,
+        # Add new providers here:
+        # "claude": ClaudeStreamingLLM,
+        # "gemini": GeminiStreamingLLM,
+    }
+
     def __init__(self):
-        """初始化流式管理器"""
+        """Initialize streaming manager"""
         self.streaming_llms: Dict[str, StreamingLLM] = {}
-    
-    def register_llm(self, provider: str, llm: BaseChatModel):
+
+    def register_llm(self, provider: str, llm: BaseChatModel) -> None:
         """
-        注册流式LLM
-        
+        Register streaming LLM provider.
+
         Args:
-            provider: 提供商名称 (zhipu, openai, ollama)
-            llm: LangChain ChatModel实例
+            provider: Provider name (zhipu, openai, ollama, etc.)
+            llm: LangChain ChatModel instance
+
+        Raises:
+            ValueError: If provider is not supported
         """
+        provider_key = provider.lower()
+
+        if provider_key not in self._PROVIDER_MAP:
+            supported = ", ".join(self._PROVIDER_MAP.keys())
+            logger.warning(
+                f"Unsupported streaming provider: {provider}. "
+                f"Supported: {supported}"
+            )
+            raise ValueError(f"Unsupported provider: {provider}")
+
         try:
-            if provider.lower() == "zhipu":
-                self.streaming_llms[provider] = ZhipuStreamingLLM(llm)
-            elif provider.lower() == "openai":
-                self.streaming_llms[provider] = OpenAIStreamingLLM(llm)
-            elif provider.lower() == "ollama":
-                self.streaming_llms[provider] = OllamaStreamingLLM(llm)
-            else:
-                logger.warning(f"不支持的流式LLM提供商: {provider}")
-                
-            logger.info(f"注册流式LLM: {provider}")
+            provider_class = self._PROVIDER_MAP[provider_key]
+            self.streaming_llms[provider_key] = provider_class(llm)
+            logger.info(f"Registered streaming LLM: {provider_key}")
         except Exception as e:
-            logger.error(f"注册流式LLM失败 {provider}: {e}")
+            logger.error(f"Failed to register streaming LLM {provider}: {e}")
+            raise
     
     async def stream_chat(
         self, 
@@ -484,38 +560,53 @@ class StreamingManager:
 # 全局流式管理器实例
 streaming_manager = StreamingManager()
 
-# 便捷函数
+# ========== Convenience Functions ==========
+
+@for_llm_only
 async def stream_llm_response(
     provider: str,
     prompt: str,
     llm: Optional[BaseChatModel] = None,
-    display_title: str = "AI 回复",
+    display_title: str = "AI Response",
     show_display: bool = True
 ) -> str:
     """
-    便捷的流式LLM调用函数
-    
+    Convenience function for streaming LLM response.
+
+    IMPORTANT: This function is for LLM direct chat only.
+    DO NOT use this for Agent tool calling - use agent.ainvoke() instead.
+
     Args:
-        provider: LLM提供商
-        prompt: 输入提示
-        llm: LangChain ChatModel实例 (可选，用于动态注册)
-        display_title: 显示标题
-        show_display: 是否显示流式界面
-        
+        provider: LLM provider name (zhipu, openai, ollama)
+        prompt: Input prompt text
+        llm: Optional LangChain ChatModel instance (for dynamic registration)
+        display_title: Display panel title
+        show_display: Whether to show streaming UI
+
     Returns:
-        完整的回复文本
+        Complete response text from LLM
+
+    Raises:
+        ValueError: If provider is not supported
+
+    Example:
+        # For LLM chat (correct usage)
+        response = await stream_llm_response("zhipu", "Hello", llm=my_llm)
+
+        # For Agent (wrong - use this instead)
+        response = await agent.ainvoke("Hello")
     """
-    # 动态注册LLM（如果提供）
+    # Dynamic registration if LLM provided
     if llm and provider not in streaming_manager.get_supported_providers():
         streaming_manager.register_llm(provider, llm)
-    
+
     result = await streaming_manager.stream_chat(
         provider=provider,
         prompt=prompt,
         display_title=display_title,
         show_display=show_display
     )
-    
+
     return result["response"]
 
 async def demo_streaming():
