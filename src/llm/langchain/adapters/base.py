@@ -1,8 +1,11 @@
 """
 LLM Adapter Base Class
 
-适配器模式基类，用于统一处理不同LLM提供商的配置和参数。
+LLM参数适配器基类，用于统一处理不同LLM提供商的LLM相关配置和参数。
 从config/llms/providers.json读取配置，应用mode_overrides和特殊逻辑。
+
+注意: 此Adapter只处理LLM参数(temperature, streaming, max_tokens等)，
+      不处理Agent参数(max_iterations等)，Agent参数由AgentAdapter处理。
 """
 
 import json
@@ -15,20 +18,27 @@ logger = logging.getLogger(__name__)
 
 
 class LLMAdapter(ABC):
-    """LLM适配器抽象基类"""
+    """
+    LLM适配器抽象基类
 
-    def __init__(self, provider: str, model: str, mode: str = "llm"):
+    职责:
+    - 只处理LLM相关参数 (temperature, streaming, max_tokens, thinking_mode等)
+    - 从配置文件的mode_defaults.llm和mode_overrides.llm读取参数
+    - 不处理Agent参数 (max_iterations等由AgentAdapter处理)
+    """
+
+    def __init__(self, provider: str = None, model: str = None, mode: str = "llm"):
         """
         初始化LLM适配器
 
         Args:
-            provider: LLM提供商 (ZHIPU, OPENAI, OLLAMA)
+            provider: LLM提供商 (ZHIPU, OPENAI, OLLAMA)，可选
             model: 模型名称
-            mode: 使用模式 ("llm" 或 "agent")
+            mode: 使用模式，固定为"llm"
         """
-        self.provider = provider.upper()
+        self.provider = provider.upper() if provider else None
         self.model = model
-        self.mode = mode
+        self.mode = "llm"  # 固定为llm模式
         self._config = None
         self._provider_config = None
         self._model_config = None
@@ -73,31 +83,31 @@ class LLMAdapter(ABC):
             self._provider_config = {}
             self._model_config = {}
 
-    def get_mode_defaults(self) -> Dict[str, Any]:
-        """获取当前模式的默认参数"""
+    def get_llm_mode_defaults(self) -> Dict[str, Any]:
+        """获取llm模式的默认参数"""
         mode_defaults = self._provider_config.get("mode_defaults", {})
-        return mode_defaults.get(self.mode, {})
+        return mode_defaults.get("llm", {})
 
-    def get_mode_overrides(self) -> Dict[str, Any]:
-        """获取模型特定的mode_overrides"""
+    def get_llm_mode_overrides(self) -> Dict[str, Any]:
+        """获取模型特定的llm mode_overrides"""
         if not self._model_config:
             return {}
 
         mode_overrides = self._model_config.get("mode_overrides", {})
-        return mode_overrides.get(self.mode, {})
+        return mode_overrides.get("llm", {})
 
     def get_base_params(self) -> Dict[str, Any]:
         """
-        获取基础参数（合并默认值和覆盖值）
+        获取基础LLM参数（合并默认值和覆盖值）
 
         Returns:
-            合并后的参数字典
+            合并后的LLM参数字典
         """
-        # 从mode_defaults开始
-        params = self.get_mode_defaults().copy()
+        # 从mode_defaults.llm开始
+        params = self.get_llm_mode_defaults().copy()
 
-        # 应用mode_overrides
-        overrides = self.get_mode_overrides()
+        # 应用mode_overrides.llm
+        overrides = self.get_llm_mode_overrides()
         params.update(overrides)
 
         return params
@@ -107,7 +117,16 @@ class LLMAdapter(ABC):
         """
         获取LLM参数（包含特殊逻辑处理）
 
-        子类必须实现此方法来处理提供商特定的逻辑
+        子类必须实现此方法来处理提供商特定的逻辑。
+
+        处理的参数包括:
+        - temperature: 温度参数
+        - streaming: 是否流式输出
+        - max_tokens: 最大输出token数
+        - thinking_mode: 思考模式 (智谱AI特有)
+        等
+
+        不处理Agent参数(max_iterations, max_execution_time等)
 
         Args:
             **kwargs: 用户传入的额外参数
