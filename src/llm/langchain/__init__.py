@@ -1,13 +1,14 @@
 """
-语言模型模块
+Language Model Module
 
-提供各种LLM提供商的封装和管理。
+Provides LLM provider wrappers and management.
 
-架构说明：
-- instances/: LLM具体实现（ZhipuAILLM, OpenAILLM, OllamaLLM）
-- adapters/: 适配器模式（LLMAdapter, ZhipuAdapter, OpenAIAdapter, OllamaAdapter）
-- managers/: LLM管理器
-- utils/: 工具函数集合
+Architecture:
+- instances/: LLM implementations (ZhipuAILLM, OpenAILLM, OllamaLLM)
+- adapters/: Adapter pattern (LLMAdapter, ZhipuAdapter, OpenAIAdapter, OllamaAdapter)
+- managers/: LLM manager
+- providers/: Provider-specific utilities (ollama, zhipu, openai)
+- utils/: General utilities (streaming)
 """
 
 # LLM Instances
@@ -32,12 +33,14 @@ from .managers import (
     get_llm_info,
 )
 
-# Utilities
-from .utils import (
-    # Ollama
+# Provider-specific utilities
+from .providers.ollama import (
+    OllamaClient,
     list_ollama_models,
-    OllamaHttpClient,
-    # Streaming
+)
+
+# General utilities
+from .utils import (
     StreamingLLM,
     stream_llm_response,
 )
@@ -59,9 +62,11 @@ __all__ = [
     "LLMProvider",
     "get_llm_info",
 
-    # Utils
+    # Provider utilities
+    "OllamaClient",
     "list_ollama_models",
-    "OllamaHttpClient",
+
+    # General utilities
     "StreamingLLM",
     "stream_llm_response",
 ] 

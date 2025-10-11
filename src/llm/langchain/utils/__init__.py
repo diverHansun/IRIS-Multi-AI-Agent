@@ -1,37 +1,25 @@
 """
 LLM Utilities
 
-提供LLM相关的工具函数。
+Provides general LLM-related utility functions and tools.
+
+Note: Provider-specific utilities are now in src.llm.langchain.providers
 """
 
-# Ollama工具
-from .ollama_utils import (
-    get_ollama_models_http,
-    get_ollama_models_cli,
-    list_ollama_models,
-)
-
-# Ollama HTTP客户端
-from .ollama_http_client import OllamaHttpClient
-
-# 流式输出控制
-from .streaming_llm import (
+# Streaming output for LLM direct chat
+# IMPORTANT: These are for LLM chat ONLY, NOT for Agent tool calling
+# Agents should use non-streaming methods (agent.ainvoke) to get complete responses
+from .streaming import (
     StreamingLLM,
     StreamingCallbackHandler,
-    stream_llm_response,
+    StreamingManager,
+    stream_llm_response,  # LLM chat only - decorated with @for_llm_only
 )
 
 __all__ = [
-    # Ollama工具
-    "get_ollama_models_http",
-    "get_ollama_models_cli",
-    "list_ollama_models",
-
-    # Ollama HTTP客户端
-    "OllamaHttpClient",
-
-    # 流式输出
+    # Streaming output (LLM direct chat only)
     "StreamingLLM",
     "StreamingCallbackHandler",
+    "StreamingManager",
     "stream_llm_response",
 ]
