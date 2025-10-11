@@ -159,7 +159,7 @@ class LLMManager:
             # 尝试从JSON文件加载配置
             config_data = config_loader.load_config()
             self.SUPPORTED_LLMS = self._convert_json_config(config_data)
-            logger.info("✅ 已从JSON配置文件加载LLM配置")
+            logger.info("已从JSON配置文件加载LLM配置")
         except Exception as e:
             # 降级到硬编码配置
             logger.warning(f"⚠️ 从JSON加载配置失败，使用备用配置: {e}")
@@ -216,10 +216,10 @@ class LLMManager:
             # 重新加载JSON配置
             config_data = config_loader.reload_config()
             self.SUPPORTED_LLMS = self._convert_json_config(config_data)
-            logger.info("✅ LLM配置重新加载完成")
+            logger.info("LLM配置重新加载完成")
             return True
         except Exception as e:
-            logger.error(f"❌ 重新加载配置失败: {e}")
+            logger.error(f"重新加载配置失败: {e}")
             return False
     
     def get_available_providers(self) -> List[Dict[str, Any]]:
