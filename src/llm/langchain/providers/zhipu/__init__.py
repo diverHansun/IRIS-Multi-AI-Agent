@@ -1,7 +1,11 @@
 """
-Zhipu AI provider-specific utilities
+Zhipu AI Provider
 
-Reserved for future Zhipu AI-specific implementations.
+智谱AI Provider实现和工具
 """
 
-__all__ = []
+from .provider import ZhipuProvider
+
+__all__ = [
+    "ZhipuProvider",
+]

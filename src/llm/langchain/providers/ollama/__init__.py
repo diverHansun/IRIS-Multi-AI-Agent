@@ -1,9 +1,10 @@
 """
-Ollama Provider Utilities
+Ollama Provider
 
-Ollama-specific HTTP client and model discovery utilities.
+Ollama Provider实现、HTTP客户端和模型发现工具
 """
 
+from .provider import OllamaProvider
 from .client import OllamaClient
 from .utils import (
     get_ollama_models_http,
@@ -15,6 +16,9 @@ from .utils import (
 )
 
 __all__ = [
+    # Provider Implementation
+    "OllamaProvider",
+
     # HTTP Client
     "OllamaClient",
 

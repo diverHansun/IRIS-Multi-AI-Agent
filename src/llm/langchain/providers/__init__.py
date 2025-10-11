@@ -5,12 +5,26 @@ This module contains provider-specific tools and implementations.
 Each provider has its own subdirectory with dedicated utilities.
 
 Structure:
-- ollama/: Ollama-specific HTTP client and utilities
-- zhipu/: Zhipu AI-specific utilities (reserved)
-- openai/: OpenAI-specific utilities (reserved)
+- base.py: BaseProvider abstract base class
+- zhipu/: 智谱AI Provider实现和工具
+  - provider.py: ZhipuProvider implementation
+- openai/: OpenAI Provider实现和工具
+  - provider.py: OpenAIProvider implementation
+- ollama/: Ollama Provider实现、HTTP客户端和工具
+  - provider.py: OllamaProvider implementation
+  - client.py: HTTP client
+  - utils.py: Model discovery utilities
 """
 
-# Ollama provider
+# Base Provider
+from .base import BaseProvider
+
+# Provider implementations (从子目录导入)
+from .zhipu import ZhipuProvider
+from .openai import OpenAIProvider
+from .ollama import OllamaProvider
+
+# Ollama utilities (for compatibility)
 from .ollama import (
     OllamaClient,
     list_ollama_models,
@@ -19,7 +33,12 @@ from .ollama import (
 )
 
 __all__ = [
-    # Ollama
+    # Base & Provider implementations
+    "BaseProvider",
+    "ZhipuProvider",
+    "OpenAIProvider",
+    "OllamaProvider",
+    # Ollama utilities
     "OllamaClient",
     "list_ollama_models",
     "get_ollama_models_http",
