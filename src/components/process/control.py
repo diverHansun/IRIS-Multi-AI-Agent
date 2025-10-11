@@ -3,7 +3,7 @@ Control module for the Multi-AI-Agent project.
 This module contains general control commands.
 """
 
-from src.agents.langchain.agent_factory import agent_factory
+from src.agents.langchain.factories import agent_factory
 from src.llm.langchain.managers import reload_llm_config
 
 

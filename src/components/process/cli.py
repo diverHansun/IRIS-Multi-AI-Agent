@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Import the IRIS logo display function
 from src.ui.logo.logo import display_logo,display_logo_intro
 
-from src.agents.langchain.agent_factory import create_default_agent, get_available_configurations
+from src.agents.langchain.factories import create_default_agent, get_available_configurations
 from src.llm.langchain.utils import stream_llm_response
 from src.components.shared.memory import GlobalMemoryManager, SessionManager
 
