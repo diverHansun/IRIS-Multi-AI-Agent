@@ -22,9 +22,9 @@ class AgentManager:
 
     def __init__(self):
         """初始化Agent管理器"""
-        # 延迟导入避免循环依赖
-        from src.llm.langchain.managers import llm_manager
-        self.llm_manager = llm_manager
+        # 使用共享provider_registry替代llm_manager
+        from src.core.langchain.providers import provider_registry
+        self.provider_registry = provider_registry
 
         logger.info("AgentManager initialized")
 
@@ -93,13 +93,11 @@ class AgentManager:
     def _get_provider_config(self, provider: str) -> Dict[str, Any]:
         """获取Provider配置"""
         try:
-            # 从LLM Manager获取Provider配置
-            providers = self.llm_manager.get_available_providers()
-            for p in providers:
-                if p["provider"].upper() == provider:
-                    return p
-
-            raise ValueError(f"Provider {provider} not found")
+            # 从共享provider_registry获取配置
+            config = self.provider_registry.get_provider_config(provider)
+            if not config:
+                raise ValueError(f"Provider {provider} not found")
+            return config
         except Exception as e:
             logger.error(f"Failed to get provider config: {e}")
             raise
@@ -210,22 +208,20 @@ class AgentManager:
         """
         agents = []
 
-        providers = self.llm_manager.get_available_providers()
-        for provider_info in providers:
-            if not provider_info.get("available"):
-                continue
+        # 从provider_registry获取所有provider配置
+        all_providers = self.provider_registry.list_providers()
+        for provider_key, provider_config in all_providers.items():
+            provider = provider_key.lower()
+            models = provider_config.get("models", {})
 
-            provider = provider_info["provider"]
-            for model_name in provider_info.get("models", []):
-                model_info = provider_info.get("models_detail", {}).get(model_name, {})
-
+            for model_name, model_config in models.items():
                 # 确定Agent类型
-                if provider.upper() == "ZHIPU":
+                if provider == "zhipu":
                     if model_name in ["glm-4.5", "glm-4.5-flash"]:
                         agent_type = "function_calling"
                     else:
                         agent_type = "react"
-                elif provider.upper() == "OPENAI":
+                elif provider == "openai":
                     agent_type = "function_calling"
                 else:
                     agent_type = "react"
@@ -234,9 +230,9 @@ class AgentManager:
                     "provider": provider,
                     "model": model_name,
                     "agent_type": agent_type,
-                    "supports_tools": model_info.get("supports_tools", False),
-                    "recommended": model_info.get("recommended", False),
-                    "description": model_info.get("description", ""),
+                    "supports_tools": model_config.get("supports_tools", False),
+                    "recommended": model_config.get("recommended", False),
+                    "description": model_config.get("description", ""),
                 })
 
         return agents

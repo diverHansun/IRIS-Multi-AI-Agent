@@ -59,7 +59,7 @@ class OllamaAgentFactory(BaseAgentFactory):
         actual_model = model
         if model == "auto":
             try:
-                from src.llm.langchain.providers.ollama import list_ollama_models
+                from src.core.langchain.providers.utils import list_ollama_models
                 local_models = await list_ollama_models(base_url, timeout=5)
 
                 if local_models:
