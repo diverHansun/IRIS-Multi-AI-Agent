@@ -33,18 +33,29 @@ from .factories import (
     FactoryRegistry,
     get_global_registry,
     agent_factory,
+    # Compatibility functions (deprecated)
+    create_agent,
+    create_default_agent,
+    get_available_configurations,
 )
 
 # 向后兼容：AgentFactory 类别名
 AgentFactory = FactoryRegistry
 
-# Builder Pattern (NEW)
-from .builders import (
-    AgentBuilder,
-    AgentPresets,
+# Builder Pattern removed in v4.0
+# Use agent_manager.create_agent() instead
+
+# Manager Pattern (Recommended)
+from .managers import (
+    agent_manager,
+    AgentManager,
 )
 
 __all__ = [
+    # Recommended API
+    "agent_manager",
+    "AgentManager",
+
     # Agent instances
     "BaseAgent",
     "ZhipuAgent",
@@ -66,7 +77,8 @@ __all__ = [
     "FactoryRegistry",
     "get_global_registry",
 
-    # Builder Pattern
-    "AgentBuilder",
-    "AgentPresets",
+    # Compatibility functions (deprecated in v4.0)
+    "create_agent",
+    "create_default_agent",
+    "get_available_configurations",
 ] 
