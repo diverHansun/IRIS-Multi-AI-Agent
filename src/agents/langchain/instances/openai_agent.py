@@ -92,6 +92,23 @@ class OpenAIAgent(BaseAgent):
 
         logger.info(f"Creating OpenAI Agent instance: {model}")
 
+    async def _create_llm_instance(self, llm_params: Dict[str, Any]):
+        """使用 LLM Adapter 参数创建 LLM（新接口）"""
+        from src.config import settings
+
+        base_url = self.kwargs.get('base_url') or settings.openai_base_url
+
+        self.llm = build_openai_chat(
+            api_key=self.api_key,
+            model=llm_params.get("model", self.model),
+            temperature=llm_params.get("temperature", 0.1),
+            streaming=llm_params.get("streaming", False),
+            max_tokens=llm_params.get("max_tokens"),
+            base_url=base_url
+        )
+
+        logger.info(f"LLM 创建完成（新方式）: {self.model}")
+
     async def _create_llm(self):
         """Create OpenAI LLM instance."""
         logger.info("Creating OpenAI LLM...")
@@ -175,15 +192,14 @@ async def build_openai_agent(
 
     Returns:
         初始化完成的OpenAIAgent实例
+        
+    推荐方式::
+    
+        from src.agents.langchain.managers import agent_manager
+        agent = await agent_manager.create_agent('openai', model, verbose=verbose)
     """
-    warnings.warn(
-        "build_openai_agent() is deprecated. "
-        "Use agent_manager.create_agent('openai', model) instead. "
-        "Will be removed in v5.0.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-
+    # DEPRECATED v4.0 - Will be removed in v5.0
+    # Use: agent_manager.create_agent('openai', model)
     agent = OpenAIAgent(
         api_key=api_key,
         model=model,

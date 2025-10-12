@@ -86,14 +86,9 @@ class ZhipuFunctionCallingAgent:
                 f"max_iterations={self.max_iterations} (从配置)"
             )
         else:
-            # 旧方式: 直接使用传入的参数（向后兼容）
-            warnings.warn(
-                "Direct parameter initialization is deprecated. "
-                "Use agent_manager.create_agent() for configuration-driven initialization. "
-                "Will be removed in v5.0.",
-                DeprecationWarning,
-                stacklevel=3
-            )
+            # DEPRECATED v4.0: 旧方式 - 直接使用传入的参数（向后兼容）
+            # 推荐使用: agent_manager.create_agent() 进行配置驱动的初始化
+            # 将在 v5.0 中移除
 
             self.temperature = temperature if temperature is not None else 0.1
             self.verbose = verbose if verbose is not None else False
@@ -536,15 +531,14 @@ async def build_zhipu_fcall_agent(
 
     Returns:
         初始化完成的ZhipuFunctionCallingAgent实例
+        
+    推荐方式::
+    
+        from src.agents.langchain.managers import agent_manager
+        agent = await agent_manager.create_agent('zhipu', 'glm-4.5', verbose=verbose)
     """
-    warnings.warn(
-        "build_zhipu_fcall_agent() is deprecated. "
-        "Use agent_manager.create_agent('zhipu', model) instead. "
-        "Will be removed in v5.0.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-
+    # DEPRECATED v4.0 - Will be removed in v5.0
+    # Use: agent_manager.create_agent('zhipu', 'glm-4.5')
     agent = ZhipuFunctionCallingAgent(
         model=model,
         temperature=temperature,

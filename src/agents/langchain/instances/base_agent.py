@@ -89,14 +89,9 @@ class BaseAgent(ABC):
                 f"max_iterations={self.max_iterations} (从配置)"
             )
         else:
-            # 旧方式: 直接使用传入的参数（向后兼容）
-            warnings.warn(
-                "Direct parameter initialization is deprecated. "
-                "Use agent_manager.create_agent() for configuration-driven initialization. "
-                "Will be removed in v5.0.",
-                DeprecationWarning,
-                stacklevel=3
-            )
+            # DEPRECATED v4.0: 旧方式 - 直接使用传入的参数（向后兼容）
+            # 推荐使用: agent_manager.create_agent() 进行配置驱动的初始化
+            # 将在 v5.0 中移除
 
             self.temperature = temperature if temperature is not None else 0.1
             self.verbose = verbose if verbose is not None else False

@@ -129,6 +129,10 @@ def create_zhipu_llm(model: str = "glm-4-plus", streaming: bool = False,
     """
     创建智谱AI LLM实例的工厂函数（兼容旧接口）
     
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('zhipu', model) 替代。
+        此函数将在 v5.0 中移除。
+    
     Args:
         model: 模型名称
         streaming: 是否启用流式输出
@@ -137,7 +141,14 @@ def create_zhipu_llm(model: str = "glm-4-plus", streaming: bool = False,
         
     Returns:
         LangChain兼容的ChatModel实例
+        
+    推荐方式::
+    
+        from src.llm.langchain.managers import llm_manager
+        llm = llm_manager.create_llm('zhipu', model, streaming=streaming)
     """
+    # DEPRECATED v4.0 - Will be removed in v5.0
+    # Use: llm_manager.create_llm('zhipu', model)
     import asyncio
     
     # 直接创建 ChatZhipuAI 实例，不使用包装器
@@ -179,6 +190,10 @@ async def create_zhipu_llm_async(model: str = "glm-4-plus", streaming: bool = Fa
     """
     异步创建智谱AI LLM实例
     
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('zhipu', model) 替代。
+        此函数将在 v5.0 中移除。
+    
     Args:
         model: 模型名称
         streaming: 是否启用流式输出
@@ -187,7 +202,14 @@ async def create_zhipu_llm_async(model: str = "glm-4-plus", streaming: bool = Fa
         
     Returns:
         初始化完成的ZhipuAILLM实例
+        
+    推荐方式::
+    
+        from src.llm.langchain.managers import llm_manager
+        llm = llm_manager.create_llm('zhipu', model)
     """
+    # DEPRECATED v4.0 - Will be removed in v5.0
+    # Use: llm_manager.create_llm('zhipu', model)
     zhipu_llm = ZhipuAILLM(model=model, streaming=streaming, 
                           thinking_mode=thinking_mode, **kwargs)
     await zhipu_llm.initialize()
@@ -197,6 +219,10 @@ def create_streaming_zhipu_llm(model: str = "glm-4-plus", **kwargs) -> BaseChatM
     """
     创建支持流式输出的智谱AI LLM实例
     
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('zhipu', model, streaming=True) 替代。
+        此函数将在 v5.0 中移除。
+    
     Args:
         model: 模型名称
         **kwargs: 其他参数
@@ -204,4 +230,5 @@ def create_streaming_zhipu_llm(model: str = "glm-4-plus", **kwargs) -> BaseChatM
     Returns:
         支持流式输出的LangChain兼容ChatModel实例
     """
+    # DEPRECATED v4.0 - Will be removed in v5.0
     return create_zhipu_llm(model=model, streaming=True, **kwargs) 

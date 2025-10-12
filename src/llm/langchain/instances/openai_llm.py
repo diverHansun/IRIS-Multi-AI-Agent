@@ -210,6 +210,10 @@ def build_openai_chat(
     """
     构建OpenAI聊天模型（兼容旧接口）
     
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('openai', model) 替代。
+        此函数将在 v5.0 中移除。
+    
     Args:
         api_key: OpenAI API密钥
         model: 模型名称
@@ -220,7 +224,14 @@ def build_openai_chat(
     
     Returns:
         LangChain ChatOpenAI实例
+        
+    推荐方式::
+    
+        from src.llm.langchain.managers import llm_manager
+        llm = llm_manager.create_llm('openai', model, api_key=api_key, temperature=temperature)
     """
+    # DEPRECATED v4.0 - Will be removed in v5.0
+    # Use: llm_manager.create_llm('openai', model)
     llm_wrapper = OpenAILLM(
         api_key=api_key,
         model=model,
@@ -244,6 +255,10 @@ async def create_openai_llm_async(
     """
     异步创建OpenAI LLM实例
     
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('openai', model) 替代。
+        此函数将在 v5.0 中移除。
+    
     Args:
         api_key: OpenAI API密钥
         model: 模型名称
@@ -254,7 +269,14 @@ async def create_openai_llm_async(
     
     Returns:
         初始化完成的OpenAILLM实例
+        
+    推荐方式::
+    
+        from src.llm.langchain.managers import llm_manager
+        llm = llm_manager.create_llm('openai', model, api_key=api_key)
     """
+    # DEPRECATED v4.0 - Will be removed in v5.0
+    # Use: llm_manager.create_llm('openai', model)
     llm_wrapper = OpenAILLM(
         api_key=api_key,
         model=model,
@@ -270,25 +292,60 @@ async def create_openai_llm_async(
 
 # 便捷函数
 def create_gpt5(api_key: str, **kwargs) -> BaseChatModel:
-    """创建GPT-5模型"""
+    """
+    创建GPT-5模型
+    
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('openai', 'gpt-5') 替代。
+        此函数将在 v5.0 中移除。
+    """
+    # DEPRECATED v4.0 - Will be removed in v5.0
     return build_openai_chat(api_key, model="gpt-5", **kwargs)
 
 
 def create_gpt5_mini(api_key: str, **kwargs) -> BaseChatModel:
-    """创建GPT-5-mini模型"""
+    """
+    创建GPT-5-mini模型
+    
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('openai', 'gpt-5-mini') 替代。
+        此函数将在 v5.0 中移除。
+    """
+    # DEPRECATED v4.0 - Will be removed in v5.0
     return build_openai_chat(api_key, model="gpt-5-mini", **kwargs)
 
 
 def create_gpt4o(api_key: str, **kwargs) -> BaseChatModel:
-    """创建GPT-4o模型"""
+    """
+    创建GPT-4o模型
+    
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('openai', 'gpt-4o') 替代。
+        此函数将在 v5.0 中移除。
+    """
+    # DEPRECATED v4.0 - Will be removed in v5.0
     return build_openai_chat(api_key, model="gpt-4o", **kwargs)
 
 
 def create_gpt4o_mini(api_key: str, **kwargs) -> BaseChatModel:
-    """创建GPT-4o-mini模型"""
+    """
+    创建GPT-4o-mini模型
+    
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('openai', 'gpt-4o-mini') 替代。
+        此函数将在 v5.0 中移除。
+    """
+    # DEPRECATED v4.0 - Will be removed in v5.0
     return build_openai_chat(api_key, model="gpt-4o-mini", **kwargs)
 
 
 def create_gpt4_turbo(api_key: str, **kwargs) -> BaseChatModel:
-    """创建GPT-4-turbo模型"""
+    """
+    创建GPT-4-turbo模型
+    
+    .. deprecated:: 4.0
+        使用 llm_manager.create_llm('openai', 'gpt-4-turbo') 替代。
+        此函数将在 v5.0 中移除。
+    """
+    # DEPRECATED v4.0 - Will be removed in v5.0
     return build_openai_chat(api_key, model="gpt-4-turbo", **kwargs)

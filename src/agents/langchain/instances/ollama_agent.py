@@ -7,6 +7,7 @@ Ollama Agent Implementation
 
 import logging
 import warnings
+from typing import Dict, Any
 
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
@@ -64,6 +65,25 @@ class OllamaAgent(BaseAgent):
         self.disable_thinking_mode = disable_thinking_mode
 
         logger.info(f"Creating Ollama Agent instance: {model}")
+
+    async def _create_llm_instance(self, llm_params: Dict[str, Any]):
+        """使用 LLM Adapter 参数创建 LLM（新接口）"""
+        ollama_llm = OllamaLLM(
+            model=llm_params.get("model", self.model),
+            base_url=self.base_url,
+            temperature=llm_params.get("temperature", 0.0),
+            **self.kwargs
+        )
+
+        # Health check
+        health_ok = await ollama_llm.health_check()
+        if not health_ok:
+            logger.warning("Ollama service health check failed")
+
+        await ollama_llm.initialize()
+        self.llm = ollama_llm.create_llm()
+
+        logger.info(f"LLM 创建完成（新方式）: {self.model}")
 
     async def _create_llm(self):
         """Create Ollama LLM instance."""
@@ -214,15 +234,14 @@ async def build_ollama_agent(
 
     Returns:
         初始化完成的Ollama Agent
+        
+    推荐方式::
+    
+        from src.agents.langchain.managers import agent_manager
+        agent = await agent_manager.create_agent('ollama', model, verbose=verbose)
     """
-    warnings.warn(
-        "build_ollama_agent() is deprecated. "
-        "Use agent_manager.create_agent('ollama', model) instead. "
-        "Will be removed in v5.0.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-
+    # DEPRECATED v4.0 - Will be removed in v5.0
+    # Use: agent_manager.create_agent('ollama', model)
     agent = OllamaAgent(
         model=model,
         base_url=base_url,

@@ -63,7 +63,19 @@ class ZhipuAgent(BaseAgent):
 
         # Zhipu-specific configuration
         self.prompt_provider = prompt_provider or ("glm" if "glm" in model.lower() else None)
-    
+
+    async def _create_llm_instance(self, llm_params: Dict[str, Any]):
+        """使用 LLM Adapter 参数创建 LLM（新接口）"""
+        self.llm = create_zhipu_llm(
+            model=llm_params.get("model", self.model),
+            temperature=llm_params.get("temperature", 0.1),
+            max_tokens=llm_params.get("max_tokens", 2048),
+            streaming=llm_params.get("streaming", False),
+            thinking_mode=llm_params.get("thinking_mode", False)
+        )
+
+        logger.info(f"LLM 创建完成（新方式）: {self.model}, params: {llm_params}")
+
     async def _create_llm(self):
         """创建LLM实例"""
         # 从配置文件获取模型参数
@@ -189,19 +201,18 @@ async def build_zhipu_agent(
 ) -> ZhipuAgent:
     """
     创建并初始化智谱AI Agent
-
+    
     .. deprecated:: 4.0
         使用 agent_manager.create_agent('zhipu', model) 替代。
         此函数将在 v5.0 中移除。
+    
+    推荐方式::
+    
+        from src.agents.langchain.managers import agent_manager
+        agent = await agent_manager.create_agent('zhipu', model, verbose=verbose, temperature=temperature)
     """
-    warnings.warn(
-        "build_zhipu_agent() is deprecated. "
-        "Use agent_manager.create_agent('zhipu', model) instead. "
-        "Will be removed in v5.0.",
-        DeprecationWarning,
-        stacklevel=2
-    )
-
+    # DEPRECATED v4.0 - Will be removed in v5.0
+    # Use: agent_manager.create_agent('zhipu', model)
     agent = ZhipuAgent(
         model=model,
         temperature=temperature,
