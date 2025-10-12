@@ -5,6 +5,7 @@ OpenAI Agent工厂，统一创建OpenAI Agent。
 """
 
 import logging
+import warnings
 from typing import Dict, Any, Optional
 
 from .base import BaseAgentFactory
@@ -31,6 +32,10 @@ class OpenAIAgentFactory(BaseAgentFactory):
         """
         创建OpenAI Agent
 
+        .. deprecated:: 4.0
+            使用 agent_manager.create_agent() 替代。
+            此方法将在 v5.0 中移除。
+
         Args:
             model: 模型名称
             verbose: 是否详细输出
@@ -43,6 +48,14 @@ class OpenAIAgentFactory(BaseAgentFactory):
         Returns:
             OpenAIAgent实例
         """
+        warnings.warn(
+            "OpenAIAgentFactory.create_agent() is deprecated. "
+            "Use agent_manager.create_agent() instead. "
+            "Will be removed in v5.0.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
         from src.agents.langchain.instances.openai_agent import build_openai_agent
 
         logger.info(f"创建OpenAI Agent: {model}")
@@ -58,4 +71,45 @@ class OpenAIAgentFactory(BaseAgentFactory):
         )
 
         logger.info(f"成功创建OpenAI Agent: {model}")
+        return agent
+
+    async def create_agent_with_adapters(
+        self,
+        model: str,
+        llm_adapter,
+        agent_adapter,
+        **user_params
+    ) -> Any:
+        """
+        创建Agent实例（新接口，使用Adapters）
+
+        这是推荐的创建方式，由AgentManager调用。
+        使用adapters提供的配置驱动参数管理。
+
+        Args:
+            model: 模型名称
+            llm_adapter: LLM适配器
+            agent_adapter: Agent适配器
+            **user_params: 用户参数（可覆盖配置）
+
+        Returns:
+            OpenAIAgent实例
+        """
+        from src.agents.langchain.instances import OpenAIAgent
+
+        logger.info(f"创建OpenAI Agent (新模式): {model}")
+
+        # 创建Agent实例（传入adapters）
+        agent = OpenAIAgent(
+            provider="openai",
+            model=model,
+            llm_adapter=llm_adapter,
+            agent_adapter=agent_adapter,
+            **user_params
+        )
+
+        # 初始化
+        await agent.initialize()
+
+        logger.info(f"成功创建OpenAI Agent (新模式): {model}")
         return agent

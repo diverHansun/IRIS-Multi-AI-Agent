@@ -5,6 +5,7 @@ Ollama本地模型Agent工厂，统一创建Ollama Agent。
 """
 
 import logging
+import warnings
 from typing import Dict, Any, Optional
 
 from .base import BaseAgentFactory
@@ -31,6 +32,10 @@ class OllamaAgentFactory(BaseAgentFactory):
         """
         创建Ollama Agent
 
+        .. deprecated:: 4.0
+            使用 agent_manager.create_agent() 替代。
+            此方法将在 v5.0 中移除。
+
         特殊逻辑：
         - 如果model为"auto"，自动选择本地第一个可用模型
         - Agent模式默认temperature=0.0优化
@@ -48,6 +53,14 @@ class OllamaAgentFactory(BaseAgentFactory):
         Returns:
             OllamaAgent实例
         """
+        warnings.warn(
+            "OllamaAgentFactory.create_agent() is deprecated. "
+            "Use agent_manager.create_agent() instead. "
+            "Will be removed in v5.0.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
         from src.agents.langchain.instances.ollama_agent import build_ollama_agent
         from src.config import settings
 
@@ -93,4 +106,67 @@ class OllamaAgentFactory(BaseAgentFactory):
         )
 
         logger.info(f"成功创建Ollama Agent: {actual_model}")
+        return agent
+
+    async def create_agent_with_adapters(
+        self,
+        model: str,
+        llm_adapter,
+        agent_adapter,
+        **user_params
+    ) -> Any:
+        """
+        创建Agent实例（新接口，使用Adapters）
+
+        这是推荐的创建方式，由AgentManager调用。
+        使用adapters提供的配置驱动参数管理。
+
+        Args:
+            model: 模型名称（可以是"auto"）
+            llm_adapter: LLM适配器
+            agent_adapter: Agent适配器
+            **user_params: 用户参数（可覆盖配置）
+
+        Returns:
+            OllamaAgent实例
+        """
+        from src.agents.langchain.instances import OllamaAgent
+        from src.config import settings
+
+        # 处理base_url
+        base_url = user_params.get("base_url", settings.ollama_base_url)
+
+        # 处理auto模型选择
+        actual_model = model
+        if model == "auto":
+            try:
+                from src.core.langchain.providers.utils import list_ollama_models
+                local_models = await list_ollama_models(base_url, timeout=5)
+
+                if local_models:
+                    actual_model = local_models[0]
+                    logger.info(f"自动选择Ollama模型: {actual_model}")
+                else:
+                    actual_model = "gpt-oss:20b"
+                    logger.warning(f"未找到本地Ollama模型，使用默认: {actual_model}")
+
+            except Exception as e:
+                actual_model = "gpt-oss:20b"
+                logger.warning(f"获取Ollama模型列表失败，使用默认: {actual_model}, 错误: {e}")
+
+        logger.info(f"创建Ollama Agent (新模式): {actual_model}")
+
+        # 创建Agent实例（传入adapters）
+        agent = OllamaAgent(
+            provider="ollama",
+            model=actual_model,
+            llm_adapter=llm_adapter,
+            agent_adapter=agent_adapter,
+            **user_params
+        )
+
+        # 初始化
+        await agent.initialize()
+
+        logger.info(f"成功创建Ollama Agent (新模式): {actual_model}")
         return agent
