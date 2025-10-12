@@ -9,6 +9,7 @@ v2更新: 支持配置驱动的初始化方式（通过Adapter），同时保持
 
 import logging
 import asyncio
+import warnings
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 
@@ -89,6 +90,14 @@ class BaseAgent(ABC):
             )
         else:
             # 旧方式: 直接使用传入的参数（向后兼容）
+            warnings.warn(
+                "Direct parameter initialization is deprecated. "
+                "Use agent_manager.create_agent() for configuration-driven initialization. "
+                "Will be removed in v5.0.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+
             self.temperature = temperature if temperature is not None else 0.1
             self.verbose = verbose if verbose is not None else False
             self.max_iterations = max_iterations if max_iterations is not None else 8

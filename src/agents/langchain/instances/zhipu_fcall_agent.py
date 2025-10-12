@@ -7,6 +7,7 @@
 import json
 import logging
 import asyncio
+import warnings
 import zhipuai
 from typing import List, Dict, Any, Optional, Union
 from langchain_core.tools import BaseTool
@@ -86,6 +87,14 @@ class ZhipuFunctionCallingAgent:
             )
         else:
             # 旧方式: 直接使用传入的参数（向后兼容）
+            warnings.warn(
+                "Direct parameter initialization is deprecated. "
+                "Use agent_manager.create_agent() for configuration-driven initialization. "
+                "Will be removed in v5.0.",
+                DeprecationWarning,
+                stacklevel=3
+            )
+
             self.temperature = temperature if temperature is not None else 0.1
             self.verbose = verbose if verbose is not None else False
             self.max_iterations = max_iterations if max_iterations is not None else 10
@@ -514,23 +523,35 @@ async def build_zhipu_fcall_agent(
 ) -> ZhipuFunctionCallingAgent:
     """
     创建并初始化智谱AI Function Calling Agent
-    
+
+    .. deprecated:: 4.0
+        使用 agent_manager.create_agent('zhipu', model) 替代。
+        此函数将在 v5.0 中移除。
+
     Args:
         model: 模型名称
         verbose: 是否显示详细日志
         temperature: 模型温度参数
         **kwargs: 其他参数
-        
+
     Returns:
         初始化完成的ZhipuFunctionCallingAgent实例
     """
+    warnings.warn(
+        "build_zhipu_fcall_agent() is deprecated. "
+        "Use agent_manager.create_agent('zhipu', model) instead. "
+        "Will be removed in v5.0.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     agent = ZhipuFunctionCallingAgent(
         model=model,
         temperature=temperature,
         verbose=verbose,
         **kwargs
     )
-    
+
     await agent.initialize()
     return agent
 
