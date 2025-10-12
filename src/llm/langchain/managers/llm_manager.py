@@ -16,7 +16,7 @@ from typing import Dict, Any, List, Union
 from enum import Enum
 
 from src.config import settings
-from src.llm.langchain.managers.provider_registry import provider_registry
+from src.core.langchain.providers import provider_registry
 
 logger = logging.getLogger(__name__)
 

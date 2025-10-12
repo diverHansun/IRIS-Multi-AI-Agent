@@ -7,7 +7,7 @@ OpenAI Provider实现，负责创建和管理OpenAI LLM实例。
 import logging
 from typing import Dict, Any
 
-from src.llm.langchain.providers.base import BaseProvider
+from src.core.langchain.providers import BaseProvider
 from src.llm.langchain.instances.openai_llm import build_openai_chat
 from src.config import settings
 

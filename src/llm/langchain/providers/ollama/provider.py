@@ -7,7 +7,7 @@ Ollama Provider实现，负责创建和管理Ollama本地LLM实例。
 import logging
 from typing import Dict, Any
 
-from src.llm.langchain.providers.base import BaseProvider
+from src.core.langchain.providers import BaseProvider
 from src.llm.langchain.instances.ollama_llm import OllamaLLM
 
 logger = logging.getLogger(__name__)

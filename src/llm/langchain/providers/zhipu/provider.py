@@ -7,7 +7,7 @@ Zhipu AI Provider Implementation
 import logging
 from typing import Dict, Any
 
-from src.llm.langchain.providers.base import BaseProvider
+from src.core.langchain.providers import BaseProvider
 from src.llm.langchain.instances.zhipu_llm import ZhipuAILLM
 
 logger = logging.getLogger(__name__)
