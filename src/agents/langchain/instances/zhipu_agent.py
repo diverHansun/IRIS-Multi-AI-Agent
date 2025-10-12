@@ -6,6 +6,7 @@
 """
 
 import logging
+import warnings
 from typing import Optional, Dict, Any
 
 from langchain.agents import create_react_agent, AgentExecutor
@@ -186,14 +187,28 @@ async def build_zhipu_agent(
     temperature: float = 0.1,
     **kwargs
 ) -> ZhipuAgent:
-    """创建并初始化智谱AI Agent"""
+    """
+    创建并初始化智谱AI Agent
+
+    .. deprecated:: 4.0
+        使用 agent_manager.create_agent('zhipu', model) 替代。
+        此函数将在 v5.0 中移除。
+    """
+    warnings.warn(
+        "build_zhipu_agent() is deprecated. "
+        "Use agent_manager.create_agent('zhipu', model) instead. "
+        "Will be removed in v5.0.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     agent = ZhipuAgent(
         model=model,
         temperature=temperature,
         verbose=verbose,
         **kwargs
     )
-    
+
     await agent.initialize()
     return agent
 

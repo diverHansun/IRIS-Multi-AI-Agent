@@ -6,6 +6,7 @@ OpenAI Agent Implementation
 """
 
 import logging
+import warnings
 from typing import Dict, Any, Optional, Iterable
 
 from langchain.agents import create_openai_tools_agent, AgentExecutor
@@ -159,7 +160,11 @@ async def build_openai_agent(
 ) -> OpenAIAgent:
     """
     构建OpenAI Agent
-    
+
+    .. deprecated:: 4.0
+        使用 agent_manager.create_agent('openai', model) 替代。
+        此函数将在 v5.0 中移除。
+
     Args:
         api_key: OpenAI API密钥
         model: 模型名称
@@ -167,10 +172,18 @@ async def build_openai_agent(
         temperature: 温度参数
         enable_memory: 是否启用记忆
         **kwargs: 其他参数
-    
+
     Returns:
         初始化完成的OpenAIAgent实例
     """
+    warnings.warn(
+        "build_openai_agent() is deprecated. "
+        "Use agent_manager.create_agent('openai', model) instead. "
+        "Will be removed in v5.0.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     agent = OpenAIAgent(
         api_key=api_key,
         model=model,

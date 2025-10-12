@@ -6,6 +6,7 @@ Ollama Agent Implementation
 """
 
 import logging
+import warnings
 
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
@@ -196,7 +197,11 @@ async def build_ollama_agent(
 ) -> OllamaAgent:
     """
     构建并初始化Ollama Agent
-    
+
+    .. deprecated:: 4.0
+        使用 agent_manager.create_agent('ollama', model) 替代。
+        此函数将在 v5.0 中移除。
+
     Args:
         model: 模型名称
         base_url: Ollama服务地址
@@ -206,10 +211,18 @@ async def build_ollama_agent(
         global_memory_manager: 全局记忆管理器
         disable_thinking_mode: 是否关闭思考模式（Agent模式建议True）
         **kwargs: 其他参数
-        
+
     Returns:
         初始化完成的Ollama Agent
     """
+    warnings.warn(
+        "build_ollama_agent() is deprecated. "
+        "Use agent_manager.create_agent('ollama', model) instead. "
+        "Will be removed in v5.0.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     agent = OllamaAgent(
         model=model,
         base_url=base_url,
