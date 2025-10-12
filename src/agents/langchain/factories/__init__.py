@@ -1,8 +1,7 @@
 """
 Agent Factories
 
-抽象工厂模式实现，用于创建不同Provider的Agent。
-提供便捷函数和向后兼容的agent_factory别名。
+Factory pattern implementation for creating Agents from different providers.
 """
 
 from .base import BaseAgentFactory
@@ -13,16 +12,9 @@ from .registry import (
     FactoryRegistry,
     get_global_registry,
     reset_global_registry,
-    # 便捷函数
-    create_agent,
-    create_default_agent,
-    create_zhipu_agent,
-    create_openai_agent,
-    create_ollama_agent,
-    get_available_configurations,
 )
 
-# 向后兼容：提供agent_factory别名
+# Backward compatible: provide agent_factory alias
 agent_factory = get_global_registry()
 
 __all__ = [
@@ -39,14 +31,6 @@ __all__ = [
     "get_global_registry",
     "reset_global_registry",
 
-    # 便捷函数（NEW）
-    "create_agent",
-    "create_default_agent",
-    "create_zhipu_agent",
-    "create_openai_agent",
-    "create_ollama_agent",
-    "get_available_configurations",
-
-    # 向后兼容别名（NEW）
+    # Backward compatible alias
     "agent_factory",
 ]

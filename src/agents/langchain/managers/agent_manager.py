@@ -24,11 +24,14 @@ class AgentManager:
         """初始化Agent管理器"""
         # 使用共享provider_registry替代llm_manager
         from src.core.langchain.providers import provider_registry
+        from src.agents.langchain.factories.registry import FactoryRegistry
+
         self.provider_registry = provider_registry
+        self.factory_registry = FactoryRegistry()
 
         logger.info("AgentManager initialized")
 
-    def create_agent(
+    async def create_agent(
         self,
         provider: str,
         model: str = None,
@@ -76,11 +79,13 @@ class AgentManager:
         # 3. 创建Agent Adapter (来自本模块)
         agent_adapter = self._create_agent_adapter(provider, model)
 
-        # 4. 确定Agent类并创建实例
-        agent_class = self._get_agent_class(provider, model, agent_type)
+        # 4. 获取Factory并创建Agent
+        factory = self.factory_registry.get_factory(provider)
+        if not factory:
+            raise ValueError(f"No factory found for provider: {provider}")
 
-        agent = agent_class(
-            provider=provider,
+        # 使用Factory创建Agent（会调用create_agent_with_adapters）
+        agent = await factory.create_agent_with_adapters(
             model=model,
             llm_adapter=llm_adapter,
             agent_adapter=agent_adapter,
@@ -243,7 +248,7 @@ agent_manager = AgentManager()
 
 
 # 便捷函数
-def create_agent(provider: str, model: str = None, **kwargs):
+async def create_agent(provider: str, model: str = None, **kwargs):
     """
     创建Agent实例的便捷函数
 
@@ -255,7 +260,7 @@ def create_agent(provider: str, model: str = None, **kwargs):
     Returns:
         Agent实例
     """
-    return agent_manager.create_agent(provider, model, **kwargs)
+    return await agent_manager.create_agent(provider, model, **kwargs)
 
 
 def get_available_agents() -> List[Dict[str, Any]]:

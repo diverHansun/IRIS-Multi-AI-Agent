@@ -25,14 +25,6 @@ from .instances import (
 
 # Factory Pattern - 现在从 factories 模块导入
 from .factories import (
-    # 便捷函数（向后兼容）
-    agent_factory,
-    create_agent,
-    create_default_agent,
-    create_zhipu_agent,
-    create_openai_agent,
-    create_ollama_agent,
-    get_available_configurations,
     # Abstract Factory Pattern
     BaseAgentFactory,
     ZhipuAgentFactory,
@@ -40,6 +32,7 @@ from .factories import (
     OllamaAgentFactory,
     FactoryRegistry,
     get_global_registry,
+    agent_factory,
 )
 
 # 向后兼容：AgentFactory 类别名
@@ -63,17 +56,9 @@ __all__ = [
     "OllamaAgent",
     "build_ollama_agent",
 
-    # Factory (Legacy API - backward compatible)
+    # Factory Pattern
     "AgentFactory",
     "agent_factory",
-    "create_agent",
-    "create_default_agent",
-    "create_zhipu_agent",
-    "create_openai_agent",
-    "create_ollama_agent",
-    "get_available_configurations",
-
-    # Abstract Factory Pattern (NEW)
     "BaseAgentFactory",
     "ZhipuAgentFactory",
     "OpenAIAgentFactory",
@@ -81,7 +66,7 @@ __all__ = [
     "FactoryRegistry",
     "get_global_registry",
 
-    # Builder Pattern (NEW)
+    # Builder Pattern
     "AgentBuilder",
     "AgentPresets",
 ] 

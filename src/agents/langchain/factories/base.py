@@ -49,6 +49,33 @@ class BaseAgentFactory(ABC):
         """
         pass
 
+    async def create_agent_with_adapters(
+        self,
+        model: str,
+        llm_adapter,
+        agent_adapter,
+        **user_params
+    ) -> Any:
+        """
+        Create agent with adapters (new interface, recommended)
+
+        This method is called by AgentManager and receives pre-created adapters.
+        Default implementation calls create_agent() for backward compatibility.
+        Subclasses can override this method for optimized implementation.
+
+        Args:
+            model: Model name
+            llm_adapter: LLM adapter instance
+            agent_adapter: Agent adapter instance
+            **user_params: User parameters
+
+        Returns:
+            Agent instance
+        """
+        # Default implementation: delegate to old create_agent method
+        # Subclasses should override this with optimized implementation
+        return await self.create_agent(model=model, **user_params)
+
     def supports_model(self, model: str) -> bool:
         """
         判断工厂是否支持指定模型
