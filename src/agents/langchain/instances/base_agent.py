@@ -142,7 +142,7 @@ class BaseAgent(ABC):
     async def _create_llm_with_adapter(self):
         """使用LLM Adapter创建LLM"""
         # 从LLM Adapter获取LLM参数
-        llm_params = self.llm_adapter.get_llm_params() if self.llm_adapter else {}
+        llm_params = self.llm_adapter.get_llm_params(**self.kwargs) if self.llm_adapter else {}
 
         # 调用子类实现的LLM创建方法
         if hasattr(self, '_create_llm_instance'):
@@ -168,23 +168,37 @@ class BaseAgent(ABC):
             logger.error(f"AgentExecutor创建失败: {e}", exc_info=True)
             raise
 
-    @abstractmethod
     async def _create_llm(self):
         """
-        Create LLM instance (must be implemented by subclass).
+        Create LLM instance (default implementation).
 
-        Subclasses should create self.llm in this method.
+        Subclasses should override this method to create self.llm.
+        This default implementation just logs a warning.
         """
-        pass
+        logger.warning(f"_create_llm not implemented in {self.__class__.__name__}. Using adapter method.")
+        # Default implementation will use adapter method which is now handled in _create_llm_with_adapter
 
-    @abstractmethod
     def _build_agent_executor_with_adapter(self):
         """
-        Build agent executor using agent adapter (must be implemented by subclass).
+        Build agent executor using agent adapter.
 
-        Subclasses should create self.agent_executor in this method using the agent adapter.
+        Uses agent adapter to create agent executor with llm and tools.
         """
-        pass
+        try:
+            # Use agent adapter to create agent executor
+            if self.agent_adapter:
+                self.agent_executor = self.agent_adapter.create_agent_executor(
+                    llm=self.llm,
+                    tools=self.tools
+                )
+
+                logger.info("AgentExecutor created (using Agent Adapter)")
+            else:
+                logger.warning("No agent adapter provided, agent executor not built")
+
+        except Exception as e:
+            logger.error(f"AgentExecutor creation failed: {e}", exc_info=True)
+            raise
 
     async def _load_tools(self):
         """

@@ -146,6 +146,18 @@ async def run():
         ctx.console.print(f"[green]Agent initialized successfully[/]")
         ctx.console.print(f"[dim]Provider: {info['provider']}, Model: {info['model']}, Tool Count: {info['tool_count']}[/]")
         
+        # Register streaming LLM for LLM mode
+        if hasattr(ctx.agent, 'get_llm') and callable(getattr(ctx.agent, 'get_llm')):
+            try:
+                from src.llm.langchain.utils import streaming_manager
+                llm = ctx.agent.get_llm()
+                if llm:
+                    streaming_manager.register_llm(info['provider'], llm)
+                    ctx.console.print(f"[dim]Streaming LLM registered for {info['provider']}[/]")
+            except Exception as e:
+                # Non-critical: streaming will use dynamic registration if needed
+                ctx.console.print(f"[yellow]Warning: Could not register streaming LLM: {e}[/]")
+        
         # Show current mode and prompt
         if ctx.llm_mode:
             ctx.console.print(f"[green]Current Mode: LLM Mode (Streaming Output)[/]")

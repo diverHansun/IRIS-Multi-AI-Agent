@@ -119,15 +119,33 @@ class ZhipuFunctionCallingAgent:
             logger.info("开始初始化智谱AI Function Calling Agent...")
             
             # 1. 创建LLM
+            if self.llm_adapter:
+                llm_params = self.llm_adapter.get_llm_params(**self.kwargs)
+            else:
+                llm_params = {}
+
+            params = llm_params.copy()
+
+            # 确保temperature与LLM保持一致
+            if "temperature" in params:
+                self.temperature = params["temperature"]
+            else:
+                params["temperature"] = self.temperature
+
+            model_name = params.pop("model", self.model)
+            self.model = model_name
+
+            api_key_override = params.get("api_key") or self.kwargs.get("api_key")
+
             self.llm = llm_manager.create_llm(
                 provider="zhipu",
-                model=self.model,
-                temperature=self.temperature,
-                **self.kwargs
+                model=model_name,
+                mode="agent",
+                **params
             )
             
             # 2. 创建智谱AI原生客户端（用于Function Calling）
-            api_key = settings.zhipu_api_key
+            api_key = api_key_override or settings.zhipu_api_key
             if not api_key:
                 raise ValueError("未找到ZHIPU_API_KEY，请检查配置")
             self.zhipu_client = zhipuai.ZhipuAI(api_key=api_key)

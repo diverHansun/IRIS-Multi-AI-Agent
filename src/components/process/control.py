@@ -40,6 +40,20 @@ async def switch_llm(ctx, provider: str, model: str = None):
         ctx.console.print(f"[dim]Tool count: {info['tool_count']}, Memory: {'Enabled' if info['memory_enabled'] else 'Disabled'}[/]")
         ctx.console.print(f"[dim]Memory continuity maintained, you can continue previous conversations after switching[/]")
         
+        # Update streaming LLM registration for LLM mode
+        # This ensures the streaming manager uses the new LLM instance
+        if hasattr(new_agent, 'get_llm') and callable(getattr(new_agent, 'get_llm')):
+            try:
+                from src.llm.langchain.utils import streaming_manager
+                llm = new_agent.get_llm()
+                if llm:
+                    # Re-register the provider with new LLM instance
+                    streaming_manager.register_llm(info['provider'], llm)
+                    ctx.console.print(f"[dim]Streaming LLM registered for {info['provider']}[/]")
+            except Exception as e:
+                # Non-critical: streaming still works via dynamic registration
+                ctx.console.print(f"[yellow]Warning: Could not pre-register streaming LLM: {e}[/]")
+        
         # Update context
         ctx.agent = new_agent
         
@@ -151,14 +165,20 @@ def reload_config(ctx):
         success = reload_llm_config()
         
         if success:
-            # Clear agent factory cache to use new config
-            agent_factory.clear_cache()
+            # Clear agent manager cache to use new config
+            # Note: cache clearing is now handled by factory registry
+            try:
+                from src.agents.langchain.factories.registry import get_global_registry
+                registry = get_global_registry()
+                registry.clear_cache()
+            except Exception as cache_error:
+                # Non-critical: just log the warning
+                pass
             
             return {
                 "type": "success",
                 "message": "LLM configuration reloaded successfully",
                 "payload": {
-                    "cache_cleared": True,
                     "note": "You may need to switch models to use the updated configuration"
                 }
             }

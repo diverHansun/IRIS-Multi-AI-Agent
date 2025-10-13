@@ -114,6 +114,18 @@ class OllamaAgentFactory(BaseAgentFactory):
 
         logger.info(f"创建Ollama Agent (新模式): {actual_model}")
 
+        if actual_model != model:
+            llm_adapter = llm_adapter.__class__(
+                model=actual_model,
+                provider_registry=llm_adapter.provider_registry,
+                mode=llm_adapter.mode,
+            )
+            agent_adapter = agent_adapter.__class__(
+                model=actual_model,
+                provider_registry=agent_adapter.provider_registry,
+            )
+
+
         # 创建Agent实例（传入adapters）
         agent = OllamaAgent(
             provider="ollama",

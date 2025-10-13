@@ -53,11 +53,10 @@ class OpenAIAgent(BaseAgent):
 
     def __init__(
         self,
-        api_key: str,
         model: str = "gpt-4o-mini",
-        temperature: float = 0.1,
-        verbose: bool = False,
-        enable_memory: bool = True,
+        provider: str = "openai",
+        llm_adapter = None,
+        agent_adapter = None,
         global_memory_manager = None,
         **kwargs
     ):
@@ -65,58 +64,44 @@ class OpenAIAgent(BaseAgent):
         Initialize OpenAI Agent.
 
         Args:
-            api_key: OpenAI API key
             model: Model name
-            temperature: Temperature parameter
-            verbose: Enable verbose logging
-            enable_memory: Enable memory management
+            provider: Provider name
+            llm_adapter: LLM adapter
+            agent_adapter: Agent adapter
             global_memory_manager: Global memory manager
             **kwargs: Additional parameters
         """
         # Call parent constructor
         super().__init__(
             model=model,
-            temperature=temperature,
-            verbose=verbose,
-            enable_memory=enable_memory,
+            provider=provider,
+            llm_adapter=llm_adapter,
+            agent_adapter=agent_adapter,
             global_memory_manager=global_memory_manager,
             **kwargs
         )
 
-        # OpenAI-specific configuration
-        self.api_key = api_key
-
         logger.info(f"Creating OpenAI Agent instance: {model}")
 
     async def _create_llm_instance(self, llm_params: Dict[str, Any]):
-        """使用 LLM Adapter 参数创建 LLM（新接口）"""
-        from src.config import settings
+        """Create LLM instance using processed parameters."""
+        params = llm_params.copy()
+        model_name = params.pop("model", self.model)
+        self.model = model_name
 
-        base_url = self.kwargs.get('base_url') or settings.openai_base_url
-        
-        # 使用新的LLM管理器创建LLM
-        llm_kwargs = {
-            "api_key": self.api_key,
-            "model": llm_params.get("model", self.model),
-            "temperature": llm_params.get("temperature", 0.1),
-            "streaming": llm_params.get("streaming", False)
-        }
-        
-        if base_url:
-            llm_kwargs["base_url"] = base_url
-        
-        if "max_tokens" in llm_params and llm_params["max_tokens"] is not None:
-            llm_kwargs["max_tokens"] = llm_params["max_tokens"]
+        if "temperature" in params and params["temperature"] is not None:
+            self.temperature = params["temperature"]
 
-        self.llm = llm_manager.create_llm(
+        llm = llm_manager.create_llm(
             provider="openai",
-            **llm_kwargs
+            model=model_name,
+            mode="agent",
+            **params,
         )
 
-        logger.info(f"LLM 创建完成（新方式）: {self.model}")
+        logger.info("LLM created via adapter: %s, params=%s", model_name, llm_params)
+        return llm
 
     def _get_provider_name(self) -> str:
         """Get provider name for agent info."""
         return "openai"
-
-

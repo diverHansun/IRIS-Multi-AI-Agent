@@ -10,16 +10,23 @@ from typing import Dict, Any
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+from typing import Optional
+
 from .base import AgentAdapter
+from src.core.langchain.providers.provider_registry import ProviderRegistry
 
 logger = logging.getLogger(__name__)
 
 
 class OpenAIAgentAdapter(AgentAdapter):
-    """OpenAI Agent适配器"""
+    """OpenAI agent adapter."""
 
-    def __init__(self, provider: str, model: str):
-        super().__init__(provider="OPENAI", model=model)
+    def __init__(
+        self,
+        model: Optional[str],
+        provider_registry: Optional[ProviderRegistry] = None,
+    ):
+        super().__init__("OPENAI", model, provider_registry=provider_registry)
 
     def get_agent_params(self, **user_params) -> Dict[str, Any]:
         """

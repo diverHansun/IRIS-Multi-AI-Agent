@@ -8,8 +8,7 @@ Ollama Agent Implementation
 import logging
 from typing import Dict, Any
 
-from src.llm.langchain.instances.ollama_llm import OllamaLLM
-
+from src.llm.langchain.managers import llm_manager
 from .base_agent import BaseAgent
 
 logger = logging.getLogger(__name__)
@@ -24,11 +23,11 @@ class OllamaAgent(BaseAgent):
     def __init__(
         self,
         model: str = "gpt-oss:20b",
-        base_url: str = "http://localhost:11434",
-        temperature: float = 0.0,
-        verbose: bool = False,
-        enable_memory: bool = True,
+        provider: str = "ollama",
+        llm_adapter = None,
+        agent_adapter = None,
         global_memory_manager = None,
+        base_url: str = "http://localhost:11434",
         disable_thinking_mode: bool = True,
         **kwargs
     ):
@@ -37,21 +36,20 @@ class OllamaAgent(BaseAgent):
 
         Args:
             model: Model name
-            base_url: Ollama service URL
-            temperature: Temperature parameter (0.0 recommended for agent mode)
-            verbose: Enable verbose logging
-            enable_memory: Enable memory management
+            provider: Provider name
+            llm_adapter: LLM adapter
+            agent_adapter: Agent adapter
             global_memory_manager: Global memory manager
+            base_url: Ollama service URL
             disable_thinking_mode: Disable thinking mode for better stability
             **kwargs: Additional parameters
         """
         # Call parent constructor
         super().__init__(
             model=model,
-            temperature=temperature,
-            verbose=verbose,
-            max_iterations=3,  # Lower for local models
-            enable_memory=enable_memory,
+            provider=provider,
+            llm_adapter=llm_adapter,
+            agent_adapter=agent_adapter,
             global_memory_manager=global_memory_manager,
             **kwargs
         )
@@ -63,23 +61,32 @@ class OllamaAgent(BaseAgent):
         logger.info(f"Creating Ollama Agent instance: {model}")
 
     async def _create_llm_instance(self, llm_params: Dict[str, Any]):
-        """使用 LLM Adapter 参数创建 LLM（新接口）"""
-        ollama_llm = OllamaLLM(
-            model=llm_params.get("model", self.model),
-            base_url=self.base_url,
-            temperature=llm_params.get("temperature", 0.0),
-            **self.kwargs
+        """Create LLM instance using processed parameters."""
+        params = llm_params.copy()
+        params.setdefault("base_url", self.base_url)
+        params.setdefault("disable_thinking_mode", self.disable_thinking_mode)
+
+        for key, value in self.kwargs.items():
+            if value is not None and key not in params:
+                params[key] = value
+
+        if "base_url" in params and params["base_url"]:
+            self.base_url = params["base_url"]
+        if "temperature" in params and params["temperature"] is not None:
+            self.temperature = params["temperature"]
+
+        model_name = params.pop("model", self.model)
+        self.model = model_name
+
+        llm = llm_manager.create_llm(
+            provider="ollama",
+            model=model_name,
+            mode="agent",
+            **params,
         )
 
-        # Health check
-        health_ok = await ollama_llm.health_check()
-        if not health_ok:
-            logger.warning("Ollama service health check failed")
-
-        await ollama_llm.initialize()
-        self.llm = ollama_llm.create_llm()
-
-        logger.info(f"LLM 创建完成（新方式）: {self.model}")
+        logger.info("LLM created via adapter: %s, params=%s", model_name, llm_params)
+        return llm
 
     def _custom_error_handler(self, error):
         """

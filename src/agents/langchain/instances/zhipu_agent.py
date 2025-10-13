@@ -52,17 +52,23 @@ class ZhipuAgent(BaseAgent):
         self.prompt_provider = prompt_provider or ("glm" if "glm" in model.lower() else None)
 
     async def _create_llm_instance(self, llm_params: Dict[str, Any]):
-        """使用 LLM Adapter 参数创建 LLM（新接口）"""
-        self.llm = llm_manager.create_llm(
+        """创建 LLM 实例（使用已处理的参数）"""
+        params = llm_params.copy()
+        model_name = params.pop("model", self.model)
+        self.model = model_name
+
+        if "temperature" in params and params["temperature"] is not None:
+            self.temperature = params["temperature"]
+
+        llm = llm_manager.create_llm(
             provider="zhipu",
-            model=llm_params.get("model", self.model),
-            temperature=llm_params.get("temperature", 0.1),
-            max_tokens=llm_params.get("max_tokens", 2048),
-            streaming=llm_params.get("streaming", False),
-            thinking_mode=llm_params.get("thinking_mode", False)
+            model=model_name,
+            mode="agent",
+            **params,
         )
 
-        logger.info(f"LLM 创建完成（新方式）: {self.model}, params: {llm_params}")
+        logger.info("LLM created via adapter: %s, params=%s", model_name, llm_params)
+        return llm
 
     def _get_provider_name(self) -> str:
         """Get provider name for agent info."""

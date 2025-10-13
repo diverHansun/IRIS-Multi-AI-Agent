@@ -10,16 +10,23 @@ from typing import Dict, Any
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 
+from typing import Optional
+
 from .base import AgentAdapter
+from src.core.langchain.providers.provider_registry import ProviderRegistry
 
 logger = logging.getLogger(__name__)
 
 
 class OllamaAgentAdapter(AgentAdapter):
-    """Ollama Agent适配器"""
+    """Ollama agent adapter."""
 
-    def __init__(self, provider: str, model: str):
-        super().__init__(provider="OLLAMA", model=model)
+    def __init__(
+        self,
+        model: Optional[str],
+        provider_registry: Optional[ProviderRegistry] = None,
+    ):
+        super().__init__("OLLAMA", model, provider_registry=provider_registry)
 
     def get_agent_params(self, **user_params) -> Dict[str, Any]:
         """

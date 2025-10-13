@@ -125,8 +125,11 @@ class AgentManager:
         if not adapter_class:
             raise ValueError(f"No LLM adapter found for provider: {provider}")
 
-        # LLM Adapter使用"llm"模式
-        return adapter_class(model=model, mode="llm")
+        return adapter_class(
+            model=model,
+            provider_registry=self.provider_registry,
+            mode="agent",
+        )
 
     def _create_agent_adapter(self, provider: str, model: str):
         """创建Agent适配器 (来自本模块)"""
@@ -146,7 +149,10 @@ class AgentManager:
         if not adapter_class:
             raise ValueError(f"No Agent adapter found for provider: {provider}")
 
-        return adapter_class(provider=provider, model=model)
+        return adapter_class(
+            model=model,
+            provider_registry=self.provider_registry,
+        )
 
     def _get_agent_class(self, provider: str, model: str, agent_type: str):
         """
@@ -219,26 +225,85 @@ class AgentManager:
             provider = provider_key.lower()
             models = provider_config.get("models", {})
 
-            for model_name, model_config in models.items():
-                # 确定Agent类型
-                if provider == "zhipu":
-                    if model_name in ["glm-4.5", "glm-4.5-flash"]:
+            # 对于Ollama，需要动态检测本地可用模型
+            if provider == "ollama":
+                try:
+                    # 动态获取Ollama本地模型
+                    import asyncio
+                    from src.core.langchain.providers.utils import list_ollama_models
+                    
+                    # 检查是否在事件循环中
+                    try:
+                        loop = asyncio.get_running_loop()
+                        # 如果在事件循环中，创建新的线程来运行异步函数
+                        import concurrent.futures
+                        import threading
+                        
+                        def run_async():
+                            return asyncio.run(list_ollama_models())
+                        
+                        # 在新线程中运行异步函数
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            future = executor.submit(run_async)
+                            local_models = future.result(timeout=10)
+                    except RuntimeError:
+                        # 没有运行的事件循环，直接运行
+                        local_models = asyncio.run(list_ollama_models())
+                    
+                    # 为每个本地模型创建一个代理项
+                    for model_name in local_models:
+                        agents.append({
+                            "provider": provider,
+                            "model": model_name,
+                            "agent_type": "react",
+                            "supports_tools": True,  # Ollama模型通常支持工具调用
+                            "recommended": True,  # 本地模型视为推荐
+                            "description": f"Ollama本地模型: {model_name}",
+                        })
+                    
+                    # 如果没有本地模型，至少添加一个基础项
+                    if not local_models:
+                        agents.append({
+                            "provider": provider,
+                            "model": "default",
+                            "agent_type": "react",
+                            "supports_tools": True,
+                            "recommended": False,
+                            "description": "Ollama本地模型（无模型）",
+                        })
+                except Exception as e:
+                    logger.warning(f"无法获取Ollama模型列表: {e}")
+                    # 即使无法获取具体的本地模型，也要添加一个基础的Ollama代理项
+                    agents.append({
+                        "provider": provider,
+                        "model": "unknown",  # 表示模型还未知
+                        "agent_type": "react",
+                        "supports_tools": True,
+                        "recommended": False,
+                        "description": "Ollama本地模型服务",
+                    })
+            else:
+                # 对于其他提供商，使用预定义的模型列表
+                for model_name, model_config in models.items():
+                    # 确定Agent类型
+                    if provider == "zhipu":
+                        if model_name in ["glm-4.5", "glm-4.5-flash"]:
+                            agent_type = "function_calling"
+                        else:
+                            agent_type = "react"
+                    elif provider == "openai":
                         agent_type = "function_calling"
                     else:
                         agent_type = "react"
-                elif provider == "openai":
-                    agent_type = "function_calling"
-                else:
-                    agent_type = "react"
 
-                agents.append({
-                    "provider": provider,
-                    "model": model_name,
-                    "agent_type": agent_type,
-                    "supports_tools": model_config.get("supports_tools", False),
-                    "recommended": model_config.get("recommended", False),
-                    "description": model_config.get("description", ""),
-                })
+                    agents.append({
+                        "provider": provider,
+                        "model": model_name,
+                        "agent_type": agent_type,
+                        "supports_tools": model_config.get("supports_tools", False),
+                        "recommended": model_config.get("recommended", False),
+                        "description": model_config.get("description", ""),
+                    })
 
         return agents
 
