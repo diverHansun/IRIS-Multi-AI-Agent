@@ -25,7 +25,6 @@ async def switch_llm(ctx, provider: str, model: str = None):
         new_agent = await agent_manager.create_agent(
             provider=provider,
             model=model,
-            use_cache=False,  # Don't use cache when switching
             global_memory_manager=ctx.global_memory  # Pass global memory manager
         )
         # Set specific parameters after agent creation if needed

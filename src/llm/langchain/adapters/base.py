@@ -49,11 +49,12 @@ class LLMAdapter(ABC):
 
         model_config = self.provider_registry.get_model_config(self.provider, resolved_model)
         if model_config is None:
-            logger.warning(
-                "Model %s not found in provider %s configuration, using empty config",
-                resolved_model,
-                self.provider,
-            )
+            if self._provider_config.get("models"):
+                logger.warning(
+                    "Model %s not found in provider %s configuration, using empty config",
+                    resolved_model,
+                    self.provider,
+                )
             model_config = {}
 
         self.model = resolved_model

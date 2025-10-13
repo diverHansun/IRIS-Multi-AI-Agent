@@ -54,6 +54,7 @@ class BaseAgent(ABC):
         self.provider = provider
         self.llm_adapter = llm_adapter
         self.agent_adapter = agent_adapter
+        self._use_adapters = bool(llm_adapter or agent_adapter)
 
         # 从Agent Adapter获取参数（配置驱动）
         if agent_adapter:
