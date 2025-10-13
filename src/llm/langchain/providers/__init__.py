@@ -5,7 +5,7 @@ This module contains provider-specific tools and implementations.
 Each provider has its own subdirectory with dedicated utilities.
 
 Structure:
-- base.py: BaseProvider abstract base class
+- BaseProvider: abstract base class (from core module)
 - zhipu/: 智谱AI Provider实现和工具
   - provider.py: ZhipuProvider implementation
 - openai/: OpenAI Provider实现和工具
@@ -16,8 +16,8 @@ Structure:
   - utils.py: Model discovery utilities
 """
 
-# Base Provider
-from .base import BaseProvider
+# Base Provider (imported from core module)
+from src.core.langchain.providers import BaseProvider
 
 # Provider implementations (从子目录导入)
 from .zhipu import ZhipuProvider
