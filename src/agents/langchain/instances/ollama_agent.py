@@ -6,11 +6,7 @@ Ollama Agent Implementation
 """
 
 import logging
-import warnings
 from typing import Dict, Any
-
-from langchain.agents import create_react_agent, AgentExecutor
-from langchain_core.prompts import PromptTemplate
 
 from src.llm.langchain.instances.ollama_llm import OllamaLLM
 
@@ -85,33 +81,6 @@ class OllamaAgent(BaseAgent):
 
         logger.info(f"LLM 创建完成（新方式）: {self.model}")
 
-    async def _create_llm(self):
-        """Create Ollama LLM instance."""
-        logger.info("Creating Ollama LLM...")
-
-        # Optimize parameters for agent mode
-        agent_kwargs = self.kwargs.copy()
-
-        # Disable thinking mode for better stability
-        if self.disable_thinking_mode:
-            logger.info("Thinking mode disabled for agent stability")
-
-        ollama_llm = OllamaLLM(
-            model=self.model,
-            base_url=self.base_url,
-            temperature=self.temperature,
-            **agent_kwargs
-        )
-
-        # Health check
-        health_ok = await ollama_llm.health_check()
-        if not health_ok:
-            logger.warning("Ollama service health check failed, continuing initialization")
-
-        # Async initialization
-        await ollama_llm.initialize()
-        self.llm = ollama_llm.create_llm()
-    
     def _custom_error_handler(self, error):
         """
         自定义错误处理函数，专门处理Ollama模型的常见问题
@@ -146,112 +115,7 @@ class OllamaAgent(BaseAgent):
         
         # 通用错误处理
         return f"出现错误: {str(error)}。请重新尝试或使用不同的表达方式。如果问题持续，请直接给出Final Answer。"
-    
-    def _build_agent(self):
-        """Build ReAct agent optimized for local models."""
-        # Optimized ReAct prompt template for local models
-        react_prompt = PromptTemplate.from_template("""
-你是一个智能助手，可以回答问题并使用工具完成任务。
-
-你可以使用以下工具：
-{tools}
-
-使用以下格式回答：
-
-Question: 用户的问题
-Thought: 你应该思考要做什么
-Action: 要执行的动作，应该是[{tool_names}]中的一个
-Action Input: 动作的输入
-Observation: 动作执行的结果
-... (这个Thought/Action/Action Input/Observation序列可以重复N次)
-Thought: 我现在知道最终答案了
-Final Answer: 给用户的最终回复
-
-重要规则：
-1. 必须严格按照上面的格式回答
-2. Action必须是可用工具列表中的一个
-3. 每次只能执行一个Action
-4. 如果不需要工具，直接给出Final Answer
-5. 用中文回答用户
-
-开始！
-
-Question: {input}
-{agent_scratchpad}""")
-
-        # Create ReAct Agent
-        agent = create_react_agent(
-            llm=self.llm,
-            tools=self.tools,
-            prompt=react_prompt
-        )
-
-        # Create AgentExecutor with optimized config for local models
-        self.agent_executor = AgentExecutor(
-            agent=agent,
-            tools=self.tools,
-            verbose=self.verbose,
-            handle_parsing_errors=self._custom_error_handler,
-            max_iterations=self.max_iterations,
-            max_execution_time=30,
-            return_intermediate_steps=False
-        )
-
-        logger.info("ReAct Agent created")
 
     def _get_provider_name(self) -> str:
         """Get provider name for agent info."""
         return "ollama"
-
-
-# 构建函数
-async def build_ollama_agent(
-    model: str = "gpt-oss:20b",
-    base_url: str = "http://localhost:11434",
-    verbose: bool = False,
-    temperature: float = 0.0,  # Agent模式默认使用0.0温度
-    enable_memory: bool = True,
-    global_memory_manager = None,
-    disable_thinking_mode: bool = True,  # 默认关闭思考模式
-    **kwargs
-) -> OllamaAgent:
-    """
-    构建并初始化Ollama Agent
-
-    .. deprecated:: 4.0
-        使用 agent_manager.create_agent('ollama', model) 替代。
-        此函数将在 v5.0 中移除。
-
-    Args:
-        model: 模型名称
-        base_url: Ollama服务地址
-        verbose: 是否显示详细信息
-        temperature: 温度参数（Agent模式建议使用0.0）
-        enable_memory: 是否启用记忆功能
-        global_memory_manager: 全局记忆管理器
-        disable_thinking_mode: 是否关闭思考模式（Agent模式建议True）
-        **kwargs: 其他参数
-
-    Returns:
-        初始化完成的Ollama Agent
-        
-    推荐方式::
-    
-        from src.agents.langchain.managers import agent_manager
-        agent = await agent_manager.create_agent('ollama', model, verbose=verbose)
-    """
-    # DEPRECATED v4.0 - Will be removed in v5.0
-    # Use: agent_manager.create_agent('ollama', model)
-    agent = OllamaAgent(
-        model=model,
-        base_url=base_url,
-        verbose=verbose,
-        temperature=temperature,
-        enable_memory=enable_memory,
-        global_memory_manager=global_memory_manager,
-        disable_thinking_mode=disable_thinking_mode,
-        **kwargs
-    )
-    
-    await agent.initialize()
-    return agent

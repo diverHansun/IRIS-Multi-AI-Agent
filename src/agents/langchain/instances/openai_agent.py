@@ -6,11 +6,7 @@ OpenAI Agent Implementation
 """
 
 import logging
-import warnings
 from typing import Dict, Any, Optional, Iterable
-
-from langchain.agents import create_openai_tools_agent, AgentExecutor
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from src.llm.langchain.instances.openai_llm import build_openai_chat
 
@@ -109,107 +105,8 @@ class OpenAIAgent(BaseAgent):
 
         logger.info(f"LLM 创建完成（新方式）: {self.model}")
 
-    async def _create_llm(self):
-        """Create OpenAI LLM instance."""
-        logger.info("Creating OpenAI LLM...")
-
-        # Check for custom base_url
-        from src.config import settings
-        base_url = self.kwargs.get('base_url') or settings.openai_base_url
-
-        # Log API endpoint
-        if base_url:
-            logger.info(f"Using custom OpenAI API endpoint: {base_url}")
-        else:
-            logger.info("Using default OpenAI API endpoint")
-
-        # Remove base_url from kwargs to avoid duplication
-        filtered_kwargs = {k: v for k, v in self.kwargs.items() if k != 'base_url'}
-
-        self.llm = build_openai_chat(
-            api_key=self.api_key,
-            model=self.model,
-            temperature=self.temperature,
-            base_url=base_url,
-            **filtered_kwargs
-        )
-
-    def _build_agent(self):
-        """Build OpenAI Function Calling agent."""
-        # Simple prompt for Function Calling
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "你是一个智能助手，可以使用工具来帮助用户。"),
-            MessagesPlaceholder("chat_history", optional=True),
-            ("human", "{input}"),
-            MessagesPlaceholder("agent_scratchpad"),
-        ])
-
-        # Create OpenAI tools agent
-        agent = create_openai_tools_agent(
-            llm=self.llm,
-            tools=self.tools,
-            prompt=prompt
-        )
-
-        # Create AgentExecutor
-        self.agent_executor = AgentExecutor(
-            agent=agent,
-            tools=self.tools,
-            verbose=self.verbose,
-            handle_parsing_errors=True,
-            max_iterations=10,
-            return_intermediate_steps=True
-        )
-
     def _get_provider_name(self) -> str:
         """Get provider name for agent info."""
         return "openai"
-
-
-# 便捷构建函数
-async def build_openai_agent(
-    api_key: str,
-    model: str = "gpt-4o-mini",
-    verbose: bool = False,
-    temperature: float = 0.1,
-    enable_memory: bool = True,
-    **kwargs
-) -> OpenAIAgent:
-    """
-    构建OpenAI Agent
-
-    .. deprecated:: 4.0
-        使用 agent_manager.create_agent('openai', model) 替代。
-        此函数将在 v5.0 中移除。
-
-    Args:
-        api_key: OpenAI API密钥
-        model: 模型名称
-        verbose: 是否显示详细信息
-        temperature: 温度参数
-        enable_memory: 是否启用记忆
-        **kwargs: 其他参数
-
-    Returns:
-        初始化完成的OpenAIAgent实例
-        
-    推荐方式::
-    
-        from src.agents.langchain.managers import agent_manager
-        agent = await agent_manager.create_agent('openai', model, verbose=verbose)
-    """
-    # DEPRECATED v4.0 - Will be removed in v5.0
-    # Use: agent_manager.create_agent('openai', model)
-    agent = OpenAIAgent(
-        api_key=api_key,
-        model=model,
-        temperature=temperature,
-        verbose=verbose,
-        enable_memory=enable_memory,
-        **kwargs
-    )
-    
-    await agent.initialize()
-    return agent
 
 
