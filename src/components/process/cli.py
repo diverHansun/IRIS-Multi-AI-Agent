@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Import the IRIS logo display function
 from src.ui.logo.logo import display_logo,display_logo_intro
 
-from src.agents.langchain.factories import create_default_agent, get_available_configurations
+from src.agents.langchain.managers import agent_manager
 from src.llm.langchain.utils import stream_llm_response
 from src.components.shared.memory import GlobalMemoryManager, SessionManager
 
@@ -107,8 +107,8 @@ async def run():
     ctx = AppState()
     
     # Check for at least one LLM available
-    configs = get_available_configurations()
-    if not configs["available_providers"]:
+    available_agents = agent_manager.get_available_agents()
+    if not available_agents:
         ctx.console.print("[bold red]Error: No LLM providers available[/]")
         ctx.console.print("Please set at least one API key in your .env file:")
         ctx.console.print("- ZHIPU_API_KEY (Zhipu AI)")
@@ -130,11 +130,16 @@ async def run():
     try:
         # Create default Agent (async) and integrate global memory
         with ctx.console.status("[yellow]Initializing default Agent...[/]"):
-            ctx.agent = await create_default_agent(
-                verbose=True,
-                temperature=0.1,
+            ctx.agent = await agent_manager.create_agent(
+                provider="zhipu",
+                model=None,
                 global_memory_manager=ctx.global_memory  # Pass global memory manager
             )
+            # Set specific parameters after agent creation if needed
+            if hasattr(ctx.agent, 'verbose'):
+                ctx.agent.verbose = True
+            if hasattr(ctx.agent, 'temperature'):
+                ctx.agent.temperature = 0.1
 
         # Show initialization info
         info = ctx.agent.get_info()

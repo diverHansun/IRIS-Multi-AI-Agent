@@ -3,16 +3,16 @@ Registry module for the Multi-AI-Agent project.
 This module contains provider/model catalog and validation.
 """
 
-from src.agents.langchain.factories import get_available_configurations
+from src.agents.langchain.managers import agent_manager
 from src.llm.langchain.providers.ollama import list_ollama_models
 
 
 async def get_catalog():
     """Get the full provider/model catalog"""
     try:
-        configs = get_available_configurations()
+        available_agents = agent_manager.get_available_agents()
         
-        if not configs["available_providers"]:
+        if not available_agents:
             return {
                 "error": "No available LLM providers",
                 "message": "Please ensure at least one API key is configured (ZHIPU_API_KEY or OPENAI_API_KEY)"
@@ -20,19 +20,32 @@ async def get_catalog():
         
         catalog = {
             "providers": [],
-            "recommended": configs.get("recommended_configs", []),
-            "default": configs.get("default_config", {})
+            "recommended": [],
+            "default": {}
         }
         
-        for provider in configs["available_providers"]:
-            provider_info = {
-                "name": provider['name'],
-                "provider": provider['provider'],
-                "default_model": provider['default_model']
-            }
-            
+        # Group available agents by provider
+        provider_map = {}
+        for agent in available_agents:
+            provider = agent['provider']
+            if provider not in provider_map:
+                provider_map[provider] = {
+                    "name": provider,
+                    "provider": provider,
+                    "default_model": agent.get('model'),
+                    "models_detail": []
+                }
+            provider_map[provider]["models_detail"].append({
+                "model": agent['model'],
+                "agent_type": agent['agent_type'],
+                "supports_tools": agent['supports_tools'],
+                "recommended": agent['recommended'],
+                "description": agent['description']
+            })
+        
+        for provider_info in provider_map.values():
             # Ollama special handling: show local available models and dynamic default model
-            if provider['provider'] == 'ollama':
+            if provider_info['provider'] == 'ollama':
                 try:
                     local_models = await list_ollama_models()
                     if local_models:
@@ -45,10 +58,6 @@ async def get_catalog():
                         provider_info["message"] = "No local models available. Please run 'ollama pull <model>' to install models."
                 except Exception as e:
                     provider_info["error"] = str(e)
-            else:
-                # Other providers show static supported model list
-                if "models_detail" in provider:
-                    provider_info["models"] = provider["models_detail"]
             
             catalog["providers"].append(provider_info)
         

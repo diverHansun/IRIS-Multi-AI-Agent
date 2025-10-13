@@ -3,15 +3,15 @@ Control module for the Multi-AI-Agent project.
 This module contains general control commands.
 """
 
-from src.agents.langchain.factories import agent_factory
+from src.agents.langchain.managers import agent_manager
 from src.llm.langchain.managers import reload_llm_config
 
 
 async def switch_llm(ctx, provider: str, model: str = None):
     """Switch LLM provider/model"""
     try:
-        # Validate provider
-        available_providers = [p["provider"] for p in agent_factory.get_available_configurations()["available_providers"]]
+        # Validate provider using new agent manager
+        available_providers = [p["provider"] for p in agent_manager.get_available_agents()]
         if provider not in available_providers:
             return {
                 "type": "error",
@@ -21,15 +21,18 @@ async def switch_llm(ctx, provider: str, model: str = None):
                 }
             }
         
-        # Create new Agent and pass global memory manager
-        new_agent = await agent_factory.create_agent(
+        # Create new Agent and pass global memory manager using new architecture
+        new_agent = await agent_manager.create_agent(
             provider=provider,
             model=model,
-            verbose=True,
-            temperature=0.1,
             use_cache=False,  # Don't use cache when switching
             global_memory_manager=ctx.global_memory  # Pass global memory manager
         )
+        # Set specific parameters after agent creation if needed
+        if hasattr(new_agent, 'verbose'):
+            new_agent.verbose = True
+        if hasattr(new_agent, 'temperature'):
+            new_agent.temperature = 0.1
         
         # Get Agent info
         info = new_agent.get_info()
