@@ -3,6 +3,7 @@ Provider utility functions.
 """
 
 from .ollama import (
+    OllamaClient,
     list_ollama_models,
     get_ollama_models_http,
     get_ollama_models_cli,
@@ -12,6 +13,7 @@ from .ollama import (
 )
 
 __all__ = [
+    'OllamaClient',
     'list_ollama_models',
     'get_ollama_models_http',
     'get_ollama_models_cli',

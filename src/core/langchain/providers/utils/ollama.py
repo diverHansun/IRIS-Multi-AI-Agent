@@ -11,13 +11,109 @@ import logging
 import shutil
 import subprocess
 import asyncio
-from typing import List, Dict, Any
+from typing import AsyncGenerator, List, Dict, Any
 
 import aiohttp
 
 from src.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class OllamaClient:
+    """Direct HTTP client for Ollama API, used as fallback when LangChain streaming fails."""
+
+    def __init__(self, base_url: str = "http://localhost:11434", timeout: int = 300):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    async def stream_chat(
+        self,
+        model: str,
+        prompt: str,
+        temperature: float = 0.1,
+    ) -> AsyncGenerator[str, None]:
+        """Stream chat responses directly from Ollama HTTP API."""
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+            "options": {
+                "temperature": temperature,
+                "top_p": 0.9,
+                "top_k": 40,
+            },
+        }
+
+        timeout_cfg = aiohttp.ClientTimeout(total=self.timeout)
+        async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+            async with session.post(
+                f"{self.base_url}/api/chat",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(f"HTTP {response.status}: {error_text}")
+
+                async for chunk in response.content:
+                    if not chunk:
+                        continue
+                    try:
+                        data = json.loads(chunk.decode("utf-8").strip())
+                    except json.JSONDecodeError:
+                        continue
+
+                    message = data.get("message", {})
+                    content = message.get("content")
+                    if content:
+                        yield content
+
+                    if data.get("done"):
+                        break
+
+    async def simple_chat(
+        self,
+        model: str,
+        prompt: str,
+        temperature: float = 0.1,
+    ) -> str:
+        """Send a non-streaming chat request."""
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "top_p": 0.9,
+                "top_k": 40,
+            },
+        }
+
+        timeout_cfg = aiohttp.ClientTimeout(total=self.timeout)
+        async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+            async with session.post(
+                f"{self.base_url}/api/chat",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise RuntimeError(f"HTTP {response.status}: {error_text}")
+
+                data = await response.json()
+                message = data.get("message", {})
+                return message.get("content", "")
+
+    async def health_check(self) -> bool:
+        """Return True when Ollama service responds successfully."""
+        timeout_cfg = aiohttp.ClientTimeout(total=10)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+                async with session.get(f"{self.base_url}/api/tags") as response:
+                    return response.status == 200
+        except Exception:
+            return False
 
 
 async def get_ollama_models_http(base_url: str, timeout: int = 8) -> List[str]:

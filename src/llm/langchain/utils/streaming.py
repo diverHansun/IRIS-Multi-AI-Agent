@@ -28,6 +28,7 @@ from rich.text import Text
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 from langchain_core.callbacks import AsyncCallbackHandler, BaseCallbackHandler
+from src.core.langchain.providers.utils import OllamaClient
 
 # 导入配置
 try:
@@ -312,8 +313,6 @@ class OllamaStreamingLLM(StreamingLLM):
                     
                     # 使用直接HTTP客户端作为fallback
                     try:
-                        from src.llm.langchain.providers.ollama import OllamaClient
-
                         base_url = getattr(self.llm, 'base_url', 'http://localhost:11434')
                         model = getattr(self.llm, 'model', 'unknown')
                         temperature = getattr(self.llm, 'temperature', 0.1)

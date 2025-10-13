@@ -4,7 +4,7 @@ This module contains provider/model catalog and validation.
 """
 
 from src.agents.langchain.managers import agent_manager
-from src.llm.langchain.providers.ollama import list_ollama_models
+from src.core.langchain.providers.utils import list_ollama_models
 
 
 async def get_catalog():

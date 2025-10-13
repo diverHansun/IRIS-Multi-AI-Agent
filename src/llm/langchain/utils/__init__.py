@@ -3,7 +3,7 @@ LLM Utilities
 
 Provides general LLM-related utility functions and tools.
 
-Note: Provider-specific utilities are now in src.llm.langchain.providers
+Note: Provider-specific utilities are now in src.core.langchain.providers.utils
 """
 
 # Streaming output for LLM direct chat
@@ -13,6 +13,7 @@ from .streaming import (
     StreamingLLM,
     StreamingCallbackHandler,
     StreamingManager,
+    streaming_manager,  # Global streaming manager instance
     stream_llm_response,  # LLM chat only - decorated with @for_llm_only
 )
 
@@ -21,5 +22,6 @@ __all__ = [
     "StreamingLLM",
     "StreamingCallbackHandler",
     "StreamingManager",
+    "streaming_manager",  # Global instance
     "stream_llm_response",
 ]

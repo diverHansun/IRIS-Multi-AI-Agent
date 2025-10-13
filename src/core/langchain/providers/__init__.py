@@ -5,7 +5,6 @@ Provides shared Provider abstractions and configuration management.
 """
 
 from .provider_registry import ProviderRegistry, provider_registry, LLMProvider
-from .base import BaseProvider
 from .utils.ollama import (
     list_ollama_models,
     get_ollama_models_http,
@@ -21,7 +20,6 @@ __all__ = [
 
     # Classes (for advanced users)
     'ProviderRegistry',
-    'BaseProvider',
     'LLMProvider',
 
     # Ollama utilities

@@ -1,329 +1,326 @@
 """
-LLM Manager - 统一LLM管理接口
+LLM Manager
 
-提供统一的LLM选择、创建和管理功能
-支持多个LLM提供商（智谱AI、OpenAI等）
-
-职责:
-- API密钥管理
-- 委托ProviderRegistry进行配置管理
-- 委托Provider实现进行LLM创建
-- 提供向后兼容的查询接口
+Centralised entry point for creating LangChain compatible LLM clients.
+Delegates configuration to ProviderRegistry and parameter handling to adapters.
 """
 
 import logging
-from typing import Dict, Any, List, Union
 from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.config import settings
 from src.core.langchain.providers import provider_registry
+from src.llm.langchain.adapters import (
+    ZhipuAdapter,
+    OpenAIAdapter,
+    OllamaAdapter,
+)
+from src.llm.langchain.instances import (
+    ZhipuAILLM,
+    OpenAILLM,
+    OllamaLLM,
+)
 
 logger = logging.getLogger(__name__)
 
+
 class LLMProvider(Enum):
-    """LLM提供商枚举"""
+    """Supported LLM providers."""
+
     ZHIPU = "zhipu"
     OPENAI = "openai"
     OLLAMA = "ollama"
 
+
 class LLMManager:
     """
-    LLM管理器 (简化版)
+    Central coordinator for LLM creation.
 
-    职责:
-    - API密钥管理
-    - 委托ProviderRegistry进行配置查询
-    - 委托Provider实现进行LLM创建
+    Responsibilities:
+    - Manage provider configuration via ProviderRegistry.
+    - Collect API credentials from settings and user overrides.
+    - Use adapters to normalise LLM parameters.
+    - Instantiate provider specific LLM wrappers.
     """
 
     def __init__(self):
-        """初始化LLM管理器"""
-        self.provider_registry = provider_registry  # 委托配置管理
-        self._api_keys = {}
+        self.provider_registry = provider_registry
+        self._api_keys: Dict[LLMProvider, str] = {}
+        self._adapter_map = {
+            "ZHIPU": ZhipuAdapter,
+            "OPENAI": OpenAIAdapter,
+            "OLLAMA": OllamaAdapter,
+        }
+        self._instance_map = {
+            "ZHIPU": ZhipuAILLM,
+            "OPENAI": OpenAILLM,
+            "OLLAMA": OllamaLLM,
+        }
         self._load_api_keys()
-        logger.info("LLM Manager initialized")
+        logger.info("LLM Manager initialised")
 
-    def _load_api_keys(self):
-        """从配置中加载API密钥"""
+    def _load_api_keys(self) -> None:
+        """Load API keys from settings."""
         try:
-            # 智谱AI API密钥
             if settings.zhipu_api_key:
                 self._api_keys[LLMProvider.ZHIPU] = settings.zhipu_api_key
-
-            # OpenAI API密钥
-            if hasattr(settings, 'openai_api_key') and settings.openai_api_key:
+            if settings.openai_api_key:
                 self._api_keys[LLMProvider.OPENAI] = settings.openai_api_key
+        except Exception as exc:
+            logger.warning("Failed to load API keys from settings: %s", exc)
 
-            logger.info(f"已加载 {len(self._api_keys)} 个LLM提供商的API密钥")
-
-        except Exception as e:
-            logger.warning(f"加载API密钥时出错: {str(e)}")
-
-    def reload_config(self):
-        """重新加载配置 (委托给ProviderRegistry)"""
-        logger.info(" 重新加载LLM配置...")
+    def reload_config(self) -> bool:
+        """Reload provider configuration."""
+        logger.info("Reloading LLM configuration")
         return self.provider_registry.reload_config()
-
-    def get_available_providers(self) -> List[Dict[str, Any]]:
-        """获取可用的LLM提供商列表"""
-        providers: List[Dict[str, Any]] = []
-
-        # 从ProviderRegistry获取所有Provider配置
-        all_providers = self.provider_registry.list_providers()
-
-        for provider_key, config in all_providers.items():
-            provider_name = provider_key.lower()
-
-            # 检查是否有API密钥 (Ollama不需要)
-            has_api_key = (provider_name == "ollama") or (
-                LLMProvider(provider_name) in self._api_keys
-            )
-
-            # 获取Provider实例以访问模型列表
-            try:
-                provider_instance = self.provider_registry.get_provider_instance(provider_key)
-                models_registry = provider_instance.get_supported_models()
-            except Exception as e:
-                logger.warning(f"无法获取 {provider_key} 的模型列表: {e}")
-                models_registry = config.get("models", {})
-
-            provider_info = {
-                "provider": provider_name,
-                "name": config.get("name", provider_key),
-                "available": has_api_key,
-                "default_model": config.get("default_model"),
-                "models": list(models_registry.keys()),
-                "api_key_required": config.get("api_key_env"),
-                "mode_defaults": dict(config.get("mode_defaults", {}))
-            }
-
-            # 获取模型详细信息
-            models_detail: Dict[str, Any] = {}
-            for model_name in models_registry:
-                try:
-                    models_detail[model_name] = self.get_llm_info(provider_name, model_name)
-                except Exception as e:
-                    logger.debug(f"获取模型 {model_name} 详细信息失败: {e}")
-                    model_cfg = models_registry.get(model_name, {})
-                    models_detail[model_name] = {
-                        "model": model_name,
-                        "name": model_cfg.get("name", model_name),
-                        "description": model_cfg.get("description", "")
-                    }
-
-            if models_detail:
-                provider_info["models_detail"] = models_detail
-
-            providers.append(provider_info)
-
-        return providers
-
-    def get_provider_models(self, provider: Union[str, LLMProvider]) -> Dict[str, Any]:
-        """获取指定提供商的模型注册信息 (委托给ProviderRegistry)"""
-        if isinstance(provider, str):
-            provider_name = provider
-        else:
-            provider_name = provider.value
-
-        # 获取Provider配置
-        config = self.provider_registry.get_provider_config(provider_name.upper())
-        if not config:
-            raise ValueError(f"不支持的LLM提供商: {provider_name}")
-
-        # 获取Provider实例以访问模型
-        try:
-            provider_instance = self.provider_registry.get_provider_instance(provider_name.upper())
-            models_registry = provider_instance.get_supported_models()
-        except Exception as e:
-            logger.warning(f"无法获取 {provider_name} 的模型列表: {e}")
-            models_registry = config.get("models", {})
-
-        # 检查是否可用
-        available = (provider_name.lower() == "ollama") or (
-            LLMProvider(provider_name.lower()) in self._api_keys
-        )
-
-        return {
-            "provider": provider_name.lower(),
-            "name": config.get("name"),
-            "models": models_registry,
-            "default_model": config.get("default_model"),
-            "available": available,
-            "mode_defaults": dict(config.get("mode_defaults", {}))
-        }
-
-    def validate_model(self, provider: Union[str, LLMProvider], model: str) -> bool:
-        """验证模型是否受支持 (委托给ProviderRegistry)"""
-        if isinstance(provider, str):
-            provider_name = provider
-        else:
-            provider_name = provider.value
-
-        return self.provider_registry.validate_model(provider_name, model)
 
     def create_llm(
         self,
         provider: Union[str, LLMProvider],
-        model: str = None,
-        api_key: str = None,
-        **kwargs
+        model: Optional[str] = None,
+        mode: str = "llm",
+        **kwargs,
     ):
         """
-        创建LLM实例 (委托给Provider)
+        Create an LLM instance.
 
         Args:
-            provider: LLM提供商
-            model: 模型名称，为None时使用默认模型
-            api_key: API密钥，为None时使用配置中的密钥
-            **kwargs: 其他参数
+            provider: Provider identifier.
+            model: Model name, uses provider default when omitted.
+            mode: Behavioural mode for adapter, defaults to "llm".
+            **kwargs: User supplied overrides.
 
         Returns:
-            LLM实例
+            LangChain compatible LLM client.
         """
-        if isinstance(provider, str):
-            provider_enum = LLMProvider(provider.lower())
-            provider_name = provider.lower()
-        else:
-            provider_enum = provider
-            provider_name = provider.value
+        provider_key, provider_enum = self._normalise_provider(provider)
+        provider_config = self._get_provider_config(provider_key)
+        model_name = self._resolve_model_name(provider_config, model)
 
-        # 获取Provider实例
-        try:
-            provider_instance = self.provider_registry.get_provider_instance(provider_name.upper())
-        except ValueError as e:
-            raise ValueError(f"不支持的LLM提供商: {provider_name}") from e
+        user_params = kwargs.copy()
+        explicit_api_key = user_params.pop("api_key", None)
 
-        # 确定模型
-        if not model:
-            model = provider_instance.get_default_model()
-
-        # 确定API密钥（Ollama不需要）
-        if provider_name != "ollama":
-            if not api_key:
-                api_key = self._api_keys.get(provider_enum)
-                if not api_key:
-                    config = self.provider_registry.get_provider_config(provider_name.upper())
-                    api_key_env = config.get("api_key_env", "API_KEY")
-                    raise ValueError(f"未找到 {provider_name} 的API密钥，请设置环境变量 {api_key_env}")
-
-        # 验证模型
-        if not provider_instance.validate_model(model):
-            logger.warning(f"模型 {model} 可能不受 {provider_name} 支持")
-
-        # 委托Provider创建LLM实例
-        logger.info(f"创建LLM: {provider_name}/{model}")
-        return provider_instance.create_llm(model, api_key, **kwargs)
-
-    def get_llm_info(self, provider: Union[str, LLMProvider], model: str = None) -> Dict[str, Any]:
-        """获取LLM信息 (委托给ProviderRegistry)"""
-        if isinstance(provider, str):
-            provider_name = provider
-        else:
-            provider_name = provider.value
-
-        # 委托给ProviderRegistry
-        model_info = self.provider_registry.get_model_info(provider_name, model)
-
-        # 添加可用性信息
-        provider_enum_value = provider_name.lower()
-        available = (provider_enum_value == "ollama") or (
-            LLMProvider(provider_enum_value) in self._api_keys
+        adapter = self._create_adapter(provider_key, model_name, mode)
+        llm_params = adapter.get_llm_params(**user_params)
+        final_params = self._prepare_instance_params(
+            provider_key=provider_key,
+            provider_enum=provider_enum,
+            adapter=adapter,
+            adapter_params=llm_params,
+            explicit_api_key=explicit_api_key,
+            user_params=user_params,
         )
-        model_info["available"] = available
 
-        return model_info
+        instance = self._create_instance(provider_key, final_params)
+        llm = instance.create_llm()
+        logger.info("Created LLM instance: provider=%s model=%s", provider_key, model_name)
+        return llm
 
-    def set_api_key(self, provider: Union[str, LLMProvider], api_key: str):
-        """设置API密钥"""
-        if isinstance(provider, str):
-            provider_enum = LLMProvider(provider.lower())
-            provider_name = provider.lower()
-        else:
-            provider_enum = provider
-            provider_name = provider.value
+    def get_available_providers(self) -> List[Dict[str, Any]]:
+        """Return available provider summary with model information."""
+        providers: List[Dict[str, Any]] = []
+        for provider_key, config in self.provider_registry.list_providers().items():
+            provider_name = provider_key.lower()
+            is_available = self._provider_available(provider_name)
+            models_registry = config.get("models", {})
+            models_detail = {}
+            for model_name in models_registry.keys():
+                try:
+                    models_detail[model_name] = self.get_llm_info(provider_name, model_name)
+                except ValueError:
+                    models_detail[model_name] = {
+                        "provider": provider_name,
+                        "model": model_name,
+                        "name": models_registry[model_name].get("name", model_name),
+                        "description": models_registry[model_name].get("description", ""),
+                    }
 
-        # 获取Provider实例进行验证
+            providers.append(
+                {
+                    "provider": provider_name,
+                    "name": config.get("name", provider_name),
+                    "available": is_available,
+                    "default_model": config.get("default_model"),
+                    "models": list(models_registry.keys()),
+                    "api_key_required": config.get("api_key_env"),
+                    "mode_defaults": dict(config.get("mode_defaults", {})),
+                    "models_detail": models_detail,
+                }
+            )
+        return providers
+
+    def get_provider_models(self, provider: Union[str, LLMProvider]) -> Dict[str, Any]:
+        """Return raw model registry for a provider."""
+        provider_key, _ = self._normalise_provider(provider)
+        config = self._get_provider_config(provider_key)
+        return config.get("models", {})
+
+    def get_llm_info(
+        self,
+        provider: Union[str, LLMProvider],
+        model: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Return enriched model information."""
+        provider_key, _ = self._normalise_provider(provider)
         try:
-            provider_instance = self.provider_registry.get_provider_instance(provider_name.upper())
+            info = self.provider_registry.get_model_info(provider_key, model)
+        except ValueError:
+            # For providers with dynamic models (e.g., Ollama) fall back to defaults.
+            resolved_model = model or self._get_provider_config(provider_key).get("default_model")
+            info = {
+                "provider": provider_key.lower(),
+                "model": resolved_model,
+                "name": resolved_model,
+                "description": "",
+                "recommended": False,
+                "model_features": [],
+                "supports_tools": False,
+                "max_tokens": None,
+                "context_window": None,
+                "mode_defaults": {
+                    "llm": self._get_provider_config(provider_key).get("mode_defaults", {}).get("llm", {})
+                },
+            }
+        info["available"] = self._provider_available(info["provider"])
+        return info
 
-            if not provider_instance.validate_api_key(api_key):
-                logger.warning(f"{provider_name} API密钥格式可能不正确")
-
-            self._api_keys[provider_enum] = api_key
-            logger.info(f"已设置 {provider_name} 的API密钥")
-
-        except ValueError as e:
-            raise ValueError(f"不支持的LLM提供商: {provider_name}") from e
+    def set_api_key(self, provider: Union[str, LLMProvider], api_key: str) -> None:
+        """Set or override provider API key."""
+        if not api_key:
+            raise ValueError("API key must not be empty")
+        provider_key, provider_enum = self._normalise_provider(provider)
+        if provider_enum == LLMProvider.OLLAMA:
+            logger.info("OLLAMA does not require an API key, ignoring provided value")
+            return
+        self._api_keys[provider_enum] = api_key
+        logger.info("API key set for provider %s", provider_key)
 
     def get_recommended_models(self) -> List[Dict[str, Any]]:
-        """获取推荐模型列表"""
-        recommended: List[Dict[str, Any]] = []
+        """Return recommended models for all available providers."""
+        recommendations: List[Dict[str, Any]] = []
+        for provider_key, config in self.provider_registry.list_providers().items():
+            for model_name, model_config in config.get("models", {}).items():
+                if model_config.get("recommended"):
+                    try:
+                        info = self.get_llm_info(provider_key.lower(), model_name)
+                        if info.get("available"):
+                            recommendations.append(
+                                {
+                                    "provider": info["provider"],
+                                    "provider_name": info.get("provider_name", config.get("name")),
+                                    "model": info["model"],
+                                    "model_name": info.get("model_name", model_config.get("name", model_name)),
+                                    "description": info.get("description", ""),
+                                }
+                            )
+                    except ValueError:
+                        continue
+        return recommendations
 
-        # 遍历所有可用的Provider
-        all_providers = self.provider_registry.list_providers()
+    # Internal helpers
 
-        for provider_key, config in all_providers.items():
-            provider_name = provider_key.lower()
+    def _normalise_provider(
+        self,
+        provider: Union[str, LLMProvider],
+    ) -> Tuple[str, LLMProvider]:
+        if isinstance(provider, LLMProvider):
+            return provider.value.upper(), provider
+        provider_name = str(provider).lower()
+        provider_enum = LLMProvider(provider_name)
+        return provider_enum.value.upper(), provider_enum
 
-            # 检查Provider是否可用
-            provider_available = (provider_name == "ollama") or (
-                LLMProvider(provider_name) in self._api_keys
-            )
+    def _get_provider_config(self, provider_key: str) -> Dict[str, Any]:
+        config = self.provider_registry.get_provider_config(provider_key)
+        if not config:
+            raise ValueError(f"Provider {provider_key} not found")
+        return config
 
-            if not provider_available:
-                continue
+    def _resolve_model_name(self, provider_config: Dict[str, Any], model: Optional[str]) -> str:
+        if model:
+            return model
+        default_model = provider_config.get("default_model")
+        if not default_model:
+            raise ValueError("Provider configuration does not define a default model")
+        return default_model
 
-            # 获取模型列表
-            try:
-                provider_instance = self.provider_registry.get_provider_instance(provider_key)
-                models_registry = provider_instance.get_supported_models()
-            except:
-                models_registry = config.get("models", {})
+    def _create_adapter(self, provider_key: str, model: str, mode: str):
+        adapter_cls = self._adapter_map.get(provider_key)
+        if not adapter_cls:
+            raise ValueError(f"No adapter registered for provider {provider_key}")
+        return adapter_cls(model=model, provider_registry=self.provider_registry, mode=mode)
 
-            # 查找推荐模型
-            for model_name in models_registry:
-                try:
-                    info = self.get_llm_info(provider_name, model_name)
-                    if info.get("recommended"):
-                        recommended.append({
-                            "provider": info["provider"],
-                            "provider_name": info["provider_name"],
-                            "model": info["model"],
-                            "model_name": info["model_name"],
-                            "description": info["description"]
-                        })
-                except Exception as e:
-                    logger.debug(f"获取模型 {model_name} 信息失败: {e}")
-                    continue
+    def _create_instance(self, provider_key: str, params: Dict[str, Any]):
+        instance_cls = self._instance_map.get(provider_key)
+        if not instance_cls:
+            raise ValueError(f"No instance registered for provider {provider_key}")
+        return instance_cls(**params)
 
-        return recommended
+    def _prepare_instance_params(
+        self,
+        provider_key: str,
+        provider_enum: LLMProvider,
+        adapter,
+        adapter_params: Dict[str, Any],
+        explicit_api_key: Optional[str],
+        user_params: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        params = adapter_params.copy()
+        params.setdefault("model", adapter.model)
+
+        if provider_enum == LLMProvider.OLLAMA:
+            base_url = params.get("base_url") or user_params.get("base_url") or settings.ollama_base_url
+            params["base_url"] = base_url
+            params.setdefault("timeout", user_params.get("timeout") or settings.ollama_timeout)
+            params.setdefault("keep_alive", user_params.get("keep_alive") or settings.ollama_keep_alive)
+        else:
+            api_key = self._resolve_api_key(provider_enum, explicit_api_key)
+            params["api_key"] = api_key
+            if provider_enum == LLMProvider.OPENAI:
+                base_url = params.get("base_url") or user_params.get("base_url") or settings.openai_base_url
+                if base_url:
+                    params["base_url"] = base_url
+
+        return params
+
+    def _resolve_api_key(self, provider_enum: LLMProvider, explicit_api_key: Optional[str]) -> str:
+        if explicit_api_key:
+            return explicit_api_key
+        cached = self._api_keys.get(provider_enum)
+        if cached:
+            return cached
+        provider_key = provider_enum.value.upper()
+        provider_config = self._get_provider_config(provider_key)
+        env_name = provider_config.get("api_key_env", "API_KEY")
+        raise ValueError(f"API key for provider {provider_enum.value} not configured. Please set environment {env_name}")
+
+    def _provider_available(self, provider_name: str) -> bool:
+        if provider_name == LLMProvider.OLLAMA.value:
+            return True
+        provider_enum = LLMProvider(provider_name)
+        return provider_enum in self._api_keys
 
 
-# 全局LLM管理器实例
+# Global manager instance
 llm_manager = LLMManager()
 
 
-# 便捷函数
+# Convenience functions
 def get_available_providers() -> List[Dict[str, Any]]:
-    """获取可用的LLM提供商"""
     return llm_manager.get_available_providers()
 
 
 def create_llm(provider: str, model: str = None, **kwargs):
-    """创建LLM实例的便捷函数"""
     return llm_manager.create_llm(provider, model, **kwargs)
 
 
 def get_llm_info(provider: str, model: str = None) -> Dict[str, Any]:
-    """获取LLM信息的便捷函数"""
     return llm_manager.get_llm_info(provider, model)
 
 
 def get_recommended_models() -> List[Dict[str, Any]]:
-    """获取推荐模型"""
     return llm_manager.get_recommended_models()
 
 
 def reload_llm_config() -> bool:
-    """重新加载LLM配置的便捷函数"""
     return llm_manager.reload_config()

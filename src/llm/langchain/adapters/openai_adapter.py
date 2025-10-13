@@ -1,13 +1,11 @@
 """
-OpenAI LLM Adapter
-
-OpenAI的LLM适配器，处理特殊逻辑：
-1. GPT-5系列: temperature_fixed=true，强制使用temperature=1.0
-2. 从配置读取default_temperature
+OpenAI LLM Adapter.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any, Dict, Optional
+
+from src.core.langchain.providers.provider_registry import ProviderRegistry
 
 from .base import LLMAdapter
 
@@ -15,10 +13,20 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIAdapter(LLMAdapter):
-    """OpenAI LLM适配器"""
+    """OpenAI LLM adapter."""
 
-    def __init__(self, model: str, mode: str = "llm"):
-        super().__init__(provider="OPENAI", model=model, mode=mode)
+    def __init__(
+        self,
+        model: Optional[str],
+        provider_registry: Optional[ProviderRegistry] = None,
+        mode: str = "llm",
+    ):
+        super().__init__(
+            provider="OPENAI",
+            model=model,
+            provider_registry=provider_registry,
+            mode=mode,
+        )
 
     def get_llm_params(self, **kwargs) -> Dict[str, Any]:
         """
@@ -39,33 +47,28 @@ class OpenAIAdapter(LLMAdapter):
         Returns:
             处理后的LLM参数字典
         """
-        # 获取基础参数（已包含mode_defaults + mode_overrides）
         params = self.get_base_params()
 
-        # 特殊逻辑：temperature_fixed
         if self._model_config.get("temperature_fixed", False):
-            # 从配置读取default_temperature
             fixed_temp = self._model_config.get("default_temperature", 1.0)
             params["temperature"] = fixed_temp
 
-            # 警告：如果用户试图修改temperature
             if "temperature" in kwargs and kwargs["temperature"] != fixed_temp:
                 logger.warning(
-                    f"{self.model} 使用固定temperature={fixed_temp} "
-                    f"(用户设置的{kwargs['temperature']}被忽略)"
+                    "%s enforces temperature=%s (user input %s ignored)",
+                    self.model,
+                    fixed_temp,
+                    kwargs["temperature"],
                 )
 
-            # 从kwargs中移除temperature，避免覆盖
             user_params = {k: v for k, v in kwargs.items() if k != "temperature"}
         else:
-            # 正常模型，允许用户覆盖temperature
             user_params = kwargs
 
-        # 合并用户参数
         params = self.merge_user_params(params, user_params)
+        params.setdefault("model", self.model)
 
-        logger.debug(f"OpenAI {self.model} ({self.mode}模式) 参数: {params}")
-
+        logger.debug("OpenAI %s (%s) params: %s", self.model, self.mode, params)
         return params
 
     def is_temperature_fixed(self) -> bool:

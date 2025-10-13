@@ -7,7 +7,6 @@ Architecture:
 - instances/: LLM implementations (ZhipuAILLM, OpenAILLM, OllamaLLM)
 - adapters/: Adapter pattern (LLMAdapter, ZhipuAdapter, OpenAIAdapter, OllamaAdapter)
 - managers/: LLM manager
-- providers/: Provider-specific utilities (ollama, zhipu, openai)
 - utils/: General utilities (streaming)
 """
 
@@ -34,7 +33,7 @@ from .managers import (
 )
 
 # Provider-specific utilities
-from .providers.ollama import (
+from src.core.langchain.providers.utils import (
     OllamaClient,
     list_ollama_models,
 )

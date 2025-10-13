@@ -1,14 +1,13 @@
 """
 Zhipu AI LLM Adapter
 
-智谱AI的LLM适配器，只处理LLM相关参数：
-1. temperature, streaming, max_tokens等LLM参数
-2. glm-4.5/glm-4.5-flash: 启用thinking_mode
-3. 不处理Agent参数(max_iterations等)
+负责读取配置并应用智谱特有的参数逻辑。
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any, Dict, Optional
+
+from src.core.langchain.providers.provider_registry import ProviderRegistry
 
 from .base import LLMAdapter
 
@@ -16,10 +15,20 @@ logger = logging.getLogger(__name__)
 
 
 class ZhipuAdapter(LLMAdapter):
-    """智谱AI LLM适配器 - 只处理LLM参数"""
+    """Zhipu AI LLM adapter."""
 
-    def __init__(self, model: str, mode: str = "llm"):
-        super().__init__(provider="ZHIPU", model=model, mode="llm")
+    def __init__(
+        self,
+        model: Optional[str],
+        provider_registry: Optional[ProviderRegistry] = None,
+        mode: str = "llm",
+    ):
+        super().__init__(
+            provider="ZHIPU",
+            model=model,
+            provider_registry=provider_registry,
+            mode=mode,
+        )
 
     def get_llm_params(self, **kwargs) -> Dict[str, Any]:
         """
@@ -44,24 +53,18 @@ class ZhipuAdapter(LLMAdapter):
         Returns:
             处理后的LLM参数字典
         """
-        # 获取基础LLM参数（已包含mode_defaults.llm + mode_overrides.llm）
         params = self.get_base_params()
 
-        # 特殊逻辑：thinking_mode
-        # glm-4.5和glm-4.5-flash在配置中已设置thinking_mode: true
-        # 这里只需要确保它被正确读取
-        if self.model in ["glm-4.5", "glm-4.5-flash"]:
-            # 从mode_overrides.llm中读取thinking_mode
+        if self.model in {"glm-4.5", "glm-4.5-flash"}:
             overrides = self.get_llm_mode_overrides()
             if "thinking_mode" in overrides:
                 params["thinking_mode"] = overrides["thinking_mode"]
-                logger.debug(f"{self.model} 使用thinking_mode={params['thinking_mode']}")
+                logger.debug("%s using thinking_mode=%s", self.model, params["thinking_mode"])
 
-        # 合并用户参数（只合并LLM相关参数）
         params = self.merge_user_params(params, kwargs)
+        params.setdefault("model", self.model)
 
-        logger.debug(f"智谱AI {self.model} LLM参数: {params}")
-
+        logger.debug("Zhipu %s (%s) params: %s", self.model, self.mode, params)
         return params
 
     def supports_function_calling(self) -> bool:
