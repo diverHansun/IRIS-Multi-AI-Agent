@@ -51,6 +51,7 @@ class ZhipuAgentFactory(BaseAgentFactory):
         Returns:
             ZhipuAgent或ZhipuFCallAgent实例
         """
+        import warnings
         warnings.warn(
             "ZhipuAgentFactory.create_agent() is deprecated. "
             "Use agent_manager.create_agent() instead. "
@@ -58,79 +59,10 @@ class ZhipuAgentFactory(BaseAgentFactory):
             DeprecationWarning,
             stacklevel=2
         )
-        # 判断使用哪种Agent类型
-        if model in self._fcall_models:
-            return await self._create_fcall_agent(
-                model=model,
-                verbose=verbose,
-                temperature=temperature,
-                enable_memory=enable_memory,
-                global_memory_manager=global_memory_manager,
-                **kwargs
-            )
-        else:
-            return await self._create_react_agent(
-                model=model,
-                verbose=verbose,
-                temperature=temperature,
-                enable_memory=enable_memory,
-                global_memory_manager=global_memory_manager,
-                **kwargs
-            )
-
-    async def _create_fcall_agent(
-        self,
-        model: str,
-        verbose: bool = False,
-        temperature: Optional[float] = None,
-        enable_memory: bool = True,
-        global_memory_manager = None,
-        **kwargs
-    ) -> Any:
-        """创建Function Calling Agent"""
-        from src.agents.langchain.instances.zhipu_fcall_agent import build_zhipu_fcall_agent
-
-        logger.info(f"创建智谱AI Function Calling Agent: {model}")
-
-        agent = await build_zhipu_fcall_agent(
-            model=model,
-            verbose=verbose,
-            temperature=temperature,
-            enable_memory=enable_memory,
-            global_memory_manager=global_memory_manager,
-            **kwargs
+        raise NotImplementedError(
+            "ZhipuAgentFactory.create_agent() is deprecated. "
+            "Use agent_manager.create_agent('zhipu', model) instead."
         )
-
-        logger.info(f"成功创建智谱AI Function Calling Agent: {model}")
-        return agent
-
-    async def _create_react_agent(
-        self,
-        model: str,
-        verbose: bool = False,
-        temperature: Optional[float] = None,
-        enable_memory: bool = True,
-        global_memory_manager = None,
-        **kwargs
-    ) -> Any:
-        """创建ReAct Agent"""
-        from src.agents.langchain.instances.zhipu_agent import build_zhipu_agent
-
-        logger.info(f"创建智谱AI ReAct Agent: {model}")
-
-        # 基于提供商选择模板：ZHIPU对应GLM模板族
-        agent = await build_zhipu_agent(
-            model=model,
-            verbose=verbose,
-            temperature=temperature,
-            enable_memory=enable_memory,
-            global_memory_manager=global_memory_manager,
-            prompt_provider="glm",  # 使用GLM模板
-            **kwargs
-        )
-
-        logger.info(f"成功创建智谱AI ReAct Agent: {model}")
-        return agent
 
     async def create_agent_with_adapters(
         self,

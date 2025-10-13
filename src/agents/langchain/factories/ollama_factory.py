@@ -53,6 +53,7 @@ class OllamaAgentFactory(BaseAgentFactory):
         Returns:
             OllamaAgent实例
         """
+        import warnings
         warnings.warn(
             "OllamaAgentFactory.create_agent() is deprecated. "
             "Use agent_manager.create_agent() instead. "
@@ -60,53 +61,10 @@ class OllamaAgentFactory(BaseAgentFactory):
             DeprecationWarning,
             stacklevel=2
         )
-
-        from src.agents.langchain.instances.ollama_agent import build_ollama_agent
-        from src.config import settings
-
-        # 处理base_url
-        if base_url is None:
-            base_url = settings.ollama_base_url
-
-        # 处理auto模型选择
-        actual_model = model
-        if model == "auto":
-            try:
-                from src.core.langchain.providers.utils import list_ollama_models
-                local_models = await list_ollama_models(base_url, timeout=5)
-
-                if local_models:
-                    actual_model = local_models[0]
-                    logger.info(f"自动选择Ollama模型: {actual_model}")
-                else:
-                    actual_model = "gpt-oss:20b"
-                    logger.warning(f"未找到本地Ollama模型，使用默认: {actual_model}")
-
-            except Exception as e:
-                actual_model = "gpt-oss:20b"
-                logger.warning(f"获取Ollama模型列表失败，使用默认: {actual_model}, 错误: {e}")
-
-        logger.info(f"创建Ollama Agent: {actual_model}")
-
-        # Agent模式温度优化
-        agent_temperature = temperature
-        if temperature is None or temperature == 0.1:
-            agent_temperature = 0.0
-            logger.debug("Ollama Agent模式温度优化: temperature=0.0")
-
-        agent = await build_ollama_agent(
-            model=actual_model,
-            base_url=base_url,
-            verbose=verbose,
-            temperature=agent_temperature,
-            enable_memory=enable_memory,
-            global_memory_manager=global_memory_manager,
-            disable_thinking_mode=kwargs.get('disable_thinking_mode', True),
-            **{k: v for k, v in kwargs.items() if k != 'disable_thinking_mode'}
+        raise NotImplementedError(
+            "OllamaAgentFactory.create_agent() is deprecated. "
+            "Use agent_manager.create_agent('ollama', model) instead."
         )
-
-        logger.info(f"成功创建Ollama Agent: {actual_model}")
-        return agent
 
     async def create_agent_with_adapters(
         self,

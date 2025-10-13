@@ -48,6 +48,7 @@ class OpenAIAgentFactory(BaseAgentFactory):
         Returns:
             OpenAIAgent实例
         """
+        import warnings
         warnings.warn(
             "OpenAIAgentFactory.create_agent() is deprecated. "
             "Use agent_manager.create_agent() instead. "
@@ -55,23 +56,10 @@ class OpenAIAgentFactory(BaseAgentFactory):
             DeprecationWarning,
             stacklevel=2
         )
-
-        from src.agents.langchain.instances.openai_agent import build_openai_agent
-
-        logger.info(f"创建OpenAI Agent: {model}")
-
-        agent = await build_openai_agent(
-            api_key=api_key,
-            model=model,
-            verbose=verbose,
-            temperature=temperature,
-            enable_memory=enable_memory,
-            global_memory_manager=global_memory_manager,
-            **kwargs
+        raise NotImplementedError(
+            "OpenAIAgentFactory.create_agent() is deprecated. "
+            "Use agent_manager.create_agent('openai', model) instead."
         )
-
-        logger.info(f"成功创建OpenAI Agent: {model}")
-        return agent
 
     async def create_agent_with_adapters(
         self,
