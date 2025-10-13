@@ -4,12 +4,11 @@ Base Agent Abstract Class
 Defines the template method pattern for all agents.
 Extracts common initialization, execution, and memory management logic.
 
-v2更新: 支持配置驱动的初始化方式（通过Adapter），同时保持向后兼容。
+新架构: 支持配置驱动的初始化方式（通过Adapter）。
 """
 
 import logging
 import asyncio
-import warnings
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 
@@ -25,12 +24,10 @@ class BaseAgent(ABC):
     """
     Base Agent class implementing template method pattern.
 
-    支持两种初始化方式:
-    1. 新方式(推荐): 通过LLM Adapter和Agent Adapter，配置驱动
-    2. 旧方式(兼容): 直接传参数，向后兼容现有代码
+    新架构: 通过LLM Adapter和Agent Adapter，配置驱动
 
     All agent implementations should inherit from this class and implement
-    the abstract methods: _create_llm() and _build_agent().
+    the abstract methods.
     """
 
     def __init__(
@@ -39,11 +36,6 @@ class BaseAgent(ABC):
         provider: str = None,
         llm_adapter = None,
         agent_adapter = None,
-        # 以下为旧接口参数（向后兼容）
-        temperature: float = None,
-        verbose: bool = None,
-        max_iterations: int = None,
-        enable_memory: bool = None,
         memory_config: Optional[Dict[str, Any]] = None,
         global_memory_manager = None,
         **kwargs
@@ -57,25 +49,14 @@ class BaseAgent(ABC):
             llm_adapter: LLM参数适配器
             agent_adapter: Agent参数适配器
             **kwargs: 用户参数（可覆盖配置）
-
-        旧方式（兼容）:
-            model: 模型名称
-            temperature: 温度参数
-            verbose: 详细输出
-            max_iterations: 最大迭代次数
-            enable_memory: 是否启用记忆
-            等
         """
         self.model = model
         self.provider = provider
         self.llm_adapter = llm_adapter
         self.agent_adapter = agent_adapter
 
-        # 判断使用新方式还是旧方式
-        self._use_adapters = (llm_adapter is not None and agent_adapter is not None)
-
-        if self._use_adapters:
-            # 新方式: 从Agent Adapter获取参数（配置驱动）
+        # 从Agent Adapter获取参数（配置驱动）
+        if agent_adapter:
             agent_params = agent_adapter.get_agent_params(**kwargs)
 
             self.temperature = agent_params.get("temperature")
@@ -85,23 +66,20 @@ class BaseAgent(ABC):
             self.max_execution_time = agent_params.get("max_execution_time")
 
             logger.info(
-                f"BaseAgent初始化(新方式): {provider}/{model}, "
+                f"BaseAgent初始化: {provider}/{model}, "
                 f"max_iterations={self.max_iterations} (从配置)"
             )
         else:
-            # DEPRECATED v4.0: 旧方式 - 直接使用传入的参数（向后兼容）
-            # 推荐使用: agent_manager.create_agent() 进行配置驱动的初始化
-            # 将在 v5.0 中移除
-
-            self.temperature = temperature if temperature is not None else 0.1
-            self.verbose = verbose if verbose is not None else False
-            self.max_iterations = max_iterations if max_iterations is not None else 8
-            self.enable_memory = enable_memory if enable_memory is not None else True
+            # 默认值，如果没有提供适配器
+            self.temperature = 0.1
+            self.verbose = False
+            self.max_iterations = 8
+            self.enable_memory = True
             self.max_execution_time = None
 
             logger.info(
-                f"BaseAgent初始化(旧方式): {model}, "
-                f"max_iterations={self.max_iterations} (硬编码)"
+                f"BaseAgent初始化: {model}, "
+                f"max_iterations={self.max_iterations} (默认)"
             )
 
         self.global_memory_manager = global_memory_manager
@@ -125,15 +103,11 @@ class BaseAgent(ABC):
         """
         Template method for agent initialization.
 
-        根据初始化方式选择不同的流程:
-        - 新方式: 使用Adapter创建LLM和AgentExecutor
-        - 旧方式: 使用子类实现的_create_llm和_build_agent
-
         流程:
-        1. Create LLM
-        2. Load tools
-        3. Build agent executor
-        4. Setup memory
+        1. Create LLM (使用LLM Adapter)
+        2. Load tools (common logic)
+        3. Build agent executor (使用Agent Adapter)
+        4. Setup memory (common logic)
         """
         if self.is_initialized:
             return
@@ -141,26 +115,15 @@ class BaseAgent(ABC):
         try:
             logger.info(f"Initializing {self.__class__.__name__}...")
 
-            if self._use_adapters:
-                # 新方式: 使用Adapter
-                # Step 1: Create LLM (使用LLM Adapter)
-                await self._create_llm_with_adapter()
+            # 新方式: 使用Adapter
+            # Step 1: Create LLM (使用LLM Adapter)
+            await self._create_llm_with_adapter()
 
-                # Step 2: Load tools (common logic)
-                await self._load_tools()
+            # Step 2: Load tools (common logic)
+            await self._load_tools()
 
-                # Step 3: Build agent executor (使用Agent Adapter)
-                self._build_agent_executor_with_adapter()
-            else:
-                # 旧方式: 使用子类实现（向后兼容）
-                # Step 1: Create LLM (subclass implementation)
-                await self._create_llm()
-
-                # Step 2: Load tools (common logic)
-                await self._load_tools()
-
-                # Step 3: Build agent (subclass implementation)
-                self._build_agent()
+            # Step 3: Build agent executor (使用Agent Adapter)
+            self._build_agent_executor_with_adapter()
 
             # Step 4: Setup memory (common logic)
             if self.enable_memory and self.chat_memory:
@@ -177,11 +140,11 @@ class BaseAgent(ABC):
             raise
 
     async def _create_llm_with_adapter(self):
-        """使用LLM Adapter创建LLM (新方式)"""
+        """使用LLM Adapter创建LLM"""
         # 从LLM Adapter获取LLM参数
-        llm_params = self.llm_adapter.get_llm_params()
+        llm_params = self.llm_adapter.get_llm_params() if self.llm_adapter else {}
 
-        # 调用子类实现的LLM创建方法（如果存在）
+        # 调用子类实现的LLM创建方法
         if hasattr(self, '_create_llm_instance'):
             self.llm = await self._create_llm_instance(llm_params)
         else:
@@ -191,7 +154,7 @@ class BaseAgent(ABC):
         logger.info(f"LLM创建完成: {self.model}, 参数: {llm_params}")
 
     def _build_agent_executor_with_adapter(self):
-        """使用Agent Adapter创建AgentExecutor (新方式)"""
+        """使用Agent Adapter创建AgentExecutor"""
         try:
             # 使用Agent Adapter创建AgentExecutor
             self.agent_executor = self.agent_adapter.create_agent_executor(
@@ -215,11 +178,11 @@ class BaseAgent(ABC):
         pass
 
     @abstractmethod
-    def _build_agent(self):
+    def _build_agent_executor_with_adapter(self):
         """
-        Build agent executor (must be implemented by subclass).
+        Build agent executor using agent adapter (must be implemented by subclass).
 
-        Subclasses should create self.agent_executor in this method.
+        Subclasses should create self.agent_executor in this method using the agent adapter.
         """
         pass
 

@@ -8,7 +8,7 @@ OpenAI Agent Implementation
 import logging
 from typing import Dict, Any, Optional, Iterable
 
-from src.llm.langchain.instances.openai_llm import build_openai_chat
+from src.llm.langchain.managers import llm_manager
 
 from .base_agent import BaseAgent
 
@@ -93,14 +93,24 @@ class OpenAIAgent(BaseAgent):
         from src.config import settings
 
         base_url = self.kwargs.get('base_url') or settings.openai_base_url
+        
+        # 使用新的LLM管理器创建LLM
+        llm_kwargs = {
+            "api_key": self.api_key,
+            "model": llm_params.get("model", self.model),
+            "temperature": llm_params.get("temperature", 0.1),
+            "streaming": llm_params.get("streaming", False)
+        }
+        
+        if base_url:
+            llm_kwargs["base_url"] = base_url
+        
+        if "max_tokens" in llm_params and llm_params["max_tokens"] is not None:
+            llm_kwargs["max_tokens"] = llm_params["max_tokens"]
 
-        self.llm = build_openai_chat(
-            api_key=self.api_key,
-            model=llm_params.get("model", self.model),
-            temperature=llm_params.get("temperature", 0.1),
-            streaming=llm_params.get("streaming", False),
-            max_tokens=llm_params.get("max_tokens"),
-            base_url=base_url
+        self.llm = llm_manager.create_llm(
+            provider="openai",
+            **llm_kwargs
         )
 
         logger.info(f"LLM 创建完成（新方式）: {self.model}")

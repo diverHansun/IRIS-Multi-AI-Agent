@@ -7,13 +7,12 @@
 import json
 import logging
 import asyncio
-import warnings
 import zhipuai
 from typing import List, Dict, Any, Optional, Union
 from langchain_core.tools import BaseTool
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-from src.llm.langchain.instances.zhipu_llm import create_zhipu_llm
+from src.llm.langchain.managers import llm_manager
 from src.components.shared.memory.global_memory import GlobalMemoryManager
 from src.components.shared.tools.adapters import convert_tool_to_function, execute_tool_with_arguments, execute_tool_with_arguments_async
 from src.config import settings
@@ -25,20 +24,15 @@ class ZhipuFunctionCallingAgent:
     """
     智谱AI Function Calling Agent
 
-    v2更新: 支持配置驱动（通过Adapter），同时保持向后兼容
+    新架构: 支持配置驱动（通过Adapter）
     """
 
     def __init__(
         self,
-        model: str = None,
-        provider: str = None,
+        model: str = "glm-4.5-flash",
+        provider: str = "ZHIPU",
         llm_adapter = None,
         agent_adapter = None,
-        # 以下为旧接口参数（向后兼容）
-        temperature: float = None,
-        verbose: bool = None,
-        max_iterations: int = None,
-        enable_memory: bool = None,
         global_memory_manager=None,
         **kwargs
     ):
@@ -51,28 +45,17 @@ class ZhipuFunctionCallingAgent:
             llm_adapter: LLM参数适配器
             agent_adapter: Agent参数适配器
             **kwargs: 用户参数（可覆盖配置）
-
-        旧方式（兼容）:
-            model: 模型名称，支持glm-4.5和glm-4.5-flash
-            temperature: 温度参数
-            verbose: 是否显示详细日志
-            max_iterations: 最大迭代次数
-            enable_memory: 是否启用记忆功能
-            global_memory_manager: 全局记忆管理器
         """
-        if model and model not in ["glm-4.5", "glm-4.5-flash"]:
+        if model not in ["glm-4.5", "glm-4.5-flash"]:
             raise ValueError("ZhipuFunctionCallingAgent仅支持glm-4.5和glm-4.5-flash模型")
 
-        self.model = model or "glm-4.5-flash"
-        self.provider = provider or "ZHIPU"
+        self.model = model
+        self.provider = provider
         self.llm_adapter = llm_adapter
         self.agent_adapter = agent_adapter
 
-        # 判断使用新方式还是旧方式
-        self._use_adapters = (llm_adapter is not None and agent_adapter is not None)
-
-        if self._use_adapters:
-            # 新方式: 从Agent Adapter获取参数（配置驱动）
+        # 新方式: 从Agent Adapter获取参数（配置驱动）
+        if agent_adapter:
             agent_params = agent_adapter.get_agent_params(**kwargs)
 
             self.temperature = agent_params.get("temperature", 0.1)
@@ -82,23 +65,20 @@ class ZhipuFunctionCallingAgent:
             self.max_execution_time = agent_params.get("max_execution_time")
 
             logger.info(
-                f"ZhipuFCallAgent初始化(新方式): {model}, "
+                f"ZhipuFCallAgent初始化: {model}, "
                 f"max_iterations={self.max_iterations} (从配置)"
             )
         else:
-            # DEPRECATED v4.0: 旧方式 - 直接使用传入的参数（向后兼容）
-            # 推荐使用: agent_manager.create_agent() 进行配置驱动的初始化
-            # 将在 v5.0 中移除
-
-            self.temperature = temperature if temperature is not None else 0.1
-            self.verbose = verbose if verbose is not None else False
-            self.max_iterations = max_iterations if max_iterations is not None else 10
-            self.enable_memory = enable_memory if enable_memory is not None else True
+            # 默认值，如果没有提供适配器
+            self.temperature = 0.1
+            self.verbose = False
+            self.max_iterations = 10
+            self.enable_memory = True
             self.max_execution_time = None
 
             logger.info(
-                f"ZhipuFCallAgent初始化(旧方式): {model}, "
-                f"max_iterations={self.max_iterations} (硬编码)"
+                f"ZhipuFCallAgent初始化: {model}, "
+                f"max_iterations={self.max_iterations} (默认)"
             )
 
         self.global_memory_manager = global_memory_manager
@@ -139,7 +119,8 @@ class ZhipuFunctionCallingAgent:
             logger.info("开始初始化智谱AI Function Calling Agent...")
             
             # 1. 创建LLM
-            self.llm = create_zhipu_llm(
+            self.llm = llm_manager.create_llm(
+                provider="zhipu",
                 model=self.model,
                 temperature=self.temperature,
                 **self.kwargs
@@ -493,7 +474,6 @@ class ZhipuFunctionCallingAgent:
             "tools": [tool.name for tool in self.tools] if self.tools else [],
             "memory_enabled": self.enable_memory,
             "mode": "function_calling",  # 标识使用Function Calling模式
-            "use_adapters": getattr(self, '_use_adapters', False),
             # 合并模型信息
             **model_info
         }
@@ -509,46 +489,5 @@ class ZhipuFunctionCallingAgent:
         return self.llm
 
 
-# 兼容性函数
-async def build_zhipu_fcall_agent(
-    model: str = "glm-4.5",
-    verbose: bool = False,
-    temperature: float = 0.1,
-    **kwargs
-) -> ZhipuFunctionCallingAgent:
-    """
-    创建并初始化智谱AI Function Calling Agent
-
-    .. deprecated:: 4.0
-        使用 agent_manager.create_agent('zhipu', model) 替代。
-        此函数将在 v5.0 中移除。
-
-    Args:
-        model: 模型名称
-        verbose: 是否显示详细日志
-        temperature: 模型温度参数
-        **kwargs: 其他参数
-
-    Returns:
-        初始化完成的ZhipuFunctionCallingAgent实例
-        
-    推荐方式::
-    
-        from src.agents.langchain.managers import agent_manager
-        agent = await agent_manager.create_agent('zhipu', 'glm-4.5', verbose=verbose)
-    """
-    # DEPRECATED v4.0 - Will be removed in v5.0
-    # Use: agent_manager.create_agent('zhipu', 'glm-4.5')
-    agent = ZhipuFunctionCallingAgent(
-        model=model,
-        temperature=temperature,
-        verbose=verbose,
-        **kwargs
-    )
-
-    await agent.initialize()
-    return agent
-
-
-# 别名，保持向后兼容
+# 别名
 ZhipuFCallAgent = ZhipuFunctionCallingAgent

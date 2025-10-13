@@ -5,19 +5,15 @@ Agent实例模块
 """
 
 from .base_agent import BaseAgent
-from .zhipu_agent import ZhipuAgent, build_zhipu_agent
-from .zhipu_fcall_agent import ZhipuFCallAgent, build_zhipu_fcall_agent
-from .openai_agent import OpenAIAgent, build_openai_agent
-from .ollama_agent import OllamaAgent, build_ollama_agent
+from .zhipu_agent import ZhipuAgent
+from .zhipu_fcall_agent import ZhipuFCallAgent
+from .openai_agent import OpenAIAgent
+from .ollama_agent import OllamaAgent
 
 __all__ = [
     "BaseAgent",
     "ZhipuAgent",
-    "build_zhipu_agent",
     "ZhipuFCallAgent",
-    "build_zhipu_fcall_agent",
     "OpenAIAgent",
-    "build_openai_agent",
     "OllamaAgent",
-    "build_ollama_agent",
 ]

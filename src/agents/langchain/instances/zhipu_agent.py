@@ -8,7 +8,7 @@
 import logging
 from typing import Optional, Dict, Any
 
-from src.llm.langchain.instances.zhipu_llm import create_zhipu_llm
+from src.llm.langchain.managers import llm_manager
 
 from .base_agent import BaseAgent
 
@@ -20,10 +20,9 @@ class ZhipuAgent(BaseAgent):
 
     def __init__(self,
                  model: str = "glm-4-plus",
-                 temperature: float = 0.1,
-                 verbose: bool = False,
-                 max_iterations: int = 8,
-                 enable_memory: bool = True,
+                 provider: str = "zhipu",
+                 llm_adapter = None,
+                 agent_adapter = None,
                  memory_config: Optional[Dict[str, Any]] = None,
                  global_memory_manager = None,
                  prompt_provider: Optional[str] = None):
@@ -32,10 +31,9 @@ class ZhipuAgent(BaseAgent):
 
         Args:
             model: Zhipu AI model name
-            temperature: Temperature parameter
-            verbose: Enable verbose logging
-            max_iterations: Maximum iterations
-            enable_memory: Enable memory management
+            provider: Provider name
+            llm_adapter: LLM adapter
+            agent_adapter: Agent adapter
             memory_config: Memory configuration parameters
             global_memory_manager: Global memory manager
             prompt_provider: Prompt template provider
@@ -43,10 +41,9 @@ class ZhipuAgent(BaseAgent):
         # Call parent constructor
         super().__init__(
             model=model,
-            temperature=temperature,
-            verbose=verbose,
-            max_iterations=max_iterations,
-            enable_memory=enable_memory,
+            provider=provider,
+            llm_adapter=llm_adapter,
+            agent_adapter=agent_adapter,
             memory_config=memory_config,
             global_memory_manager=global_memory_manager
         )
@@ -56,7 +53,8 @@ class ZhipuAgent(BaseAgent):
 
     async def _create_llm_instance(self, llm_params: Dict[str, Any]):
         """使用 LLM Adapter 参数创建 LLM（新接口）"""
-        self.llm = create_zhipu_llm(
+        self.llm = llm_manager.create_llm(
+            provider="zhipu",
             model=llm_params.get("model", self.model),
             temperature=llm_params.get("temperature", 0.1),
             max_tokens=llm_params.get("max_tokens", 2048),
@@ -69,3 +67,16 @@ class ZhipuAgent(BaseAgent):
     def _get_provider_name(self) -> str:
         """Get provider name for agent info."""
         return "zhipu"
+
+    def _build_agent_executor_with_adapter(self):
+        """Build agent executor using agent adapter"""
+        # This method is required by the new BaseAgent interface
+        # Implementation will depend on the specific agent implementation
+        if self.agent_adapter:
+            super()._build_agent_executor_with_adapter()
+        else:
+            # Fallback behavior if no adapter is provided
+            # Subclasses should implement their specific build logic
+            logger.warning("No agent adapter provided, using default behavior")
+            # Here we would implement agent-specific logic if needed
+            pass
