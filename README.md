@@ -1,7 +1,7 @@
 # Multi-AI-Agent 🤖
 基于LangChain和多LLM的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎、高德地图、OKX加密货币和Notion知识管理功能。
 
-## ✨ 功能特性
+## ✨ 一、功能特性
 
 ### 核心架构
 - **双模式运行架构**:
@@ -29,7 +29,7 @@
 - **中文优化**: 针对中文场景优化的提示词和交互体验
 - **智能降级**: 自动降级到备用方案保证服务可用性
 
-## 🎯 工作模式说明
+## 🎯 二、工作模式说明
 
 本项目支持三种工作模式，可通过命令动态切换：
 
@@ -87,7 +87,7 @@
 /switch dify
 ```
 
-## 🚀 快速开始
+## 🚀 三、快速开始
 
 ### 1. 环境准备
 
@@ -167,7 +167,7 @@ DEFAULT_LLM_MODEL=glm-4-plus OR gpt-4o
 python main.py
 ```
 
-## 💬 常用命令速查
+## 💬 四、常用命令速查
 
 ### 基础命令
 | 命令 | 说明 |
@@ -222,7 +222,7 @@ python main.py
 - 在Dify模式下，部分命令（如`/mcp`、`/connector`）不可用
 - 使用 `/help` 查看当前模式下可用的所有命令
 
-## 📊 支持的LLM模型
+## 📊 五、支持的LLM模型
 
 本项目支持多个LLM提供商，可通过 `/switch <provider> [model]` 命令动态切换。
 
@@ -275,7 +275,7 @@ ollama pull gpt-oss:20b
 > - OpenAI的GPT-5系列温度固定为1.0，无法调整
 
 
-## ⚙️ 配置说明
+## ⚙️ 六、配置说明
 
 ### 配置优先级
 
@@ -314,9 +314,29 @@ ollama pull gpt-oss:20b
 
 > **💡 配置热重载**: 修改 `providers.json` 后，使用 `/reload` 命令即可生效，无需重启程序
 
-## 📝 更新日志
+## 📝 七、更新日志
 
-### v3.0.0 (2025-10-11) 🎉
+### v4.0.0 (2025-10-13) 🎉
+- **架构全面重构**: 实现分层解耦的现代化架构
+  - **统一配置层**: ProviderRegistry作为唯一配置入口，消除重复读取
+  - **依赖注入**: Adapter通过构造函数接收配置，避免全局状态依赖
+  - **职责明确**: Manager协调流程，Adapter处理参数，Instance封装SDK
+  - **Provider层移除**: 消除冗余层级，简化调用链路
+- **性能优化**:
+  - 配置读取优化：从2次降为1次
+  - 参数处理优化：从2-3次降为1次
+  - 架构层级简化：从6层降为4层
+- **参数管理增强**:
+  - 三层优先级：user_params > mode_overrides > mode_defaults
+  - mode_overrides配置正确生效
+  - 特殊逻辑支持（temperature_fixed等）
+- **LLM与Agent统一**:
+  - 统一的Adapter接口设计
+  - 相同的配置驱动方式
+  - 一致的参数传递流程
+- **文档完善**: 新增架构重构文档，详细记录设计思路和实施过程
+
+### v3.0.0 (2025-10-11) 
 - **架构全面升级**: 基于GoF设计模式的企业级架构重构
   - Provider模块化：新增 `src/llm/langchain/providers/` 目录，清晰分离通用与专属工具
   - Ollama迁移：`ollama_http_client.py` → `providers/ollama/client.py`，`OllamaHttpClient` → `OllamaClient`
