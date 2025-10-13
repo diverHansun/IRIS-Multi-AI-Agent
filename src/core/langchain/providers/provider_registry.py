@@ -171,6 +171,37 @@ class ProviderRegistry:
     def __repr__(self) -> str:
         return f"ProviderRegistry(providers={list(self._providers.keys())})"
 
+    def get_provider_instance(self, provider: str):
+        """
+        Get provider instance based on configuration
+
+        Args:
+            provider: Provider name
+
+        Returns:
+            Provider instance
+
+        Raises:
+            ValueError: If provider not supported
+        """
+        provider_key = provider.upper()
+        provider_config = self.get_provider_config(provider_key)
+        if not provider_config:
+            raise ValueError(f"Provider {provider} not supported")
+
+        # Import provider classes dynamically to avoid circular imports
+        if provider_key == "ZHIPU":
+            from src.llm.langchain.providers import ZhipuProvider
+            return ZhipuProvider(provider_config)
+        elif provider_key == "OPENAI":
+            from src.llm.langchain.providers import OpenAIProvider
+            return OpenAIProvider(provider_config)
+        elif provider_key == "OLLAMA":
+            from src.llm.langchain.providers import OllamaProvider
+            return OllamaProvider(provider_config)
+        else:
+            raise ValueError(f"Provider {provider} not supported")
+
 
 # Global module-level Provider registry instance
 provider_registry = ProviderRegistry()

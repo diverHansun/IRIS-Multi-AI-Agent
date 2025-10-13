@@ -61,7 +61,7 @@ class LLMManager:
 
     def reload_config(self):
         """重新加载配置 (委托给ProviderRegistry)"""
-        logger.info("🔄 重新加载LLM配置...")
+        logger.info(" 重新加载LLM配置...")
         return self.provider_registry.reload_config()
 
     def get_available_providers(self) -> List[Dict[str, Any]]:

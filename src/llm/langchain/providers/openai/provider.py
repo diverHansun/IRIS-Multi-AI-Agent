@@ -8,7 +8,7 @@ import logging
 from typing import Dict, Any
 
 from src.core.langchain.providers import BaseProvider
-from src.llm.langchain.instances.openai_llm import build_openai_chat
+from src.llm.langchain.managers import llm_manager
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -51,16 +51,23 @@ class OpenAIProvider(BaseProvider):
 
         logger.info(f"创建OpenAI LLM: {model}")
 
+        # 直接使用llm_manager创建实例
+        # 设置API密钥
+        llm_manager.set_api_key(self.name.lower(), api_key)
+        
         # 检查是否有自定义base_url (从配置或kwargs)
         base_url = kwargs.pop('base_url', None)
         if not base_url:
             base_url = settings.openai_base_url if hasattr(settings, 'openai_base_url') else None
 
-        # 使用 build_openai_chat 创建实例
-        return build_openai_chat(
-            api_key=api_key,
+        # 将base_url添加到kwargs中
+        if base_url:
+            kwargs['base_url'] = base_url
+
+        # 使用llm_manager创建LLM实例
+        return llm_manager.create_llm(
+            provider=self.name.lower(),
             model=model,
-            base_url=base_url,
             **kwargs
         )
 
