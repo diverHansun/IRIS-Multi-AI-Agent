@@ -10,12 +10,34 @@ from typing import Any, Dict, Optional
 
 from rich.console import Console
 
+from src.config import settings
+
+
+def _resolve_default_langchain_provider() -> str:
+    provider = (settings.default_llm_provider or "zhipu").strip().lower()
+    return provider or "zhipu"
+
+
+def _resolve_default_langchain_model(provider: str) -> str:
+    if settings.default_llm_model:
+        return settings.default_llm_model.strip()
+    if provider == "zhipu":
+        return "glm-4.5-flash"
+    if provider == "openai":
+        return "gpt-4o-mini"
+    return "auto"
+
+
+_DEFAULT_LANGCHAIN_PROVIDER = _resolve_default_langchain_provider()
+_DEFAULT_LANGCHAIN_MODEL = _resolve_default_langchain_model(_DEFAULT_LANGCHAIN_PROVIDER)
+_DEFAULT_LANGCHAIN_MODE = "agent" if _DEFAULT_LANGCHAIN_PROVIDER == "zhipu" else "llm"
+
 
 DEFAULT_ENGINE_CONFIGS: Dict[str, Dict[str, Any]] = {
     "langchain": {
-        "provider": "zhipu",
-        "model": "glm-4-plus",
-        "mode": "llm",
+        "provider": _DEFAULT_LANGCHAIN_PROVIDER,
+        "model": _DEFAULT_LANGCHAIN_MODEL,
+        "mode": _DEFAULT_LANGCHAIN_MODE,
         "streaming": True,
         "agent": None,
     },
