@@ -8,7 +8,8 @@ from ..base import BaseCommand, CommandResult
 
 
 class LangGraphModelCommand(BaseCommand):
-    name = "model"
+    name = "graph-model"
+    aliases = ()
     engine_scope = ("langgraph",)
     help_text = "Select a model for the active graph."
 
