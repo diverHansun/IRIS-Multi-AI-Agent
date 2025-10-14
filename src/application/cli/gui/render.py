@@ -176,16 +176,24 @@ def render_info(console: Console, agent_info: Mapping[str, Any], mode_info: Mapp
     streaming = mode_info.get("streaming", True)
     mode = mode_info.get("mode", "llm")
     session_id = mode_info.get("session_id", "N/A")
+    conversation_id = agent_info.get("conversation_id")
+    files_count = agent_info.get("files_count")
 
-    info_text = f"""
-Provider: {provider}
-Model: {model}
-Tool Count: {tool_count}
-Mode: {mode.upper()}
-Streaming: {"Enabled" if streaming else "Disabled"}
-Session ID: {session_id}
-    """
-    console.print(Panel(info_text, title="System Information", border_style="blue"))
+    lines = [
+        f"Provider: {provider}",
+        f"Model: {model}",
+        f"Tool Count: {tool_count}",
+        f"Mode: {mode.upper()}",
+        f"Streaming: {'Enabled' if streaming else 'Disabled'}",
+        f"Session ID: {session_id}",
+    ]
+
+    if conversation_id:
+        lines.append(f"Conversation ID: {conversation_id}")
+    if files_count is not None:
+        lines.append(f"Queued Files: {files_count}")
+
+    console.print(Panel("\n".join(lines), title="System Information", border_style="blue"))
 
 
 def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
@@ -254,3 +262,106 @@ def render_sessions(console: Console, sessions: Iterable[Mapping[str, Any]], cur
         table.add_row(active_marker, session_id, created_at, notes)
 
     console.print(table)
+
+
+def render_mcp_status(console: Console, status: Mapping[str, Any], verbose: bool = False) -> None:
+    """
+    Render the MCP status payload.
+    """
+    if verbose:
+        console.print_json(data=status)
+        return
+
+    if not status:
+        console.print("[yellow]No MCP status information available.[/]")
+        return
+
+    lines = [
+        f"Enabled: {status.get('enabled')}  Initialized: {status.get('initialized')}",
+        f"Tool Count: {status.get('tools_total', 0)}",
+        f"Config Path: {status.get('config_path') or 'N/A'}",
+        f"Last Reload: {status.get('last_reload') or 'N/A'}",
+    ]
+    servers = status.get("servers", [])
+    for server in servers:
+        lines.append(
+            f"- {server.get('name', 'unknown')}: {server.get('status', 'unknown')} "
+            f"(tools: {server.get('tools_count')})"
+        )
+    if status.get("last_error"):
+        lines.append(f"Last Error: {status['last_error']}")
+
+    console.print(Panel("\n".join(lines), title="MCP Status", border_style="magenta"))
+
+
+def render_mcp_tools(console: Console, tools: Iterable[Any], json_flag: bool = False) -> None:
+    """
+    Render MCP tool information.
+    """
+    if json_flag:
+        serialised = [
+            {"name": getattr(tool, "name", "unknown"), "description": getattr(tool, "description", "") or ""}
+            for tool in tools
+        ]
+        console.print_json(data=serialised)
+        return
+
+    tool_list = list(tools)
+    if not tool_list:
+        console.print("[yellow]No MCP tools available.[/]")
+        return
+
+    lines = [f"Total {len(tool_list)} MCP tool(s):"]
+    for tool in tool_list[:100]:
+        description = getattr(tool, "description", "") or ""
+        lines.append(f"- {getattr(tool, 'name', 'unknown')}: {description[:120]}")
+    if len(tool_list) > 100:
+        lines.append(f"... {len(tool_list) - 100} more tool(s) not shown")
+
+    console.print(Panel("\n".join(lines), title="MCP Tools", border_style="magenta"))
+
+
+def render_connector_status(console: Console, status: Mapping[str, Any], verbose: bool = False) -> None:
+    """
+    Render connector service status.
+    """
+    if verbose:
+        console.print_json(data=status)
+        return
+
+    if not status:
+        console.print("[yellow]No connector status information available.[/]")
+        return
+
+    lines = [
+        f"Service: {status.get('service', 'N/A')}  Status: {status.get('status', 'unknown')}",
+        f"Tool Count: {status.get('tool_count', 0)}",
+        f"Base URL: {status.get('base_url', 'N/A')}",
+        f"Timeout: {status.get('timeout', 'N/A')}s  Stream Timeout: {status.get('stream_timeout', 'N/A')}s",
+    ]
+    if status.get("schema_error"):
+        lines.append(f"Schema Error: {status['schema_error']}")
+
+    console.print(Panel("\n".join(lines), title="Connector Status", border_style="cyan"))
+
+
+def render_connector_tools(console: Console, tools: Mapping[str, str], json_flag: bool = False) -> None:
+    """
+    Render connector tool list.
+    """
+    if json_flag:
+        serialised = [{"name": name, "description": description} for name, description in tools.items()]
+        console.print_json(data=serialised)
+        return
+
+    if not tools:
+        console.print("[yellow]No connector tools registered.[/]")
+        return
+
+    lines = [f"Total {len(tools)} connector tool(s):"]
+    for name, description in list(tools.items())[:100]:
+        lines.append(f"- {name}: {description[:120]}")
+    if len(tools) > 100:
+        lines.append(f"... {len(tools) - 100} more tool(s) not shown")
+
+    console.print(Panel("\n".join(lines), title="Connector Tools", border_style="cyan"))

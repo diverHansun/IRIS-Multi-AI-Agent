@@ -13,7 +13,3 @@ class DifyAdapter(BaseAdapter):
         service = DifyService()
         return await service.handle_query(ctx, query)
 
-    async def upload_files(self, ctx, files: list[str]):
-        service = DifyService()
-        return await service.upload_files(ctx, files)
-

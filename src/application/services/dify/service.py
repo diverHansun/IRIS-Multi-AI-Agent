@@ -1,17 +1,23 @@
 """
-Dify 控制模块
+Dify engine service that implements the BaseEngineService contract.
 
-管理 Dify 模式的初始化、配置和查询处理
+The implementation adapts the legacy Dify control logic into a runtime
+object managed by the service. The runtime handles configuration loading,
+client lifecycle, streaming output, and file management.
 """
 
-import os
-import json
-import asyncio
-from typing import Dict, Any, Optional,List
-from pathlib import Path
-from rich.console import Console
-import logging
+from __future__ import annotations
 
+import json
+import logging
+import os
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from rich.console import Console
+
+from ..base import BaseEngineService
 from .client import DifyClient, DifyClientError
 from .streaming import DifyStreaming
 from .upload import handle_upload_command
@@ -19,598 +25,409 @@ from .upload import handle_upload_command
 logger = logging.getLogger(__name__)
 
 
-class DifyControl:
-    """Dify 控制逻辑"""
-    
-    def __init__(self, console: Console, config_path: str = "config/dify/config.json"):
-        """
-        初始化 Dify 控制器
-        
-        Args:
-            console: Rich Console 实例
-            config_path: 配置文件路径
-        """
+class _DifyRuntime:
+    """
+    Runtime wrapper that encapsulates the legacy Dify control behaviour.
+    """
+
+    def __init__(self, console: Console, config_path: str = "config/dify/config.json") -> None:
         self.console = console
         self.config_path = config_path
-        self.config = None
-        self.client = None
-        self.streaming = None
-        self.conversation_id = None  # 当前会话ID
-        self.is_initialized = False
-        self.uploaded_files = []  # 存储上传的文件信息
-    
-    def _load_config(self) -> Dict[str, Any]:
-        """
-        加载配置文件
-        
-        Returns:
-            配置字典
-            
-        Raises:
-            FileNotFoundError: 配置文件不存在
-            json.JSONDecodeError: 配置文件格式错误
-        """
-        config_file = Path(self.config_path)
-        
-        if not config_file.exists():
-            raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
-        
-        try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                config_content = f.read()
-            
-            # 处理环境变量替换
-            config_content = self._substitute_env_vars(config_content)
-            config = json.loads(config_content)
-            
-            return config
-            
-        except json.JSONDecodeError as e:
-            raise json.JSONDecodeError(f"配置文件格式错误: {e}")
-    
-    def _substitute_env_vars(self, content: str) -> str:
-        """
-        替换配置中的环境变量
-        
-        Args:
-            content: 配置文件内容
-            
-        Returns:
-            替换后的内容
-        """
-        import re
-        
-        # 匹配 ${VAR_NAME} 和 ${VAR_NAME:-default_value} 格式
-        def replace_env_var(match):
-            var_expr = match.group(1)
-            
-            if ':-' in var_expr:
-                # 有默认值的情况
-                var_name, default_value = var_expr.split(':-', 1)
-                return os.getenv(var_name, default_value)
-            else:
-                # 没有默认值的情况
-                value = os.getenv(var_expr)
-                if value is None:
-                    raise ValueError(f"环境变量 {var_expr} 未设置且无默认值")
-                return value
-        
-        # 替换所有环境变量
-        pattern = r'\$\{([^}]+)\}'
-        return re.sub(pattern, replace_env_var, content)
-    
-    def _validate_config(self, config: Dict[str, Any]) -> bool:
-        """
-        验证配置有效性
-        
-        Args:
-            config: 配置字典
-            
-        Returns:
-            是否有效
-        """
-        required_fields = ['api_key', 'base_url']
-        
-        for field in required_fields:
-            if not config.get(field):
-                self.console.print(f"[red]配置错误: 缺少必需字段 '{field}'[/red]")
-                return False
-        
-        # 验证API密钥格式
-        api_key = config['api_key']
-        if not (api_key.startswith('app-') or api_key.startswith('sk-')):
-            self.console.print(f"[red]配置错误: API密钥格式无效，应以 'app-' 或 'sk-' 开头[/red]")
-            return False
-        
-        return True
-    
+        self.config_data: Optional[Dict[str, Any]] = None
+        self.client: Optional[DifyClient] = None
+        self.streaming: Optional[DifyStreaming] = None
+        self.conversation_id: Optional[str] = None
+        self.uploaded_files: List[Dict[str, Any]] = []
+        self.initialized: bool = False
+
     async def initialize(self, force_reinit: bool = False) -> Dict[str, Any]:
         """
-        初始化 Dify 客户端
-        
-        Args:
-            force_reinit: 是否强制重新初始化（即使已经初始化过）
-        
-        Returns:
-            初始化结果
+        Initialise the Dify client and streaming helpers.
         """
+        if self.initialized and not force_reinit:
+            return {"type": "success", "message": "Dify client already initialised."}
+
+        if self.initialized and force_reinit:
+            await self.cleanup()
+
         try:
-            # 如果已经初始化且不强制重新初始化，直接返回成功
-            if self.is_initialized and not force_reinit:
-                return {
-                    "type": "success",
-                    "message": "Dify 客户端已经初始化"
-                }
-            
-            # 如果已初始化且需要重新初始化，先清理现有连接
-            if self.is_initialized and force_reinit:
-                await self.cleanup()
-            
-            # 加载配置
-            self.config = self._load_config()
-            
-            # 验证配置
-            if not self._validate_config(self.config):
-                return {
-                    "type": "error",
-                    "message": "配置验证失败"
-                }
-            
-            # 创建客户端
-            self.client = DifyClient(
-                api_key=self.config['api_key'],
-                base_url=self.config['base_url'],
-                timeout=self.config.get('timeout', 30)
-            )
-            
-            # 创建流式处理器，传递所有配置参数
-            self.streaming = DifyStreaming(self.console)
-            self.streaming.buffer_size = self.config.get('streaming_buffer_size', 200)
-            self.streaming.delay_ms = self.config.get('streaming_delay_ms', 20)
-            self.streaming.display_refresh_rate = self.config.get('streaming_display_refresh_rate', 15)
-            self.streaming.max_content_length = self.config.get('max_content_length', 1000000)
-            self.streaming.max_chunks_per_second = self.config.get('max_chunks_per_second', 50)
-            
-            # 测试连接
+            self.config_data = self._load_config()
+        except (FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
+            return {"type": "error", "message": f"Configuration error: {exc}"}
+
+        if not self._validate_config(self.config_data):
+            return {"type": "error", "message": "Invalid Dify configuration."}
+
+        self.client = DifyClient(
+            api_key=self.config_data["api_key"],
+            base_url=self.config_data["base_url"],
+            timeout=self.config_data.get("timeout", 30),
+        )
+
+        self.streaming = DifyStreaming(self.console)
+        self.streaming.buffer_size = self.config_data.get("streaming_buffer_size", 200)
+        self.streaming.delay_ms = self.config_data.get("streaming_delay_ms", 20)
+        self.streaming.display_refresh_rate = self.config_data.get("streaming_display_refresh_rate", 15)
+        self.streaming.max_content_length = self.config_data.get("max_content_length", 1_000_000)
+        self.streaming.max_chunks_per_second = self.config_data.get("max_chunks_per_second", 50)
+
+        try:
             await self._test_connection()
-            
-            self.is_initialized = True
-            
-            return {
-                "type": "success",
-                "message": "Dify 客户端初始化成功"
-            }
-            
-        except FileNotFoundError as e:
-            return {
-                "type": "error",
-                "message": f"配置文件错误: {e}"
-            }
-        except ValueError as e:
-            return {
-                "type": "error",
-                "message": f"环境变量错误: {e}"
-            }
-        except Exception as e:
-            logger.error(f"Dify 初始化失败: {e}")
-            return {
-                "type": "error",
-                "message": f"初始化失败: {e}"
-            }
-    
-    async def _test_connection(self):
+        except DifyClientError as exc:
+            logger.error("Dify connection test failed: %s", exc)
+            return {"type": "error", "message": f"Connection test failed: {exc}"}
+
+        self.initialized = True
+        return {"type": "success", "message": "Dify client initialised successfully."}
+
+    def _load_config(self) -> Dict[str, Any]:
+        config_file = Path(self.config_path)
+        if not config_file.exists():
+            raise FileNotFoundError(f"Missing configuration file: {self.config_path}")
+
+        raw_content = config_file.read_text(encoding="utf-8")
+        substituted = self._substitute_env_vars(raw_content)
+        return json.loads(substituted)
+
+    def _substitute_env_vars(self, content: str) -> str:
         """
-        测试与 Dify 的连接
-        
-        Raises:
-            DifyClientError: 连接失败时抛出
+        Replace ${VAR} or ${VAR:-default} placeholders inside the config.
         """
-        try:
-            # 发送一个简单的测试请求
-            async for _ in self.client.chat_message(
-                query="hello", 
-                user_id="test_user", 
-                streaming=False
-            ):
-                break  # 只要能收到响应就说明连接正常
-                    
-        except Exception as e:
-            raise DifyClientError(f"连接测试失败: {e}")
-    
+
+        def _replace(match: re.Match[str]) -> str:
+            expression = match.group(1)
+            if ":-" in expression:
+                var_name, default = expression.split(":-", 1)
+                return os.getenv(var_name, default)
+            value = os.getenv(expression)
+            if value is None:
+                raise ValueError(f"Environment variable '{expression}' is not set.")
+            return value
+
+        return re.sub(r"\$\{([^}]+)\}", _replace, content)
+
+    def _validate_config(self, config: Dict[str, Any]) -> bool:
+        required = ("api_key", "base_url")
+        for field in required:
+            if not config.get(field):
+                self.console.print(f"[red]Config validation failed: missing '{field}'.[/]")
+                return False
+
+        api_key = config["api_key"]
+        if not (api_key.startswith("app-") or api_key.startswith("sk-")):
+            self.console.print("[red]Invalid API key format. Should start with 'app-' or 'sk-'.[/]")
+            return False
+
+        return True
+
+    async def _test_connection(self) -> None:
+        """
+        Send a lightweight request to ensure the client credentials work.
+        """
+        if self.client is None:
+            raise DifyClientError("Client not initialised.")
+
+        async for _ in self.client.chat_message(
+            query="health_check",
+            user_id="system_probe",
+            streaming=False,
+        ):
+            break
+
     async def handle_query(self, query: str, user_id: str) -> Dict[str, Any]:
-        """
-        处理用户查询
-        
-        Args:
-            query: 用户查询
-            user_id: 用户ID
-            
-        Returns:
-            处理结果
-        """
-        if not self.is_initialized:
-            return {
-                "type": "error",
-                "message": "Dify 客户端未初始化，请先执行 'switch dify'"
-            }
-        
+        if not self.initialized or self.client is None or self.streaming is None:
+            return {"type": "error", "message": "Dify client is not initialised."}
+
+        files_payload = None
+        if self.uploaded_files:
+            files_payload = [{k: v for k, v in item.items() if not k.startswith("_")} for item in self.uploaded_files]
+            logger.debug("Sending files payload: %s", files_payload)
+
         try:
-            # 准备当前查询使用的文件列表（一次性使用）
-            # 过滤掉本地显示字段（以下划线开头的字段）
-            current_files = None
-            if self.uploaded_files:
-                current_files = [
-                    {k: v for k, v in f.items() if not k.startswith('_')}
-                    for f in self.uploaded_files
-                ]
-
-                # 调试输出：显示实际发送的files参数
-                logger.debug(f"发送的files参数: {current_files}")
-                self.console.print(f"[dim]调试信息 - 发送files参数: {current_files}[/dim]")
-
-            # 发送查询并处理流式响应
             stream = self.client.chat_message(
                 query=query,
                 user_id=user_id,
                 streaming=True,
                 conversation_id=self.conversation_id,
-                files=current_files
+                files=files_payload,
             )
-            
-            # 清空上传的文件列表（实现一次性使用）
+
             if self.uploaded_files:
-                file_count = len(self.uploaded_files)
+                self.console.print(f"[dim]Using {len(self.uploaded_files)} queued file(s); queue cleared.[/]")
                 self.uploaded_files.clear()
-                self.console.print(f"[dim]已使用 {file_count} 个文件，文件列表已清空[/dim]")
-            
-            # 显示流式响应
+
             new_conversation_id = await self.streaming.display_stream(stream)
-            
-            # 更新会话ID
             if new_conversation_id:
                 self.conversation_id = new_conversation_id
-            
-            return {
-                "type": "success",
-                "conversation_id": self.conversation_id
-            }
-            
-        except DifyClientError as e:
-            await self.streaming.display_error(str(e))
-            return {
-                "type": "error",
-                "message": str(e)
-            }
-        except Exception as e:
-            logger.error(f"查询处理失败: {e}")
-            await self.streaming.display_error(f"查询处理失败: {e}")
-            return {
-                "type": "error",
-                "message": f"查询处理失败: {e}"
-            }
-    
-    async def handle_upload(self, query: str, ctx) -> Dict[str, Any]:
-        """
-        处理文件上传命令
 
-        Args:
-            query: 上传命令
-            ctx: 应用上下文
+            return {"type": "success", "message": ""}
+        except DifyClientError as exc:
+            await self.streaming.display_error(str(exc))
+            return {"type": "error", "message": str(exc)}
+        except Exception as exc:
+            logger.exception("Dify query processing failed: %s", exc)
+            await self.streaming.display_error(f"Query processing failed: {exc}")
+            return {"type": "error", "message": f"Query processing failed: {exc}"}
 
-        Returns:
-            处理结果
-        """
-        if not self.is_initialized:
-            return {
-                "type": "error",
-                "message": "Dify 客户端未初始化，请先执行 'switch dify'"
-            }
+    async def handle_upload(self, ctx, args: str) -> Dict[str, Any]:
+        if not self.initialized or self.client is None or self.config_data is None:
+            return {"type": "error", "message": "Dify client is not initialised."}
 
         result = await handle_upload_command(
             ctx=ctx,
-            query=query,
+            query=args,
             client=self.client,
             console=self.console,
-            config=self.config
+            config=self.config_data,
         )
 
-        # 如果上传成功，将文件信息添加到列表中
         if result.get("type") == "success" and "uploaded_files" in result:
             uploaded_files = result["uploaded_files"]
-
             for file_result in uploaded_files:
-                file_info = file_result.get('raw_response', {})
+                raw_response = file_result.get("raw_response", {})
+                file_extension = raw_response.get("extension", "").lower()
+                if file_extension and not file_extension.startswith("."):
+                    file_extension = f".{file_extension}"
 
-                # 根据文件扩展名或返回类型判断类型
-                file_extension = file_info.get('extension', '').lower()
-                # 确保扩展名以点号开头
-                if file_extension and not file_extension.startswith('.'):
-                    file_extension = '.' + file_extension
+                file_type = file_result.get("type") or (
+                    "image" if file_extension in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"} else "document"
+                )
 
-                file_type = file_result.get('type', 'document')
+                self.uploaded_files.append(
+                    {
+                        "type": file_type,
+                        "transfer_method": "local_file",
+                        "upload_file_id": raw_response.get("id") or file_result.get("file_id"),
+                        "_filename": file_result.get("filename", "unknown"),
+                        "_size": file_result.get("size", 0),
+                    }
+                )
 
-                if not file_type or file_type == 'file':
-                    file_type = "image" if file_extension in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'] else "document"
-
-                # 添加文件到上传列表，格式为 Dify 要求的格式，并保存文件名用于显示
-                self.uploaded_files.append({
-                    "type": file_type,
-                    "transfer_method": "local_file",
-                    "upload_file_id": file_info.get("id") or file_result.get('file_id'),
-                    "_filename": file_result.get('filename', 'Unknown'),  # 本地显示字段
-                    "_size": file_result.get('size', 0)  # 本地显示字段
-                })
-
-            # 显示添加结果
-            if len(uploaded_files) == 1:
-                file_name = uploaded_files[0].get('filename', 'Unknown')
-                file_type = self.uploaded_files[-1]['type']
-                self.console.print(f"[dim]文件已添加到对话上下文: {file_name} (类型: {file_type}) - 将在下次对话中使用[/dim]")
+            count = len(uploaded_files)
+            if count == 1:
+                name = uploaded_files[0].get("filename", "unknown")
+                self.console.print(f"[dim]Queued file: {name}. It will be used in the next conversation.[/]")
             else:
-                self.console.print(f"[dim]{len(uploaded_files)} 个文件已添加到对话上下文 - 将在下次对话中使用[/dim]")
+                self.console.print(f"[dim]Queued {count} files. They will be used in the next conversation.[/]")
 
-            # 显示当前待发送文件总数
-            self.console.print(f"[blue]当前共有 {len(self.uploaded_files)} 个文件待发送[/blue]")
+            self.console.print(f"[blue]Pending files: {len(self.uploaded_files)}[/]")
 
         return result
-    
-    async def get_status(self) -> Dict[str, Any]:
-        """
-        获取当前状态信息
-        
-        Returns:
-            状态信息字典
-        """
-        return {
-            "initialized": self.is_initialized,
-            "conversation_id": self.conversation_id,
-            "config_loaded": self.config is not None,
-            "client_ready": self.client is not None
-        }
-    
-    async def get_detailed_info(self) -> Dict[str, Any]:
-        """
-        获取详细的 Dify 状态信息，用于 info 命令
-        
-        Returns:
-            详细的 Dify 状态信息
-        """
-        status = await self.get_status()
-        
-        # 构建详细信息
-        info = {
-            "provider": "Dify",
-            "model": "Cloud AI",
-            "initialized": status["initialized"],
-            "base_url": self.config.get("base_url", "N/A") if self.config else "N/A",
-            "api_key_prefix": self.config["api_key"][:10] + "..." if self.config and self.config.get("api_key") else "N/A",
-            "conversation_id": status["conversation_id"],
-            "uploaded_files_count": len(self.uploaded_files),
-            "uploaded_files": [
-                {
-                    "type": file.get("type", "unknown"),
-                    "file_id": file.get("upload_file_id", "unknown")
-                }
-                for file in self.uploaded_files
-            ],
-            "timeout": self.config.get("timeout", 30) if self.config else 30,
-            "supported_file_types": self.config.get("supported_file_types", []) if self.config else [],
-            "max_file_size_mb": (self.config.get("max_file_size", 10485760) / 1024 / 1024) if self.config else 10
-        }
-        
-        return info
-    
-    async def reset_conversation(self):
-        """重置当前会话"""
-        self.conversation_id = None
-        self.uploaded_files = []  # 同时清空文件列表
-        await self.streaming.display_info("会话已重置，文件列表已清空")
-    
-    async def clear_files(self):
-        """清空文件列表"""
-        if self.uploaded_files:
-            file_count = len(self.uploaded_files)
-            self.uploaded_files = []
-            self.console.print(f"[yellow]已清空 {file_count} 个待发送文件[/yellow]")
-        else:
-            self.console.print("[dim]文件列表已为空[/dim]")
-    
-    async def list_files(self):
-        """列出当前待发送的文件"""
+
+    async def list_files(self) -> None:
         if not self.uploaded_files:
-            self.console.print("[dim]当前没有待发送的文件[/dim]")
+            self.console.print("[dim]No files are queued for the next conversation.[/]")
             return
 
-        self.console.print(f"[blue]当前有 {len(self.uploaded_files)} 个文件待发送：[/blue]")
-
         total_size = 0
-        for i, file_info in enumerate(self.uploaded_files, 1):
-            file_type = file_info.get("type", "unknown")
-            file_id = file_info.get("upload_file_id", "unknown")
-            filename = file_info.get("_filename", "Unknown")
-            file_size = file_info.get("_size", 0)
-            total_size += file_size
-
-            # 格式化文件大小
-            if file_size > 1024 * 1024:
-                size_str = f"{file_size / (1024 * 1024):.1f}MB"
-            elif file_size > 1024:
-                size_str = f"{file_size / 1024:.1f}KB"
-            else:
-                size_str = f"{file_size}B"
-
-            # 使用不同颜色区分文件类型
+        self.console.print(f"[blue]{len(self.uploaded_files)} queued file(s):[/]")
+        for index, info in enumerate(self.uploaded_files, start=1):
+            size = info.get("_size", 0)
+            total_size += size
+            size_str = self._format_size(size)
+            file_type = info.get("type", "unknown")
+            filename = info.get("_filename", "unknown")
+            file_id = info.get("upload_file_id", "unknown")
             type_color = "cyan" if file_type == "image" else "yellow"
-            self.console.print(f"  [{i}] [{type_color}]{file_type:8}[/{type_color}] {filename} ({size_str})")
-            self.console.print(f"      [dim]ID: {file_id}[/dim]")
+            self.console.print(f"  [{index}] [{type_color}]{file_type:<8}[/{type_color}] {filename} ({size_str})")
+            self.console.print(f"      [dim]ID: {file_id}[/]")
 
-        # 显示总大小
-        if total_size > 1024 * 1024:
-            total_size_str = f"{total_size / (1024 * 1024):.1f}MB"
-        elif total_size > 1024:
-            total_size_str = f"{total_size / 1024:.1f}KB"
-        else:
-            total_size_str = f"{total_size}B"
+        self.console.print(f"[dim]Total size: {self._format_size(total_size)}[/]")
+        self.console.print("[dim]Files are consumed on the next conversation automatically.[/]")
 
-        self.console.print(f"[dim]总大小: {total_size_str}[/dim]")
-        self.console.print("[dim]提示: 这些文件将在下次对话中一次性使用，使用后自动清空[/dim]")
-        self.console.print("[dim]提示: 使用 '/files remove <序号>' 可以移除指定文件[/dim]")
-
-    async def remove_file(self, index: int) -> bool:
-        """
-        从待发送列表中移除指定序号的文件
-
-        Args:
-            index: 文件序号（从1开始）
-
-        Returns:
-            是否成功移除
-        """
+    async def remove_file(self, index: int) -> Dict[str, Any]:
         if not self.uploaded_files:
-            self.console.print("[yellow]当前没有待发送的文件[/yellow]")
-            return False
-
-        if index < 1 or index > len(self.uploaded_files):
-            self.console.print(f"[red]无效的序号: {index}，有效范围: 1-{len(self.uploaded_files)}[/red]")
-            return False
-
-        # 移除文件（序号从1开始，索引从0开始）
-        removed_file = self.uploaded_files.pop(index - 1)
-        filename = removed_file.get("_filename", "Unknown")
-        self.console.print(f"[green]已移除文件: {filename}[/green]")
-        self.console.print(f"[dim]剩余 {len(self.uploaded_files)} 个文件待发送[/dim]")
-        return True
-
-    async def remove_files_by_indices(self, indices: List[int]) -> Dict[str, Any]:
-        """
-        批量移除多个文件
-
-        Args:
-            indices: 文件序号列表（从1开始）
-
-        Returns:
-            移除结果
-        """
-        if not self.uploaded_files:
-            self.console.print("[yellow]当前没有待发送的文件[/yellow]")
+            self.console.print("[yellow]No files to remove.[/]")
             return {"removed": 0, "failed": 0}
 
-        # 按降序排序，避免删除时索引错位
-        sorted_indices = sorted(set(indices), reverse=True)
+        if index < 1 or index > len(self.uploaded_files):
+            self.console.print(f"[red]Invalid index {index}. Valid range: 1-{len(self.uploaded_files)}.[/]")
+            return {"removed": 0, "failed": 1}
 
-        removed_count = 0
-        failed_count = 0
+        removed = self.uploaded_files.pop(index - 1)
+        filename = removed.get("_filename", "unknown")
+        self.console.print(f"[green]Removed file: {filename}[/]")
+        self.console.print(f"[dim]{len(self.uploaded_files)} file(s) remain queued.[/]")
+        return {"removed": 1, "failed": 0}
 
-        for index in sorted_indices:
+    async def remove_files_by_indices(self, indices: List[int]) -> Dict[str, Any]:
+        if not self.uploaded_files:
+            self.console.print("[yellow]No files to remove.[/]")
+            return {"removed": 0, "failed": 0}
+
+        removed = 0
+        failed = 0
+        for index in sorted(set(indices), reverse=True):
             if 1 <= index <= len(self.uploaded_files):
-                removed_file = self.uploaded_files.pop(index - 1)
-                filename = removed_file.get("_filename", "Unknown")
-                self.console.print(f"[green] 已移除: {filename}[/green]")
-                removed_count += 1
+                file_info = self.uploaded_files.pop(index - 1)
+                self.console.print(f"[green]Removed: {file_info.get('_filename', 'unknown')}[/]")
+                removed += 1
             else:
-                self.console.print(f"[yellow] 无效序号: {index}[/yellow]")
-                failed_count += 1
+                self.console.print(f"[yellow]Skipped invalid index: {index}[/]")
+                failed += 1
 
-        self.console.print(f"[dim]成功移除 {removed_count} 个文件，剩余 {len(self.uploaded_files)} 个文件待发送[/dim]")
+        self.console.print(f"[dim]Removed {removed} file(s); {len(self.uploaded_files)} remain queued.[/]")
+        return {"removed": removed, "failed": failed}
 
-        return {"removed": removed_count, "failed": failed_count}
-    
-    async def cleanup(self):
-        """清理资源"""
+    async def clear_files(self) -> None:
+        if not self.uploaded_files:
+            self.console.print("[dim]File queue is already empty.[/]")
+            return
+
+        count = len(self.uploaded_files)
+        self.uploaded_files.clear()
+        self.console.print(f"[yellow]Cleared {count} queued file(s).[/]")
+
+    async def reset_conversation(self) -> None:
+        self.conversation_id = None
+        self.uploaded_files.clear()
+        if self.streaming:
+            await self.streaming.display_info("Conversation reset. File queue cleared.")
+
+    async def get_detailed_info(self) -> Dict[str, Any]:
+        return {
+            "conversation_id": self.conversation_id,
+            "queued_files": len(self.uploaded_files),
+            "initialized": self.initialized,
+        }
+
+    async def cleanup(self) -> None:
         try:
-            # 关闭客户端连接
-            if self.client:
-                try:
-                    await self.client.close()
-                    self.client = None
-                    logger.debug("Dify 客户端连接已关闭")
-                except Exception as e:
-                    logger.warning(f"关闭 Dify 客户端连接时出错: {e}")
-            
-            # 重置流式处理器
-            if self.streaming:
-                self.streaming = None
-                
-        except Exception as e:
-            logger.warning(f"清理 Dify 资源时出错: {e}")
+            if self.client is not None:
+                await self.client.close()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Error closing Dify client: %s", exc)
         finally:
-            # 重置所有状态
-            self.is_initialized = False
+            self.client = None
+            self.streaming = None
+            self.config_data = None
+            self.uploaded_files.clear()
             self.conversation_id = None
-            self.uploaded_files = []
-            self.config = None
+            self.initialized = False
+
+    @staticmethod
+    def _format_size(size: int) -> str:
+        if size > 1024 * 1024:
+            return f"{size / (1024 * 1024):.1f}MB"
+        if size > 1024:
+            return f"{size / 1024:.1f}KB"
+        return f"{size}B"
 
 
-async def init_dify_client(ctx, force_reinit: bool = False) -> Dict[str, Any]:
+class DifyService(BaseEngineService):
     """
-    初始化 Dify 客户端的便捷函数
-    
-    Args:
-        ctx: 应用上下文
-        force_reinit: 是否强制重新初始化
-        
-    Returns:
-        初始化结果
+    Service facade for the Dify runtime.
     """
-    # 如果已存在控制器且不强制重新初始化，直接使用现有实例
-    if ctx.dify_control and ctx.dify_control.is_initialized and not force_reinit:
+
+    def _get_runtime(self, ctx) -> _DifyRuntime:
+        config = ctx.get_engine_config("dify")
+        runtime = config.get("runtime")
+        if runtime is None:
+            runtime = _DifyRuntime(ctx.console)
+            config["runtime"] = runtime
+        return runtime
+
+    async def initialize(self, ctx) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
+        result = await runtime.initialize()
+        if result["type"] == "error":
+            return result
+
         return {
             "type": "success",
-            "message": "使用现有的 Dify 客户端连接"
+            "message": result.get("message", ""),
+            "payload": {
+                "agent": {
+                    "provider": "dify",
+                    "model": "cloud",
+                    "conversation_id": runtime.conversation_id,
+                    "files_count": len(runtime.uploaded_files),
+                },
+                "mode": {
+                    "mode": "cloud",
+                    "streaming": True,
+                    "session_id": ctx.session_id,
+                },
+            },
         }
-    
-    # 如果需要强制重新初始化，先清理现有连接
-    if ctx.dify_control and force_reinit:
-        await ctx.dify_control.cleanup()
-        ctx.dify_control = None
-    
-    # 创建新的控制器实例
-    control = DifyControl(ctx.console)
-    result = await control.initialize(force_reinit=force_reinit)
-    
-    if result["type"] == "success":
-        # 保存控制器实例到上下文
-        ctx.dify_control = control
-    
-    return result
 
+    async def handle_query(self, ctx, query: str) -> str:
+        runtime = self._get_runtime(ctx)
+        if not runtime.initialized:
+            init_result = await runtime.initialize()
+            if init_result["type"] == "error":
+                ctx.console.print(f"[red]{init_result['message']}[/]")
+                return ""
+        result = await runtime.handle_query(query, user_id=ctx.session_id or "default_user")
+        if result["type"] == "error":
+            ctx.console.print(f"[red]{result['message']}[/]")
+        return ""
 
-async def handle_dify_query(ctx, query: str) -> Dict[str, Any]:
-    """
-    处理 Dify 查询的便捷函数
-    
-    Args:
-        ctx: 应用上下文
-        query: 用户查询
-        
-    Returns:
-        处理结果
-    """
-    if not hasattr(ctx, 'dify_control') or not ctx.dify_control:
+    async def switch_model(self, ctx, provider: str, model: str | None = None) -> Dict[str, Any]:
         return {
             "type": "error",
-            "message": "Dify 客户端未初始化"
+            "message": "Dify relies on its managed cloud model and cannot switch providers.",
+            "payload": {},
         }
-    
-    user_id = getattr(ctx, 'session_id', 'default_user')
-    return await ctx.dify_control.handle_query(query, user_id)
 
-
-async def handle_dify_upload(ctx, query: str) -> Dict[str, Any]:
-    """
-    处理 Dify 上传的便捷函数
-    
-    Args:
-        ctx: 应用上下文
-        query: 上传命令
-        
-    Returns:
-        处理结果
-    """
-    if not hasattr(ctx, 'dify_control') or not ctx.dify_control:
+    def get_info(self, ctx) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
         return {
-            "type": "error",
-            "message": "Dify 客户端未初始化"
+            "agent": {
+                "provider": "dify",
+                "model": "cloud",
+                "conversation_id": runtime.conversation_id,
+                "files_count": len(runtime.uploaded_files),
+            },
+            "mode": {
+                "mode": "cloud",
+                "streaming": True,
+                "session_id": ctx.session_id,
+            },
         }
-    
-    return await ctx.dify_control.handle_upload(query, ctx)
+
+    async def upload_from_command(self, ctx, args: str) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
+        if not runtime.initialized:
+            init_result = await runtime.initialize()
+            if init_result["type"] == "error":
+                return init_result
+        return await runtime.handle_upload(ctx, args)
+
+    async def list_files(self, ctx) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
+        await runtime.list_files()
+        return {"type": "success", "message": ""}
+
+    async def clear_files(self, ctx) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
+        await runtime.clear_files()
+        return {"type": "success", "message": "Cleared queued files."}
+
+    async def remove_files(self, ctx, indices: List[int]) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
+        result = await runtime.remove_files_by_indices(indices)
+        return {
+            "type": "success",
+            "message": f"Removed {result['removed']} file(s).",
+            "payload": result,
+        }
+
+    async def reset(self, ctx) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
+        await runtime.reset_conversation()
+        return {"type": "success", "message": "Conversation reset."}
+
+    async def reconnect(self, ctx) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
+        init_result = await runtime.initialize(force_reinit=True)
+        return init_result
+
+    async def get_detailed_info(self, ctx) -> Dict[str, Any]:
+        runtime = self._get_runtime(ctx)
+        return await runtime.get_detailed_info()
+
+    async def cleanup(self, ctx) -> None:
+        runtime = self._get_runtime(ctx)
+        await runtime.cleanup()
+

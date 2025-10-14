@@ -5,6 +5,7 @@ Refactored CLI main loop entrypoint.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Optional
 
 from src.components.shared.memory import GlobalMemoryManager, SessionManager
@@ -17,6 +18,8 @@ from .gui import formatter as gui_formatter
 from .gui import render as gui_render
 from .gui import logo as gui_logo
 from .state import AppState
+
+logger = logging.getLogger(__name__)
 
 try:
     from src.components.shared.tools.mcp import GlobalMCPManager
@@ -38,14 +41,15 @@ async def run() -> None:
     gui_logo.display_logo_intro(ctx.console)
     gui_render.print_welcome(ctx.console)
 
-    _initialize_memory(ctx)
+    try:
+        _initialize_memory(ctx)
 
-    service = get_current_service(ctx)
-    init_result = await service.initialize(ctx)
-    if not _handle_service_result(ctx, init_result):
-        return
-
-    await _cli_loop(ctx)
+        service = get_current_service(ctx)
+        init_result = await service.initialize(ctx)
+        if _handle_service_result(ctx, init_result):
+            await _cli_loop(ctx)
+    finally:
+        await _cleanup_engines(ctx)
 
 
 async def shutdown(waiter: Optional[asyncio.Task] = None) -> None:
@@ -185,3 +189,12 @@ def _handle_service_result(ctx: AppState, result: dict) -> bool:
             payload.get("mode", {}),
         )
     return True
+
+async def _cleanup_engines(ctx: AppState) -> None:
+    """Release resources for engines that maintain external connections."""
+    try:
+        from ..services.dify import DifyService
+
+        await DifyService().cleanup(ctx)
+    except Exception as exc:  # pragma: no cover - best effort cleanup
+        logger.debug("Engine cleanup skipped: %s", exc)

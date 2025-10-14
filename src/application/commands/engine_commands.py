@@ -20,8 +20,15 @@ class SwitchEngineCommand(BaseCommand):
         if engine not in ctx.engine_configs:
             return CommandResult.error(f"Unknown engine '{engine}'")
 
-        if engine == ctx.current_engine:
+        previous_engine = ctx.current_engine
+
+        if engine == previous_engine:
             return CommandResult.info(f"Already using engine '{engine}'.")
+
+        if previous_engine == "dify":
+            from ..services.dify import DifyService
+
+            await DifyService().cleanup(ctx)
 
         ctx.current_engine = engine
         service = get_current_service(ctx)
@@ -34,4 +41,3 @@ class SwitchEngineCommand(BaseCommand):
 
 
 __all__ = ["SwitchEngineCommand"]
-
