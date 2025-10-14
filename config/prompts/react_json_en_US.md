@@ -20,5 +20,8 @@ Tool names: {tool_names}
 Tool list (with full JSON Schema):
 {{tools_block}}
 
+Prior reasoning and tool interactions:
+{agent_scratchpad}
+
 Begin:
 Question: {input}

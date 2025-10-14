@@ -20,5 +20,8 @@
 工具列表（包含完整 JSON Schema）：
 {{tools_block}}
 
+历史推理与工具调用记录：
+{agent_scratchpad}
+
 现在开始：
 Question: {input}
