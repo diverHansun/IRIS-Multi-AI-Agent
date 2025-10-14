@@ -5,7 +5,7 @@ Dify engine adapter.
 from __future__ import annotations
 
 from ..services.dify import DifyService
-from . import BaseAdapter
+from .base import BaseAdapter
 
 
 class DifyAdapter(BaseAdapter):
