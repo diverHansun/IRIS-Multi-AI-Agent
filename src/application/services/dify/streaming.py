@@ -1,7 +1,5 @@
-"""
-Dify 流式输出处理模块
-
-处理 Dify API 的流式响应和输出显示
+﻿"""
+Streaming helpers for processing Dify API responses and rendering output.
 """
 
 import json
@@ -18,51 +16,51 @@ logger = logging.getLogger(__name__)
 
 
 class DifyStreaming:
-    """Dify 流式输出处理"""
+    """Handle streaming responses and status output for Dify."""
     
     def __init__(self, console: Console):
         """
-        初始化流式输出处理器
-        
+        Initialise the streaming helper.
+
         Args:
-            console: Rich Console 实例
+            console: Rich console instance used for rendering.
         """
         self.console = console
         self._current_message_id = None
         self._current_conversation_id = None
         
-        # 性能监控和控制参数
+        # Performance control parameters
         self.buffer_size = 200
         self.delay_ms = 20
         self.display_refresh_rate = 15
-        self.max_content_length = 1000000
+        self.max_content_length = 1_000_000
         self.max_chunks_per_second = 50
         
-        # 性能统计
+        # Streaming statistics
         self._start_time = None
         self._chunk_count = 0
         self._total_chars = 0
         self._last_chunk_time = 0
     
     async def _apply_rate_limit(self) -> None:
-        """应用速率限制，防止处理过于频繁"""
+        """Apply a simple rate limit to avoid excessive updates."""
         current_time = time.time()
         
-        # 计算当前处理速率
+        # Calculate the current throughput
         if self._start_time and current_time > self._start_time:
             elapsed = current_time - self._start_time
             chunks_per_second = self._chunk_count / elapsed
             
-            # 如果速率过高，添加延迟
+            # If throughput is too high, add a short delay
             if chunks_per_second > self.max_chunks_per_second:
                 delay = max(0, self.delay_ms / 1000.0)
                 await asyncio.sleep(delay)
         
-        # 更新最后处理时间
+        # Update the timestamp for the most recent chunk
         self._last_chunk_time = current_time
     
     def _update_statistics(self, content: str) -> None:
-        """更新性能统计"""
+        """Update basic performance statistics."""
         self._chunk_count += 1
         self._total_chars += len(content)
         
@@ -70,7 +68,7 @@ class DifyStreaming:
             self._start_time = time.time()
     
     def _get_performance_stats(self) -> Dict[str, Any]:
-        """获取性能统计信息"""
+        """Return performance statistics for summary output."""
         if not self._start_time:
             return {}
         
@@ -100,7 +98,7 @@ class DifyStreaming:
             event = data.get('event')
             
             if event == 'message':
-                # 消息事件，包含部分回复内容
+                # Message event: append assistant content
                 return {
                     'type': 'message',
                     'content': data.get('answer', ''),
@@ -109,7 +107,7 @@ class DifyStreaming:
                 }
             
             elif event == 'message_end':
-                # 消息结束事件，包含完整回复
+                # Message reference event: append referenced content
                 return {
                     'type': 'message_end',
                     'content': data.get('answer', ''),
@@ -119,7 +117,7 @@ class DifyStreaming:
                 }
             
             elif event == 'error':
-                # 错误事件
+                # Tool event
                 return {
                     'type': 'error',
                     'error': data.get('error', 'Unknown error'),
@@ -127,7 +125,7 @@ class DifyStreaming:
                 }
             
             elif event == 'message_file':
-                # 文件消息事件
+                # File event
                 return {
                     'type': 'file',
                     'file_id': data.get('file_id'),
@@ -136,7 +134,7 @@ class DifyStreaming:
                 }
             
             else:
-                # 其他事件类型
+                # Error event
                 return {
                     'type': 'other',
                     'event': event,
@@ -167,7 +165,7 @@ class DifyStreaming:
         message_id = None
         
         try:
-            # 显示等待状态
+            # Show the waiting status indicator
             if show_typing:
                 status = Status("正在思考...", console=self.console, spinner="dots")
                 status.start()
@@ -180,7 +178,7 @@ class DifyStreaming:
             max_chunks = 10000  # 设置最大处理块数，防止无限循环
             buffer_size = getattr(self, 'buffer_size', 200)  # 从配置获取缓冲大小，默认200
             
-            # 重置性能统计
+            # Update statistics
             self._start_time = None
             self._chunk_count = 0
             self._total_chars = 0
@@ -188,7 +186,7 @@ class DifyStreaming:
             async for raw_data in stream_generator:
                 chunk_count += 1
                 
-                # 防止处理过多数据块导致内存问题
+                # Prevent unbounded buffer growth by limiting chunks
                 if chunk_count > max_chunks:
                     logger.warning(f"流式数据块数量超过限制: {max_chunks}")
                     self.console.print(f"\n[yellow]警告: 响应内容过长，已截断处理[/yellow]")
@@ -202,64 +200,64 @@ class DifyStreaming:
                 data_type = parsed_data['type']
                 
                 if data_type == 'message':
-                    # 收到消息内容
+                    # Handle assistant replies
                     if not first_content_received and show_typing:
                         status.stop()
                         first_content_received = True
                     
                     content = parsed_data.get('content', '')
                     if content:
-                        # 更新性能统计
+                        # Update statistics for this chunk
                         self._update_statistics(content)
                         
                         content_buffer.append(content)
                         display_buffer.append(content)
                         
-                        # 检查内容长度，使用配置的限制
+                        # Truncate overly long responses to avoid flooding
                         total_content_length = sum(len(c) for c in content_buffer)
                         if total_content_length > self.max_content_length:
                             logger.warning(f"响应内容过长: {total_content_length} 字符")
                             self.console.print(f"\n[yellow]警告: 响应内容超过限制 ({self.max_content_length} 字符)，已截断显示[/yellow]")
                             break
                         
-                        # 应用速率限制
+                        # Handle metadata events
                         await self._apply_rate_limit()
                         
-                        # 缓冲显示：累积一定量内容或遇到换行时显示
+                        # Accumulate content and flush when necessary
                         if len(display_buffer) >= buffer_size or '\n' in content:
-                            # 显示缓冲的内容
+                            # Render assistant output
                             buffered_content = ''.join(display_buffer)
                             self.console.print(buffered_content, end="", style="bright_white")
                             display_buffer.clear()
                             
-                            # 小延迟提供更好的视觉效果
+                            # Add a tiny delay for a smoother visual
                             if self.delay_ms > 0:
                                 await asyncio.sleep(self.delay_ms / 1000.0)
                     
-                    # 更新消息和会话ID
+                    # Update conversation identifier
                     if parsed_data.get('message_id'):
                         message_id = parsed_data['message_id']
                     if parsed_data.get('conversation_id'):
                         conversation_id = parsed_data['conversation_id']
                 
                 elif data_type == 'message_end':
-                    # 消息结束
+                    # Handle message identifier
                     if not first_content_received and show_typing:
                         status.stop()
                         first_content_received = True
                     
-                    # 确保显示完整内容
+                    # Ensure buffered content is displayed
                     final_content = parsed_data.get('content', '')
                     if final_content and final_content not in ''.join(content_buffer):
                         self.console.print(final_content, style="bright_white")
                     
-                    # 更新最终的ID
+                    # Update last message identifier
                     if parsed_data.get('message_id'):
                         message_id = parsed_data['message_id']
                     if parsed_data.get('conversation_id'):
                         conversation_id = parsed_data['conversation_id']
                     
-                    # 处理元数据
+                    # Track metadata for later display
                     metadata = parsed_data.get('metadata', {})
                     if metadata:
                         self._display_metadata(metadata)
@@ -267,7 +265,7 @@ class DifyStreaming:
                     break
                 
                 elif data_type == 'error':
-                    # 处理错误
+                    # Track attachments and related resources
                     if show_typing:
                         status.stop()
                     
@@ -276,7 +274,7 @@ class DifyStreaming:
                     return None
                 
                 elif data_type == 'file':
-                    # 处理文件消息
+                    # Display information about uploaded files
                     if not first_content_received and show_typing:
                         status.stop()
                         first_content_received = True
@@ -284,20 +282,20 @@ class DifyStreaming:
                     filename = parsed_data.get('filename', 'Unknown file')
                     self.console.print(f"\n[blue]文件: {filename}[/blue]")
             
-            # 确保停止状态显示
+            # Ensure the status indicator stops cleanly
             if show_typing and not first_content_received:
                 status.stop()
             
-            # 显示剩余的缓冲内容
+            # Flush any remaining buffered content
             if display_buffer:
                 buffered_content = ''.join(display_buffer)
                 self.console.print(buffered_content, end="", style="bright_white")
             
-            # 如果有内容，确保换行
+            # Persist buffered content for summary statistics
             if content_buffer:
                 self.console.print()
                 
-                # 显示性能统计（借鉴 streaming_llm 的设计）
+                # Display statistics similar to streaming LLM diagnostics
                 stats = self._get_performance_stats()
                 if stats:
                     try:
@@ -314,7 +312,7 @@ class DifyStreaming:
                 else:
                     self.console.print(f"[dim]响应完成 (共 {len(content_buffer)} 个片段)[/dim]")
             
-            # 缓存当前会话信息
+            # Persist current conversation information
             self._current_message_id = message_id
             self._current_conversation_id = conversation_id
             
@@ -327,13 +325,13 @@ class DifyStreaming:
                 except:
                     pass
             
-            # 提供更详细的错误信息
+            # Provide detailed diagnostic information
             error_type = type(e).__name__
             error_msg = str(e)
             
             self.console.print(f"\n[red]流式输出处理错误 ({error_type}): {error_msg}[/red]")
             
-            # 根据错误类型提供具体的解决建议
+                # Suggest potential remediation steps
             if "ConnectionError" in error_type or "TimeoutError" in error_type:
                 self.console.print("[yellow]建议: 检查网络连接或 Dify 服务状态[/yellow]")
             elif "JSONDecodeError" in error_type:
