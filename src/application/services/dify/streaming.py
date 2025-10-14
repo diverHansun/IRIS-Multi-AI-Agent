@@ -265,11 +265,17 @@ class DifyStreaming:
                     break
                 
                 elif data_type == 'error':
-                    # Track attachments and related resources
                     if show_typing:
                         status.stop()
-                    
-                    error_msg = parsed_data.get('error', 'Unknown error')
+
+                    error_msg = parsed_data.get('error')
+                    detail_msg = parsed_data.get('message')
+                    if not error_msg:
+                        error_msg = detail_msg or "Unknown error"
+                    elif detail_msg and detail_msg != error_msg:
+                        error_msg = f"{error_msg}: {detail_msg}"
+
+                    logger.error("Dify error event: %s", parsed_data)
                     self.console.print(f"\n[red]错误: {error_msg}[/red]")
                     return None
                 

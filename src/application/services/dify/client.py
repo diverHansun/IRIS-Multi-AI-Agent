@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import os
@@ -156,7 +157,7 @@ class DifyClient:
         filename = os.path.basename(file_path)
         content_type = self._guess_mime_type(filename)
 
-        async def _progress_hook(transferred: int) -> None:
+        def _progress_hook(transferred: int) -> None:
             if progress_callback:
                 percentage = int(transferred * 100 / max(file_size, 1))
                 progress_callback(min(percentage, 100))
@@ -164,8 +165,9 @@ class DifyClient:
         form = aiohttp.FormData()
         form.add_field("user", user_id)
 
-        with open(file_path, "rb") as file_obj:
-            reader = _StreamingReader(file_obj, _progress_hook)
+        raw_file = open(file_path, "rb", buffering=0)
+        reader = _ProgressReader(raw_file, _progress_hook)
+        try:
             form.add_field(
                 "file",
                 reader,
@@ -181,6 +183,8 @@ class DifyClient:
             ) as response:
                 await self._raise_for_status(response, context="Upload failed")
                 return await response.json()
+        finally:
+            reader.close()
 
     async def close(self) -> None:
         """
@@ -211,18 +215,18 @@ class DifyClient:
         }.get(ext, "application/octet-stream")
 
 
-class _StreamingReader:
+class _ProgressReader(io.BufferedReader):
     """
-    Wrapper that reports upload progress while aiohttp reads chunks from disk.
+    Buffered reader that reports upload progress while aiohttp reads chunks from disk.
     """
 
-    def __init__(self, stream, callback) -> None:
-        self._stream = stream
+    def __init__(self, raw, callback) -> None:
+        super().__init__(raw)
         self._callback = callback
         self._transferred = 0
 
     def read(self, size: int = -1) -> bytes:
-        chunk = self._stream.read(size)
+        chunk = super().read(size)
         self._transferred += len(chunk)
         if chunk and self._callback:
             try:
@@ -230,7 +234,3 @@ class _StreamingReader:
             except Exception as exc:  # pragma: no cover - best effort
                 logger.debug("Progress callback failed: %s", exc)
         return chunk
-
-    def __getattr__(self, item: str) -> Any:
-        return getattr(self._stream, item)
-

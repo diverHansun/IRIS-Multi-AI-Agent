@@ -189,9 +189,11 @@ class _DifyRuntime:
                 if file_extension and not file_extension.startswith("."):
                     file_extension = f".{file_extension}"
 
-                file_type = file_result.get("type") or (
-                    "image" if file_extension in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"} else "document"
-                )
+                raw_type = file_result.get("type")
+                if raw_type in (None, "", "file"):
+                    file_type = "image" if file_extension in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"} else "document"
+                else:
+                    file_type = raw_type
 
                 self.uploaded_files.append(
                     {
@@ -430,4 +432,3 @@ class DifyService(BaseEngineService):
     async def cleanup(self, ctx) -> None:
         runtime = self._get_runtime(ctx)
         await runtime.cleanup()
-
