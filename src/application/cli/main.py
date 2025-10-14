@@ -1,0 +1,187 @@
+"""
+Refactored CLI main loop entrypoint.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Optional
+
+from src.components.shared.memory import GlobalMemoryManager, SessionManager
+
+from ..commands import dispatch
+from ..commands.parser import extract_command_name, is_command, parse_command
+from ..engine_adapters import get_adapter
+from ..services import get_current_service
+from .gui import formatter as gui_formatter
+from .gui import render as gui_render
+from .gui import logo as gui_logo
+from .state import AppState
+
+try:
+    from src.components.shared.tools.mcp import GlobalMCPManager
+    MCP_AVAILABLE = True
+except Exception:  # pragma: no cover - optional dependency
+    GlobalMCPManager = None
+    MCP_AVAILABLE = False
+
+
+async def run() -> None:
+    """
+    Entrypoint for the CLI main loop.
+    """
+    ctx = AppState()
+    if MCP_AVAILABLE:
+        ctx.mcp_manager = GlobalMCPManager
+
+    gui_logo.display_logo(ctx.console)
+    gui_logo.display_logo_intro(ctx.console)
+    gui_render.print_welcome(ctx.console)
+
+    _initialize_memory(ctx)
+
+    service = get_current_service(ctx)
+    init_result = await service.initialize(ctx)
+    if not _handle_service_result(ctx, init_result):
+        return
+
+    await _cli_loop(ctx)
+
+
+async def shutdown(waiter: Optional[asyncio.Task] = None) -> None:
+    """
+    Gracefully stop any outstanding asynchronous tasks that belong to the CLI.
+    """
+    if waiter is not None:
+        await waiter
+
+
+def _initialize_memory(ctx: AppState) -> None:
+    ctx.console.print("[yellow]Initializing memory system...[/]")
+    ctx.global_memory = GlobalMemoryManager(storage_dir="data/sessions", max_messages=50)
+    ctx.session_manager = SessionManager(ctx.global_memory)
+    ctx.session_id = ctx.session_manager.prompt_for_session_choice()
+    ctx.console.print(f"[dim]Current Session ID: {ctx.session_id}[/]")
+
+
+async def _cli_loop(ctx: AppState) -> None:
+    while True:
+        try:
+            prompt = _build_prompt(ctx)
+            query = await asyncio.to_thread(ctx.console.input, prompt)
+            if not query.strip():
+                continue
+
+            if not is_command(query):
+                await _handle_conversation(ctx, query)
+                continue
+
+            command, args = parse_command(query)
+            command_name = extract_command_name(command)
+            result = await dispatch(command_name, ctx, args)
+            should_exit = _handle_command_result(ctx, command_name, result)
+            if should_exit:
+                break
+
+        except KeyboardInterrupt:
+            ctx.console.print("\n[yellow]Interrupted. Cleaning up...[/]")
+            ctx.console.print("Goodbye!")
+            break
+        except Exception as exc:  # pragma: no cover - runtime safeguard
+            ctx.console.print(f"[bold red]Error: {exc}")
+
+
+async def _handle_conversation(ctx: AppState, query: str) -> None:
+    adapter = get_adapter(ctx.current_engine)
+    try:
+        await adapter.handle_query(ctx, query)
+    except Exception as exc:
+        ctx.console.print(f"[bold red]Conversation error: {exc}")
+
+
+def _handle_command_result(ctx: AppState, command_name: str, result) -> bool:
+    if result.type == "exit":
+        ctx.console.print(result.message or "Goodbye!")
+        return True
+
+    if result.type == "error":
+        ctx.console.print(f"[red]{result.message}[/]")
+        if result.payload:
+            _render_payload(ctx, result.payload)
+        return False
+
+    if result.type == "success":
+        if result.payload:
+            _render_payload(ctx, result.payload)
+        if result.message:
+            ctx.console.print(f"[green]{result.message}[/]")
+        return False
+
+    if result.type == "info":
+        if result.message:
+            ctx.console.print(f"[cyan]{result.message}[/]")
+        if result.payload:
+            _render_payload(ctx, result.payload)
+        return False
+
+    if result.type == "render":
+        _render_payload(ctx, result.payload or {})
+        if result.message:
+            ctx.console.print(result.message)
+
+    return False
+
+
+def _render_payload(ctx: AppState, payload: Optional[dict]) -> None:
+    if not payload:
+        return
+    kind = payload.get("kind")
+    if kind == "help":
+        gui_render.print_help(ctx.console, dify_mode=(ctx.current_engine == "dify"))
+        return
+    if kind == "info":
+        data = payload.get("data", {})
+        gui_render.render_info(
+            ctx.console,
+            data.get("agent", {}),
+            data.get("mode", {}),
+        )
+        return
+    if kind == "llm_catalog":
+        gui_render.render_llms(ctx.console, payload.get("catalog", {}))
+        return
+    if kind == "sessions":
+        sessions = payload.get("sessions", [])
+        current = payload.get("current_session_id")
+        formatted = gui_formatter.format_session_list(sessions, current)
+        gui_render.render_sessions(ctx.console, formatted, current)
+        return
+
+    if "agent" in payload and "mode" in payload:
+        gui_render.render_info(ctx.console, payload["agent"], payload["mode"])
+
+
+def _build_prompt(ctx: AppState) -> str:
+    engine = ctx.current_engine
+    if engine == "langchain":
+        config = ctx.get_engine_config("langchain")
+        mode = config.get("mode", "llm")
+        streaming = config.get("streaming", True)
+        indicator = "LLM" if mode == "llm" else "Agent"
+        stream_indicator = "[S]" if mode == "llm" and streaming else ""
+        return f"\n[bold cyan]{engine}:{indicator}{stream_indicator}[/] > "
+    return f"\n[bold cyan]{engine}[/] > "
+
+
+def _handle_service_result(ctx: AppState, result: dict) -> bool:
+    if result["type"] == "error":
+        ctx.console.print(f"[bold red]{result.get('message', 'Service initialization failed.')}[/]")
+        return False
+    payload = result.get("payload", {})
+    if payload:
+        gui_render.render_info(
+            ctx.console,
+            payload.get("agent", {}),
+            payload.get("mode", {}),
+        )
+    return True
