@@ -4,9 +4,10 @@
 ## ✨ 一、功能特性
 
 ### 核心架构
-- **双模式运行架构**:
-  - **本地模式**: Agent模式（工具调用+复杂推理）、LLM模式（快速对话+流式输出）
-  - **Dify云端模式**: 云端AI平台，支持文件上传、多模态理解、流式对话
+- **多引擎架构**:
+  - **LangChain引擎**: Agent模式（工具调用+复杂推理）、LLM模式（快速对话+流式输出）
+  - **Dify引擎**: 云端AI平台，支持文件上传、多模态理解、流式对话
+  - **LangGraph引擎**: 图工作流引擎（开发中），支持复杂任务编排
 - **多LLM提供商**: 智谱AI、OpenAI、Ollama本地模型，支持动态热切换
 - **灵活配置系统**: JSON配置文件 + 环境变量，支持热重载（`/reload`命令）
 
@@ -31,14 +32,14 @@
 
 ## 🎯 二、工作模式说明
 
-本项目支持三种工作模式，可通过命令动态切换：
+本项目支持三种运行引擎，可通过 `/switch <engine>` 命令动态切换：
 
-### 本地模式
+### LangChain引擎（本地）
 
 #### 1. Agent模式（推荐）
 - **特点**: 完整功能，支持工具调用和复杂推理
 - **适用场景**: 需要搜索、计算、地图导航等工具的复杂任务
-- **切换命令**: `/mode agent`
+- **切换命令**: `/switch langchain` 然后 `/mode agent`
 - **示例**:
   ```
   你 > 搜索北京最新的天气预报
@@ -48,7 +49,7 @@
 #### 2. LLM模式
 - **特点**: 快速响应，支持流式输出，纯对话无工具调用
 - **适用场景**: 快速问答、创意写作、代码生成等纯对话任务
-- **切换命令**: `/mode llm`
+- **切换命令**: `/switch langchain` 然后 `/mode llm`
 - **流式输出**: `/stream on` 开启，`/stream off` 关闭
 - **示例**:
   ```
@@ -56,7 +57,7 @@
   AI > [流式输出] 春风拂面...
   ```
 
-### Dify云端模式
+### Dify引擎（云端）
 
 - **特点**: 集成Dify云端AI平台，支持文件上传和多模态理解
 - **适用场景**: 文档分析、图片识别、多模态对话
@@ -72,19 +73,31 @@
   AI > [分析文档] 该文档主要介绍了...
   ```
 
-### 模式切换示例
+### LangGraph引擎（开发中）
+
+- **特点**: 基于图结构的工作流引擎，支持复杂的多步骤任务编排
+- **适用场景**: 复杂工作流、多Agent协作、状态管理
+- **切换命令**: `/switch langgraph`
+
+### 引擎切换示例
 ```bash
-# 切换到本地Agent模式（智谱AI）
-/switch zhipu glm-4-plus
+# 切换到LangChain引擎
+/switch langchain
 
-# 切换到本地LLM模式（OpenAI）
-/switch openai gpt-4o-mini
+# 在LangChain引擎中切换模型（智谱AI）
+/model zhipu glm-4.5-flash
 
-# 切换到Ollama本地模型
-/switch ollama qwen3:8b
+# 在LangChain引擎中切换模型（OpenAI）
+/model openai gpt-4o-mini
+
+# 在LangChain引擎中切换模型（Ollama本地）
+/model ollama qwen3:8b
 
 # 切换到Dify云端模式
 /switch dify
+
+# 切换到LangGraph引擎（开发中）
+/switch langgraph
 ```
 
 ## 🚀 三、快速开始
@@ -169,44 +182,35 @@ python main.py
 
 ## 💬 四、常用命令速查
 
-### 基础命令
-| 命令 | 说明 |
-|------|------|
-| `/help` | 查看帮助信息 |
-| `/info` | 查看系统状态和配置信息 |
-| `/llms` | 查看所有可用的LLM模型列表 |
-| `/exit` 或 `/quit` | 退出程序 |
-
-### 模式和模型切换
+### 全局命令（所有引擎可用）
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `/switch <provider> [model]` | 切换LLM提供商和模型 | `/switch zhipu glm-4-plus` |
-| `/switch dify` | 切换到Dify云端模式 | `/switch dify` |
-| `/mode llm` | 切换到LLM模式（快速对话） | `/mode llm` |
-| `/mode agent` | 切换到Agent模式（工具调用） | `/mode agent` |
-| `/stream on/off` | 开启/关闭流式输出（仅LLM模式） | `/stream on` |
+| `/help` | 查看帮助信息 | `/help` |
+| `/info` | 查看系统状态和配置信息 | `/info` |
+| `/exit` 或 `/quit` | 退出程序 | `/exit` |
+
+### 引擎切换
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/switch <engine>` | 切换运行引擎 | `/switch langchain` |
+|  | 可选引擎：langchain, langgraph, dify | `/switch dify` |
+
+### LangChain引擎专属命令
+
+#### 模型管理
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/model <provider>` | 切换LLM提供商和模型 | `/model zhipu glm-4-plus` |
+| `/llms` | 查看所有可用的LLM模型列表 | `/llms` |
 | `/reload` | 热重载LLM配置文件 | `/reload` |
 
-### 会话管理
+#### 模式管理
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `/clear` | 清空当前会话记忆 | `/clear` |
-| `/new` | 创建新会话 | `/new` |
-| `/sessions` | 查看历史会话列表 | `/sessions` |
-| `/restore <session_id>` | 恢复指定会话 | `/restore session_20250101_120000` |
-| `/delete_session <session_id>` | 删除指定会话 | `/delete_session session_20250101_120000` |
-| `/cleanup` | 清理孤立的会话文件 | `/cleanup` |
+| `/mode <llm\|agent>` | 切换运行模式 | `/mode agent` |
+| `/stream <on\|off>` | 开启/关闭流式输出（仅LLM模式） | `/stream on` |
 
-### 文件管理（Dify模式）
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/upload [文件路径]` | 上传文件（支持多选对话框） | `/upload report.pdf` |
-| `/files` | 查看待发送文件列表 | `/files` |
-| `/files remove <序号>` | 移除指定文件 | `/files remove 2` |
-| `/files clear` | 清空所有待发送文件 | `/files clear` |
-| `/reset` | 重置Dify会话（清除记忆和文件） | `/reset` |
-
-### 工具管理
+#### 工具管理
 | 命令 | 说明 | 示例 |
 |------|------|------|
 | `/mcp status [-v]` | 查看MCP工具状态 | `/mcp status -v` |
@@ -216,15 +220,53 @@ python main.py
 | `/connector tools [--json]` | 列出Connector工具列表 | `/connector tools` |
 | `/connector reload` | 重载Connector配置 | `/connector reload` |
 
+#### 会话管理
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/new` | 创建新会话 | `/new` |
+| `/clear` | 清空当前会话记忆 | `/clear` |
+| `/sessions` | 查看历史会话列表 | `/sessions` |
+| `/restore <session_id>` | 恢复指定会话 | `/restore session_20250101_120000` |
+| `/delete_session <session_id>` | 删除指定会话 | `/delete_session session_20250101_120000` |
+| `/cleanup` | 清理孤立的会话文件 | `/cleanup` |
+
+### LangGraph引擎专属命令（开发中）
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/graph <name>` | 选择或切换图 | `/graph workflow` |
+| `/nodes` | 查看当前图的节点 | `/nodes` |
+| `/visualize` | 可视化当前图结构 | `/visualize` |
+
+### Dify引擎专属命令
+
+#### 文件管理
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/upload [文件路径]` | 上传文件（支持多选对话框） | `/upload report.pdf` |
+| `/files` | 查看待发送文件列表 | `/files` |
+| `/files remove <序号>` | 移除指定文件 | `/files remove 2` |
+| `/files clear` | 清空所有待发送文件 | `/files clear` |
+
+#### 会话管理
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `/reset` | 重置Dify会话（清除记忆和文件） | `/reset` |
+| `/reconnect` | 重新连接Dify服务 | `/reconnect` |
+
 ### 使用提示
 - 所有命令都以 `/` 开头
 - 命令不区分大小写
-- 在Dify模式下，部分命令（如`/mcp`、`/connector`）不可用
-- 使用 `/help` 查看当前模式下可用的所有命令
+- 不同引擎下可用命令不同：
+  - **全局命令**: 所有引擎都可用
+  - **LangChain专属**: 仅在 `/switch langchain` 后可用
+  - **LangGraph专属**: 仅在 `/switch langgraph` 后可用（开发中）
+  - **Dify专属**: 仅在 `/switch dify` 后可用
+- 使用 `/help` 查看当前引擎下可用的所有命令
 
 ## 📊 五、支持的LLM模型
 
-本项目支持多个LLM提供商，可通过 `/switch <provider> [model]` 命令动态切换。
+本项目支持多个LLM提供商，在LangChain引擎下可通过 `/model <provider> [model]` 命令动态切换。
 
 ### 模型概览
 
@@ -242,17 +284,20 @@ python main.py
 ### 快速切换示例
 
 ```bash
+# 首先切换到LangChain引擎
+/switch langchain
+
 # 智谱AI - 免费闪电版（推荐入门）
-/switch zhipu glm-4.5-flash
+/model zhipu glm-4.5-flash
 
 # 智谱AI - Function Calling模式
-/switch zhipu glm-4.5
+/model zhipu glm-4.5
 
 # OpenAI - GPT-5
-/switch openai gpt-5
+/model openai gpt-5
 
 # Ollama - 本地模型
-/switch ollama qwen3:8b
+/model ollama qwen3:8b
 ```
 
 ### Ollama本地模型使用
@@ -266,7 +311,8 @@ ollama pull qwen3:8b
 ollama pull gpt-oss:20b
 
 # 3. 在项目中使用
-/switch ollama qwen3:8b
+/switch langchain
+/model ollama qwen3:8b
 ```
 
 > **💡 提示**:
