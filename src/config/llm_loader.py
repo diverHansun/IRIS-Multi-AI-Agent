@@ -66,14 +66,16 @@ class LLMConfigLoader:
         return config
 
     def _validate_config(self, config: Dict[str, Any]) -> None:
-        """验证配置格式"""
-        try:
-            # 尝试导入验证器（使用安全的导入方式）
-            import importlib.util
-            from pathlib import Path
+        """Validate provider configuration structure."""
+        import importlib.util
 
-            # 直接加载validation模块，避免src包的初始化问题
-            validation_path = Path(__file__).parent.parent / "components" / "process" / "validation.py"
+        validation_path = Path(__file__).parent.parent / "components" / "process" / "validation.py"
+        if not validation_path.exists():
+            logger.info("Validation module not found; using basic validation.")
+            self._basic_validate_config(config)
+            return
+
+        try:
             spec = importlib.util.spec_from_file_location("validation_module", validation_path)
             validation_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(validation_module)
@@ -81,36 +83,28 @@ class LLMConfigLoader:
             validate_llm_config = validation_module.validate_llm_config
             validate_and_fix_config = validation_module.validate_and_fix_config
 
-            # 验证配置
             is_valid, errors = validate_llm_config(config)
 
             if not is_valid:
-                # 尝试修复配置
                 fixed_config, warnings = validate_and_fix_config(config)
-
-                # 再次验证修复后的配置
                 is_valid_after_fix, remaining_errors = validate_llm_config(fixed_config)
 
                 if is_valid_after_fix:
-                    # 使用修复后的配置
                     config.clear()
                     config.update(fixed_config)
 
-                    # 记录警告
                     for warning in warnings:
-                        logger.warning(f"配置修复: {warning}")
+                        logger.warning(f"Config auto-fix warning: {warning}")
 
-                    logger.info("[OK] 配置验证通过（已自动修复部分问题）")
+                    logger.info("[OK] Config validated (auto-fix applied).")
                 else:
-                    # 修复后仍有错误
-                    error_msg = "配置验证失败，无法自动修复:\n" + "\n".join(remaining_errors)
+                    error_msg = "Validation failed; could not auto-fix:\n" + "\n".join(remaining_errors)
                     raise ValueError(error_msg)
             else:
-                logger.debug("[OK] 配置验证通过")
+                logger.debug("[OK] Config validated by external validator.")
 
         except ImportError:
-            # 如果验证器不可用，使用基础验证
-            logger.warning("配置验证器不可用，使用基础验证")
+            logger.warning("Failed to import validation module; using basic validation.")
             self._basic_validate_config(config)
 
     def _basic_validate_config(self, config: Dict[str, Any]) -> None:
