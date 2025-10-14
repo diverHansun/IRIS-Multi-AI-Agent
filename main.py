@@ -1,4 +1,4 @@
-"""
+﻿"""
 AI Agent Demo - Main Program
 
 Provides command-line interface and async demo functionality.
@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 # Import and run CLI
-from src.components.process.cli import run
+from src.application.cli.main import run
 
 
 def main():

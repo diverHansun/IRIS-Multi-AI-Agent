@@ -4,13 +4,8 @@ Catalog service router for engine-specific catalog lookups.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Dict, Type
-
-from .langchain.catalog import LangChainCatalogService
-from .langgraph.catalog import LangGraphCatalogService
-from .dify.catalog import DifyCatalogService
-
-CATALOG_SERVICES: Dict[str, Type["BaseCatalogService"]] = {}
 
 
 class BaseCatalogService:
@@ -28,21 +23,27 @@ class BaseCatalogService:
         return True
 
 
-CATALOG_SERVICES = {
-    "langchain": LangChainCatalogService,
-    "langgraph": LangGraphCatalogService,
-    "dify": DifyCatalogService,
-}
+@lru_cache(maxsize=1)
+def _load_catalog_services() -> Dict[str, Type[BaseCatalogService]]:
+    from .langchain.catalog import LangChainCatalogService
+    from .langgraph.catalog import LangGraphCatalogService
+    from .dify.catalog import DifyCatalogService
+
+    return {
+        "langchain": LangChainCatalogService,
+        "langgraph": LangGraphCatalogService,
+        "dify": DifyCatalogService,
+    }
 
 
 def get_catalog_service(engine: str) -> BaseCatalogService:
-    if engine not in CATALOG_SERVICES:
+    services = _load_catalog_services()
+    if engine not in services:
         raise ValueError(f"Unknown engine '{engine}'")
-    service_cls = CATALOG_SERVICES[engine]
+    service_cls = services[engine]
     return service_cls()
 
 
 async def get_engine_catalog(engine: str) -> dict:
     service = get_catalog_service(engine)
     return await service.get_catalog()
-

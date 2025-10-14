@@ -1,175 +1,147 @@
-"""
-Rendering helpers extracted from the legacy CLI GUI module.
-"""
+"""Rendering helpers for the refactored CLI."""
 
 from __future__ import annotations
 
+from textwrap import dedent
 from typing import Any, Iterable, Mapping, Sequence
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+GLOBAL_COMMANDS = [
+    ("/switch <engine>", "Switch execution engine (langchain | langgraph | dify)"),
+    ("/help", "Show contextual help"),
+    ("/info", "Display current engine status"),
+    ("/exit", "Exit the application"),
+]
+
+SESSION_COMMANDS = [
+    ("/new", "Create a fresh session"),
+    ("/clear", "Clear the messages for the active session"),
+    ("/sessions", "List stored sessions"),
+    ("/restore <session_id>", "Restore session by ID"),
+    ("/delete_session <session_id>", "Delete a session and its files"),
+    ("/cleanup", "Remove orphaned session data"),
+]
+
+LANGCHAIN_CORE_COMMANDS = [
+    ("/model <provider> [model]", "Switch model used by LangChain"),
+    ("/mode llm|agent", "Toggle between LLM and Agent modes"),
+    ("/stream on|off", "Enable or disable streaming output"),
+    ("/llms", "Show the available model catalog"),
+    ("/reload", "Reload provider configuration"),
+]
+
+LANGCHAIN_TOOL_COMMANDS = [
+    ("/mcp status [-v]", "Inspect MCP servers and registered tools"),
+    ("/mcp tools [--json]", "List MCP tools (prefixed with mcp_)"),
+    ("/mcp reload", "Reload MCP configuration"),
+    ("/connector status [-v]", "Check connector service status"),
+    ("/connector tools [--json]", "List connector tools"),
+    ("/connector reload", "Reload connector definitions"),
+]
+
+DIFY_FILE_COMMANDS = [
+    ("/upload [paths...]", "Upload files (dialog opens when no path is provided)"),
+    ("/files", "List files queued for the next conversation"),
+    ("/files remove <index ...>", "Remove files by 1-based index"),
+    ("/files clear", "Clear queued files without using them"),
+]
+
+DIFY_CONVERSATION_COMMANDS = [
+    ("/reset", "Reset the current Dify conversation"),
+    ("/reconnect", "Re-initialise the Dify client"),
+    ("/info", "Show Dify connection status"),
+]
+
+
+def _format_command_section(title: str, commands: Sequence[tuple[str, str]]) -> str:
+    lines = [title, "-" * len(title)]
+    for syntax, description in commands:
+        lines.append(f"{syntax:<28} {description}")
+    return "\n".join(lines)
+
 
 def print_welcome(console: Console) -> None:
     """
-    Display the welcome banner with feature overview.
+    Display the welcome banner with key capabilities and command overview.
     """
-    welcome_text = """
-Multi-LLM AI Agent
 
-Supported Features:
-- Multi-LLM Support (Zhipu AI GLM-4-plus/GLM-4.5, OpenAI GPT-4o/4o-mini, Ollama local models)
-- Smart conversations and complex reasoning
-- Math calculations, web search, map navigation, cryptocurrency prices
-- Session memory and multi-turn dialogues
+    summary = dedent(
+        """
+        Multi-Engine AI Assistant
 
-Basic Commands:
-/exit or /quit - Exit the program
-/help - View help information
-/info - View system status
-/llms - View available LLM list
-/model <provider> [model] - Switch LLM
-/reload - Reload LLM configuration from JSON files
+        Highlights:
+        - Unified CLI for LangChain (local), Dify (cloud), and LangGraph (reserved) engines
+        - Session memory, tool orchestration, and streaming output
+        - Built-in management commands for switching engines and administering sessions
+        """
+    ).strip()
 
-Working Modes:
-/mode llm - LLM mode (streaming output, fast response)
-/mode agent - Agent mode (tool calling, reasoning analysis)
-/stream on/off - Control streaming output
+    sections = [
+        _format_command_section("Global Commands", GLOBAL_COMMANDS),
+        _format_command_section("Session Management", SESSION_COMMANDS),
+        _format_command_section("LangChain Core", LANGCHAIN_CORE_COMMANDS),
+        _format_command_section("Tool Management", LANGCHAIN_TOOL_COMMANDS),
+    ]
 
-Memory Management:
-/clear - Clear current session memory
-/new - Create new session
-/sessions - View session history list
-/restore <session_id> - Restore specified session
-/delete_session <session_id> - Delete specified session and its files
-/cleanup - Clean up sessions (remove orphaned files and indexes)
-
-MCP Management:
-/mcp status [-v] - View MCP status/servers/tool count
-/mcp tools [--json] - List MCP tools (prefixed with mcp_)
-/mcp reload - Reload config/mcp/mcp.toml
-
-Connector Management:
-/connector status [-v] - View connector service status
-/connector tools [--json] - List available connector tools
-/connector reload - Reload connector tools and refresh connections
-
-Note: MCP tools in Agent mode are prefixed with mcp_ and require JSON object parameters.
-    """
-    console.print(Panel(welcome_text, title="Welcome", border_style="cyan"))
+    body = summary + "\n\n" + "\n\n".join(sections)
+    console.print(Panel(body, title="Welcome", border_style="cyan"))
 
 
 def print_help(console: Console, dify_mode: bool = False) -> None:
     """
     Display contextual help content.
     """
+
     if dify_mode:
-        help_text = """
-Dify Mode - Cloud AI Platform
+        dify_sections = [
+            _format_command_section("Global Commands", GLOBAL_COMMANDS),
+            _format_command_section("文件管理", DIFY_FILE_COMMANDS),
+            _format_command_section("会话控制", DIFY_CONVERSATION_COMMANDS),
+        ]
 
-File Upload & Analysis:
-"/upload" - Upload files (documents, images) for AI analysis (one-time use)
-"这个文件说了什么？" - Ask about uploaded file content
-"分析这个图片" - Analyze uploaded images
+        tips = dedent(
+            """
+            提示:
+            - 上传的文件只在下一次对话中消费一次，发送后会自动清空。
+            - `files remove` 使用 1-based 序号，可一次移除多个文件。
+            - 如需返回本地引擎，请执行 `/switch langchain` 或其它目标引擎。
+            """
+        ).strip()
 
-File Management:
-- Files are used once in the next conversation, then automatically cleared
-- Use "/files" to see pending files
-- Use "/clearfiles" to clear without using
+        body = "\n\n".join(dify_sections) + f"\n\n{tips}"
+        console.print(Panel(body, title="Dify Mode Help", border_style="cyan"))
+        return
 
-Cloud AI Features:
-- Streaming conversation with cloud AI
-- File upload and analysis
-- Multi-modal understanding
-- Built-in conversation memory
+    sections = [
+        _format_command_section("Global Commands", GLOBAL_COMMANDS),
+        _format_command_section("Session Management", SESSION_COMMANDS),
+        _format_command_section("LangChain Core", LANGCHAIN_CORE_COMMANDS),
+        _format_command_section("Tool Management", LANGCHAIN_TOOL_COMMANDS),
+    ]
 
-Available Commands:
-
-File Management:
-/upload              - Upload files (support multi-select dialog or command line)
-                       Example: /upload file1.pdf file2.png
-/files               - List all pending files with details
-/files remove <#>    - Remove specific file(s) by index number
-                       Example: /files remove 2
-                       Example: /files remove 1 3 5
-/files clear         - Clear all pending files without using them
-
-Conversation:
-/reset               - Reset conversation (clear memory and files)
-/reconnect           - Reconnect to Dify service (force reinitialize)
-/info                - Show Dify connection status and file list
-
-Mode Switch:
-/switch <provider>   - Exit Dify mode and switch to local LLM
-                       Example: /switch openai gpt-4o-mini
-
-File Support:
-- Documents: .txt, .md, .pdf, .docx, .xlsx, .csv, .html, .xml, .epub
-- Images: .jpg, .jpeg, .png, .gif, .webp, .svg
-- Max file size: 10MB per file
-
-Note: Dify mode is a standalone cloud AI service.
-Use '/switch <provider>' to exit and return to local LLM modes.
+    examples = dedent(
         """
-    else:
-        help_text = """
-Usage Examples:
-
-Math Calculations:
-"Calculate 125 + 375", "Help me calculate 15 * 23 + 100"
-
-Web Search:
-"Search for latest AI news", "Find Python tutorials"
-
-Map Navigation:
-"Search for Starbucks in Beijing", "Plan walking route from Tiananmen to Forbidden City"
-
-Cryptocurrency:
-"Get current Bitcoin price", "Analyze Bitcoin price trend"
-
-Notion Knowledge Management:
-"Search for project documents in Notion", "Get recent work records from Notion"
-
-Multi LLM Provider Switching Examples:
-"/switch zhipu glm-4-plus", "/switch openai gpt-4o", "/switch ollama gpt-oss:20b", "/switch dify"
-
-Working Modes:
-/mode llm - LLM mode: fast conversation, supports streaming output (default)
-/mode agent - Agent mode: full functionality, tool calling, session memory
-/switch dify - Dify mode (cloud agent): cloud AI platform, file upload, streaming chat
-
-Streaming Output:
-- Only available in LLM mode
-- '/stream on/off' to enable/disable
-
-Agent Mode Available Tools:
-- Math calculations, web search, map navigation, cryptocurrency prices
-- Try related questions directly for detailed functionality
-
-Basic Commands:
-Type command name to view specific instructions (e.g., type '/llms' to view model list)
-/reload - Reload LLM configuration from JSON files
-
-Session Management Commands:
-/clear - Clear current session memory content (keep session files)
-/new - Create new session
-/sessions - View session history list
-/restore <session_id> - Restore specified session
-/delete_session <session_id> - Delete specified session and its files
-/cleanup - Clean up sessions (remove orphaned files and indexes)
-
-MCP Usage and Commands:
-- Management: /mcp status [-v] | /mcp tools [--json] | /mcp reload
+        Examples:
+        - /switch langchain            切换回 LangChain 引擎
+        - /model openai gpt-4o         调整到指定模型
+        - /mode agent                  进入 Agent 模式，支持工具调用
+        - /stream on                   启用流式输出
+        - /switch dify                 进入 Dify 模式
         """
+    ).strip()
 
-    console.print(Panel(help_text, title="Help Information", border_style="green"))
+    body = "\n\n".join(sections) + f"\n\n{examples}"
+    console.print(Panel(body, title="Help", border_style="green"))
 
 
 def render_info(console: Console, agent_info: Mapping[str, Any], mode_info: Mapping[str, Any]) -> None:
     """
     Render system information including agent details and mode state.
     """
+
     provider = agent_info.get("provider", "unknown")
     model = agent_info.get("model", "unknown")
     tool_count = agent_info.get("tool_count", 0)
@@ -200,54 +172,56 @@ def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
     """
     Render available LLM providers and models.
     """
+
     if "error" in catalog:
         console.print(f"[red]{catalog['error']}[/]")
         if "message" in catalog:
             console.print(f"[yellow]{catalog['message']}[/]")
         return
 
-    panel_lines: list[str] = ["Available LLM Providers:\n"]
+    lines: list[str] = ["Available LLM Providers:\n"]
     for provider in catalog.get("providers", []):
-        panel_lines.append(f"- {provider['name']} ({provider['provider']})")
-        panel_lines.append(f"  Default Model: {provider.get('default_model') or 'None'}")
+        lines.append(f"- {provider['name']} ({provider['provider']})")
+        lines.append(f"  Default Model: {provider.get('default_model') or 'None'}")
         if provider.get("provider") == "ollama":
             local_models: Sequence[str] = provider.get("local_models", [])
             if local_models:
-                panel_lines.append(f"  Available Models: {', '.join(local_models)}")
+                lines.append(f"  Available Models: {', '.join(local_models)}")
             elif provider.get("message"):
-                panel_lines.append(f"  Note: {provider['message']}")
+                lines.append(f"  Note: {provider['message']}")
             if provider.get("error"):
-                panel_lines.append(f"  Error: {provider['error']}")
+                lines.append(f"  Error: {provider['error']}")
         else:
             models_detail = provider.get("models_detail", [])
             if models_detail:
-                panel_lines.append("  Supported Models:")
+                lines.append("  Supported Models:")
                 for entry in models_detail:
                     tag = " [Recommended]" if entry.get("recommended") else ""
                     description = entry.get("description", "")
-                    panel_lines.append(f"    * {entry.get('model')}{tag}: {description}")
-        panel_lines.append("")
+                    lines.append(f"    * {entry.get('model')}{tag}: {description}")
+        lines.append("")
 
     recommended = catalog.get("recommended", [])
     if recommended:
-        panel_lines.append("Recommended Configurations:")
+        lines.append("Recommended Configurations:")
         for rec in recommended:
-            panel_lines.append(f"  * {rec['provider_name']} {rec['model']}: {rec['description']}")
-        panel_lines.append("")
+            lines.append(f"  * {rec['provider_name']} {rec['model']}: {rec['description']}")
+        lines.append("")
 
     default_cfg = catalog.get("default", {})
     if default_cfg:
-        panel_lines.append(
+        lines.append(
             f"Startup Default LLM: {default_cfg.get('provider', 'N/A')} / {default_cfg.get('model', 'N/A')}"
         )
 
-    console.print(Panel("\n".join(panel_lines), title="LLM Catalog", border_style="magenta"))
+    console.print(Panel("\n".join(lines), title="LLM Catalog", border_style="magenta"))
 
 
 def render_sessions(console: Console, sessions: Iterable[Mapping[str, Any]], current_session_id: str | None) -> None:
     """
     Render session list using a table layout.
     """
+
     table = Table(title="Sessions")
     table.add_column("Active", style="cyan", justify="center")
     table.add_column("Session ID", style="green")
@@ -268,6 +242,7 @@ def render_mcp_status(console: Console, status: Mapping[str, Any], verbose: bool
     """
     Render the MCP status payload.
     """
+
     if verbose:
         console.print_json(data=status)
         return
@@ -282,8 +257,7 @@ def render_mcp_status(console: Console, status: Mapping[str, Any], verbose: bool
         f"Config Path: {status.get('config_path') or 'N/A'}",
         f"Last Reload: {status.get('last_reload') or 'N/A'}",
     ]
-    servers = status.get("servers", [])
-    for server in servers:
+    for server in status.get("servers", []):
         lines.append(
             f"- {server.get('name', 'unknown')}: {server.get('status', 'unknown')} "
             f"(tools: {server.get('tools_count')})"
@@ -298,6 +272,7 @@ def render_mcp_tools(console: Console, tools: Iterable[Any], json_flag: bool = F
     """
     Render MCP tool information.
     """
+
     if json_flag:
         serialised = [
             {"name": getattr(tool, "name", "unknown"), "description": getattr(tool, "description", "") or ""}
@@ -325,6 +300,7 @@ def render_connector_status(console: Console, status: Mapping[str, Any], verbose
     """
     Render connector service status.
     """
+
     if verbose:
         console.print_json(data=status)
         return
@@ -349,6 +325,7 @@ def render_connector_tools(console: Console, tools: Mapping[str, str], json_flag
     """
     Render connector tool list.
     """
+
     if json_flag:
         serialised = [{"name": name, "description": description} for name, description in tools.items()]
         console.print_json(data=serialised)
@@ -365,3 +342,4 @@ def render_connector_tools(console: Console, tools: Mapping[str, str], json_flag
         lines.append(f"... {len(tools) - 100} more tool(s) not shown")
 
     console.print(Panel("\n".join(lines), title="Connector Tools", border_style="cyan"))
+
