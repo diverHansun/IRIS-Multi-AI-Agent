@@ -50,6 +50,8 @@ class LLMService(BaseEngineService):
         provider = config.get("provider")
         model = config.get("model")
         info = self._get_model_info(provider, model)
+        config["provider"] = info.get("provider", provider)
+        config["model"] = info.get("model", model)
 
         return {
             "type": "success",
@@ -81,16 +83,21 @@ class LLMService(BaseEngineService):
         config["provider"] = provider
         if model is not None:
             config["model"] = model
+        else:
+            config.pop("model", None)
         config["llm_instance"] = None
         try:
             llm = self._ensure_llm(ctx)
-            info = self._get_model_info(provider, config.get("model"))
+            info = self._get_model_info(config["provider"], config.get("model"))
         except Exception as exc:
             return {
                 "type": "error",
                 "message": f"Failed to switch LLM: {exc}",
                 "payload": {},
             }
+
+        config["provider"] = info.get("provider", provider)
+        config["model"] = info.get("model", config.get("model"))
 
         return {
             "type": "success",
@@ -119,6 +126,9 @@ class LLMService(BaseEngineService):
             info = self._get_model_info(provider, model)
         except Exception:
             info = {"provider": provider, "model": model}
+        else:
+            config["provider"] = info.get("provider", provider)
+            config["model"] = info.get("model", model)
         return {
             "agent": {
                 "provider": info.get("provider", provider),
