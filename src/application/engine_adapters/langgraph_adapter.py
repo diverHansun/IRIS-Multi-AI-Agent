@@ -4,7 +4,7 @@ LangGraph engine adapter placeholder.
 
 from __future__ import annotations
 
-from ..services.langgraph import LangGraphService
+from ..services.langgraph import LangGraphService  # pyright: ignore[reportMissingImports]
 from .base import BaseAdapter
 
 

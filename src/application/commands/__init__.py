@@ -1,6 +1,4 @@
-"""
-Command registry and dispatcher.
-"""
+"""Command registry and dispatcher."""
 
 from __future__ import annotations
 
@@ -12,10 +10,6 @@ COMMAND_REGISTRY: Dict[str, BaseCommand] = {}
 
 
 async def dispatch(name: str, ctx, args: str) -> CommandResult:
-    """
-    Dispatch a command by name. The registry will be populated during the
-    migration steps.
-    """
     command = COMMAND_REGISTRY.get(name)
     if command is None:
         return CommandResult.error(f"Unknown command '{name}'")
@@ -25,18 +19,22 @@ async def dispatch(name: str, ctx, args: str) -> CommandResult:
 
 
 def register_command(command: BaseCommand) -> None:
-    """
-    Register a command instance into the registry.
-    """
     for cmd_name in command.get_all_names():
         COMMAND_REGISTRY[cmd_name] = command
 
 
 def register_default_commands() -> None:
-    """
-    Populate the registry with the default command set.
-    """
+    from .agent.mode_commands import ModeCommand
+    from .agent.model_commands import ModelCommand
+    from .agent.tool_commands import ConnectorCommand, MCPCommand
+    from .agentflow.graph_commands import GraphCommand
+    from .agentflow.model_commands import AgentFlowModelCommand
+    from .agentflow.node_commands import NodesCommand, VisualizeCommand
+    from .dify.file_commands import DifyFilesCommand, DifyUploadCommand
+    from .dify.session_commands import DifyReconnectCommand, DifyResetCommand
     from .engine_commands import SwitchEngineCommand
+    from .llm.llm_commands import LLMsCommand, ReloadCommand
+    from .llm.stream_commands import StreamCommand as LLMStreamCommand
     from .shared.session_commands import (
         CleanupSessionsCommand,
         ClearSessionCommand,
@@ -46,15 +44,6 @@ def register_default_commands() -> None:
         RestoreSessionCommand,
     )
     from .shared.system_commands import ExitCommand, HelpCommand, InfoCommand
-    from .langchain.llm_commands import LLMsCommand, ReloadCommand
-    from .langchain.mode_commands import ModeCommand, StreamCommand
-    from .langchain.model_commands import ModelCommand
-    from .langchain.tool_commands import ConnectorCommand, MCPCommand
-    from .langgraph.graph_commands import GraphCommand
-    from .langgraph.model_commands import LangGraphModelCommand
-    from .langgraph.node_commands import NodesCommand, VisualizeCommand
-    from .dify.file_commands import DifyFilesCommand, DifyUploadCommand
-    from .dify.session_commands import DifyReconnectCommand, DifyResetCommand
 
     commands: list[BaseCommand] = [
         SwitchEngineCommand(),
@@ -69,15 +58,15 @@ def register_default_commands() -> None:
         CleanupSessionsCommand(),
         ModelCommand(),
         ModeCommand(),
-        StreamCommand(),
         LLMsCommand(),
         ReloadCommand(),
+        LLMStreamCommand(),
         MCPCommand(),
         ConnectorCommand(),
         GraphCommand(),
         NodesCommand(),
         VisualizeCommand(),
-        LangGraphModelCommand(),
+        AgentFlowModelCommand(),
         DifyUploadCommand(),
         DifyFilesCommand(),
         DifyResetCommand(),
@@ -88,5 +77,4 @@ def register_default_commands() -> None:
         register_command(command)
 
 
-# Populate registry on import
 register_default_commands()

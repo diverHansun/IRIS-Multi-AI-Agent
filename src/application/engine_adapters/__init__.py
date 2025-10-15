@@ -1,20 +1,20 @@
-"""
-Engine adapter router used to dispatch queries to engine services.
-"""
+"""Engine adapter router used to dispatch queries to engine services."""
 
 from __future__ import annotations
 
 from typing import Dict, Type
 
+from .agent_adapter import AgentAdapter
+from .agentflow_adapter import AgentFlowAdapter
 from .base import BaseAdapter
 from .dify_adapter import DifyAdapter
-from .langchain_adapter import LangChainAdapter
-from .langgraph_adapter import LangGraphAdapter
+from .llm_adapter import LLMAdapter
 
 
 ADAPTERS: Dict[str, Type[BaseAdapter]] = {
-    "langchain": LangChainAdapter,
-    "langgraph": LangGraphAdapter,
+    "llm": LLMAdapter,
+    "agent": AgentAdapter,
+    "agentflow": AgentFlowAdapter,
     "dify": DifyAdapter,
 }
 

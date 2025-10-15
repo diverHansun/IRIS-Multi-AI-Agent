@@ -1,5 +1,5 @@
 """
-Session management commands shared by LangChain and LangGraph engines.
+Session management commands shared by LLM, Agent, and AgentFlow engines.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from ..base import BaseCommand, CommandResult
 
 class NewSessionCommand(BaseCommand):
     name = "new"
-    engine_scope = ("langchain", "langgraph")
+    engine_scope = ("llm", "agent", "agentflow")
     help_text = "Create a new session."
 
     async def execute(self, ctx, args: str) -> CommandResult:
@@ -24,7 +24,7 @@ class NewSessionCommand(BaseCommand):
 
 class ClearSessionCommand(BaseCommand):
     name = "clear"
-    engine_scope = ("langchain", "langgraph")
+    engine_scope = ("llm", "agent", "agentflow")
     help_text = "Clear the current session memory."
 
     async def execute(self, ctx, args: str) -> CommandResult:
@@ -37,7 +37,7 @@ class ClearSessionCommand(BaseCommand):
 
 class ListSessionsCommand(BaseCommand):
     name = "sessions"
-    engine_scope = ("langchain", "langgraph")
+    engine_scope = ("llm", "agent", "agentflow")
     help_text = "List available sessions."
 
     async def execute(self, ctx, args: str) -> CommandResult:
@@ -56,7 +56,7 @@ class ListSessionsCommand(BaseCommand):
 
 class RestoreSessionCommand(BaseCommand):
     name = "restore"
-    engine_scope = ("langchain", "langgraph")
+    engine_scope = ("llm", "agent", "agentflow")
     help_text = "Restore a specific session by ID."
 
     async def execute(self, ctx, args: str) -> CommandResult:
@@ -77,7 +77,7 @@ class RestoreSessionCommand(BaseCommand):
 
 class DeleteSessionCommand(BaseCommand):
     name = "delete_session"
-    engine_scope = ("langchain", "langgraph")
+    engine_scope = ("llm", "agent", "agentflow")
     help_text = "Delete a session by ID."
 
     async def execute(self, ctx, args: str) -> CommandResult:
@@ -101,7 +101,7 @@ class DeleteSessionCommand(BaseCommand):
 
 class CleanupSessionsCommand(BaseCommand):
     name = "cleanup"
-    engine_scope = ("langchain", "langgraph")
+    engine_scope = ("llm", "agent", "agentflow")
     help_text = "Clean up orphaned sessions."
 
     async def execute(self, ctx, args: str) -> CommandResult:

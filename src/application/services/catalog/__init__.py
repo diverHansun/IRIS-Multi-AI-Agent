@@ -25,13 +25,15 @@ class BaseCatalogService:
 
 @lru_cache(maxsize=1)
 def _load_catalog_services() -> Dict[str, Type[BaseCatalogService]]:
-    from .langchain.catalog import LangChainCatalogService
-    from .langgraph.catalog import LangGraphCatalogService
+    from .agent.basic import BasicAgentCatalogService
+    from .agentflow import AgentFlowCatalogService
+    from .llm import LLMCatalogService
     from .dify.catalog import DifyCatalogService
 
     return {
-        "langchain": LangChainCatalogService,
-        "langgraph": LangGraphCatalogService,
+        "agent.basic": BasicAgentCatalogService,
+        "agentflow": AgentFlowCatalogService,
+        "llm": LLMCatalogService,
         "dify": DifyCatalogService,
     }
 
