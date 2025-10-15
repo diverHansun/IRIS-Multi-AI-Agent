@@ -167,13 +167,17 @@ def _render_payload(ctx: AppState, payload: Optional[dict]) -> None:
 
 def _build_prompt(ctx: AppState) -> str:
     engine = ctx.current_engine
-    if engine == "langchain":
-        config = ctx.get_engine_config("langchain")
-        mode = config.get("mode", "llm")
-        streaming = config.get("streaming", True)
-        indicator = "LLM" if mode == "llm" else "Agent"
-        stream_indicator = "[S]" if mode == "llm" and streaming else ""
-        return f"\n[bold cyan]{engine}:{indicator}{stream_indicator}[/] > "
+    if engine == "agent":
+        config = ctx.get_engine_config("agent")
+        agent_type = config.get("agent_type", "basic")
+        streaming = bool(config.get("streaming", True))
+        stream_indicator = "[S]" if streaming else ""
+        return f"\n[bold cyan]{engine}:{agent_type.upper()}{stream_indicator}[/] > "
+    if engine == "llm":
+        config = ctx.get_engine_config("llm")
+        streaming = bool(config.get("streaming", True))
+        stream_indicator = "[S]" if streaming else ""
+        return f"\n[bold cyan]{engine}:LLM{stream_indicator}[/] > "
     return f"\n[bold cyan]{engine}[/] > "
 
 
@@ -198,3 +202,5 @@ async def _cleanup_engines(ctx: AppState) -> None:
         await DifyService().cleanup(ctx)
     except Exception as exc:  # pragma: no cover - best effort cleanup
         logger.debug("Engine cleanup skipped: %s", exc)
+
+

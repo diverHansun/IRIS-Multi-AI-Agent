@@ -10,7 +10,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 GLOBAL_COMMANDS = [
-    ("/switch <engine>", "Switch execution engine (langchain | langgraph | dify)"),
+    ("/switch <engine>", "Switch execution engine (llm | agent | agentflow | dify)"),
+
     ("/help", "Show contextual help"),
     ("/info", "Display current engine status"),
     ("/exit", "Exit the application"),
@@ -25,15 +26,19 @@ SESSION_COMMANDS = [
     ("/cleanup", "Remove orphaned session data"),
 ]
 
-LANGCHAIN_CORE_COMMANDS = [
-    ("/model <provider> [model]", "Switch model used by LangChain"),
-    ("/mode llm|agent", "Toggle between LLM and Agent modes"),
-    ("/stream on|off", "Enable or disable streaming output"),
-    ("/llms", "Show the available model catalog"),
-    ("/reload", "Reload provider configuration"),
+LLM_ENGINE_COMMANDS = [
+    ("/model <provider> [model]", "Switch provider/model for the LLM engine"),
+    ("/stream on|off", "Enable or disable LLM streaming output"),
+    ("/llms", "Show the available LLM model catalog"),
+    ("/reload", "Reload LLM provider configuration"),
 ]
 
-LANGCHAIN_TOOL_COMMANDS = [
+AGENT_ENGINE_COMMANDS = [
+    ("/model <provider> [model]", "Switch provider/model for the agent engine"),
+    ("/mode basic|deep", "Toggle agent mode"),
+]
+
+AGENT_TOOL_COMMANDS = [
     ("/mcp status [-v]", "Inspect MCP servers and registered tools"),
     ("/mcp tools [--json]", "List MCP tools (prefixed with mcp_)"),
     ("/mcp reload", "Reload MCP configuration"),
@@ -73,7 +78,7 @@ def print_welcome(console: Console) -> None:
         Multi-Engine AI Assistant
 
         Highlights:
-        - Unified CLI for LangChain (local), Dify (cloud), and LangGraph (reserved) engines
+        - Unified CLI for LLM, Agent, AgentFlow, and Dify engines
         - Session memory, tool orchestration, and streaming output
         - Built-in management commands for switching engines and administering sessions
         """
@@ -82,8 +87,9 @@ def print_welcome(console: Console) -> None:
     sections = [
         _format_command_section("Global Commands", GLOBAL_COMMANDS),
         _format_command_section("Session Management", SESSION_COMMANDS),
-        _format_command_section("LangChain Core", LANGCHAIN_CORE_COMMANDS),
-        _format_command_section("Tool Management", LANGCHAIN_TOOL_COMMANDS),
+        _format_command_section("LLM Engine", LLM_ENGINE_COMMANDS),
+        _format_command_section("Agent Engine", AGENT_ENGINE_COMMANDS),
+        _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
     ]
 
     body = summary + "\n\n" + "\n\n".join(sections)
@@ -98,16 +104,16 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
     if dify_mode:
         dify_sections = [
             _format_command_section("Global Commands", GLOBAL_COMMANDS),
-            _format_command_section("文件管理", DIFY_FILE_COMMANDS),
-            _format_command_section("会话控制", DIFY_CONVERSATION_COMMANDS),
+            _format_command_section("???????", DIFY_FILE_COMMANDS),
+            _format_command_section("??????", DIFY_CONVERSATION_COMMANDS),
         ]
 
         tips = dedent(
             """
-            提示:
-            - 上传的文件只在下一次对话中消费一次，发送后会自动清空。
-            - `files remove` 使用 1-based 序号，可一次移除多个文件。
-            - 如需返回本地引擎，请执行 `/switch langchain` 或其它目标引擎。
+            ???:
+            - ???????????????ζ??????????Σ??????????????
+            - `files remove` ??? 1-based ????????????????????
+            - ???践????????棬????? `/switch agent` ????????????档
             """
         ).strip()
 
@@ -118,18 +124,19 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
     sections = [
         _format_command_section("Global Commands", GLOBAL_COMMANDS),
         _format_command_section("Session Management", SESSION_COMMANDS),
-        _format_command_section("LangChain Core", LANGCHAIN_CORE_COMMANDS),
-        _format_command_section("Tool Management", LANGCHAIN_TOOL_COMMANDS),
+        _format_command_section("LLM Engine", LLM_ENGINE_COMMANDS),
+        _format_command_section("Agent Engine", AGENT_ENGINE_COMMANDS),
+        _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
     ]
 
     examples = dedent(
         """
         Examples:
-        - /switch langchain            切换回 LangChain 引擎
-        - /model openai gpt-4o         调整到指定模型
-        - /mode agent                  进入 Agent 模式，支持工具调用
-        - /stream on                   启用流式输出
-        - /switch dify                 进入 Dify 模式
+        - /switch agent               Switch to the Agent engine
+        - /mode basic                 Use the basic agent mode
+        - /model openai gpt-4o        Switch provider and model
+        - /stream on                  Enable LLM streaming output
+        - /switch dify                Switch to the Dify engine
         """
     ).strip()
 
@@ -342,4 +349,6 @@ def render_connector_tools(console: Console, tools: Mapping[str, str], json_flag
         lines.append(f"... {len(tools) - 100} more tool(s) not shown")
 
     console.print(Panel("\n".join(lines), title="Connector Tools", border_style="cyan"))
+
+
 
