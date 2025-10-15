@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..base import BaseCommand, CommandResult
+from src.application.commands.base import BaseCommand, CommandResult
 
 
 class StreamCommand(BaseCommand):

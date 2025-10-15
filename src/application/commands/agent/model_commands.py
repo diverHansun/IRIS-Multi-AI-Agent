@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ...services.agent.basic import BasicAgentService
-from ..base import BaseCommand, CommandResult
+from src.application.services.agent.basic import BasicAgentService
+from src.application.commands.base import BaseCommand, CommandResult
 
 
 class ModelCommand(BaseCommand):
@@ -19,7 +19,7 @@ class ModelCommand(BaseCommand):
         if ctx.current_engine == "agent":
             service = BasicAgentService()
         elif ctx.current_engine == "llm":
-            from ...services.llm import LLMService
+            from src.application.services.llm import LLMService
 
             service = LLMService()
         else:

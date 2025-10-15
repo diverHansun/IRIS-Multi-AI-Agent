@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from .service import AgentFlowService
+from src.application.services.agentflow.service import AgentFlowService
 
 __all__ = ["AgentFlowService"]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .base import BaseAdapter
-from ..services.llm import LLMService
+from src.application.engine_adapters.base import BaseAdapter
+from src.application.services.llm import LLMService
 
 
 class LLMAdapter(BaseAdapter):

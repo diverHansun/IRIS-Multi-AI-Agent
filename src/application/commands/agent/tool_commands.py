@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from typing import List
 
-from ...cli.gui import render as gui_render
-from ...services.shared.tools import connector_control, mcp_control
-from ..base import BaseCommand, CommandResult
+from src.application.cli.gui import render as gui_render
+from src.application.services.shared.tools import connector_control, mcp_control
+from src.application.commands.base import BaseCommand, CommandResult
 
 
 class MCPCommand(BaseCommand):

@@ -8,7 +8,7 @@ from typing import Any, Dict, Tuple
 
 from src.agents.basicagents.managers import agent_manager
 
-from .streaming import register_llm
+from src.application.services.agent.basic.streaming import register_llm
 
 
 def _agent_config(ctx) -> Dict[str, Any]:

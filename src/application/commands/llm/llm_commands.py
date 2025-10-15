@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ...services.llm import LLMService
-from ..base import BaseCommand, CommandResult
+from src.application.services.llm import LLMService
+from src.application.commands.base import BaseCommand, CommandResult
 
 
 class LLMsCommand(BaseCommand):

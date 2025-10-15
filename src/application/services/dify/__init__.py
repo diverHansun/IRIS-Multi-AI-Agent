@@ -4,7 +4,7 @@ Dify engine service package.
 
 from __future__ import annotations
 
-from .service import DifyService
+from src.application.services.dify.service import DifyService
 
 __all__ = ["DifyService"]
 

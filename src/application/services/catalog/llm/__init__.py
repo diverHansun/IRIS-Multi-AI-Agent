@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from .catalog import LLMCatalogService
+from src.application.services.catalog.llm.catalog import LLMCatalogService
 
 __all__ = ["LLMCatalogService"]

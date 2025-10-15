@@ -4,7 +4,7 @@ AgentFlow catalog service placeholder.
 
 from __future__ import annotations
 
-from .. import BaseCatalogService
+from src.application.services.catalog import BaseCatalogService
 
 
 class AgentFlowCatalogService(BaseCatalogService):

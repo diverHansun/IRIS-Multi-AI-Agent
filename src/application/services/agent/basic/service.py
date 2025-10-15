@@ -9,11 +9,11 @@ from typing import Any, Dict, List
 from src.agents.basicagents.managers import agent_manager
 from src.llm.managers import reload_llm_config
 
-from ..base import BaseEngineService
-from ..catalog import get_catalog_service
-from .agent_lifecycle import create_default_agent, switch_agent
-from .conversation import handle_agent_query
-from .streaming import register_llm
+from src.application.services.base import BaseEngineService
+from src.application.services.catalog import get_catalog_service
+from src.application.services.agent.basic.agent_lifecycle import create_default_agent, switch_agent
+from src.application.services.agent.basic.conversation import handle_agent_query
+from src.application.services.agent.basic.streaming import register_llm
 
 
 class BasicAgentService(BaseEngineService):

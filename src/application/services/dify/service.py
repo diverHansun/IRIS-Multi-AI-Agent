@@ -17,10 +17,10 @@ from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 
-from ..base import BaseEngineService
-from .client import DifyClient, DifyClientError
-from .streaming import DifyStreaming
-from .upload import handle_upload_command
+from src.application.services.base import BaseEngineService
+from src.application.services.dify.client import DifyClient, DifyClientError
+from src.application.services.dify.streaming import DifyStreaming
+from src.application.services.dify.upload import handle_upload_command
 
 logger = logging.getLogger(__name__)
 

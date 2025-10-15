@@ -10,14 +10,14 @@ from typing import Optional
 
 from src.components.shared.memory import GlobalMemoryManager, SessionManager
 
-from ..commands import dispatch
-from ..commands.parser import extract_command_name, is_command, parse_command
-from ..engine_adapters import get_adapter
-from ..services import get_current_service
-from .gui import formatter as gui_formatter
-from .gui import render as gui_render
-from .gui import logo as gui_logo
-from .state import AppState
+from src.application.commands import dispatch
+from src.application.commands.parser import extract_command_name, is_command, parse_command
+from src.application.engine_adapters import get_adapter
+from src.application.services import get_current_service
+from src.application.cli.gui import formatter as gui_formatter
+from src.application.cli.gui import render as gui_render
+from src.application.cli.gui import logo as gui_logo
+from src.application.cli.state import AppState
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +197,7 @@ def _handle_service_result(ctx: AppState, result: dict) -> bool:
 async def _cleanup_engines(ctx: AppState) -> None:
     """Release resources for engines that maintain external connections."""
     try:
-        from ..services.dify import DifyService
+        from src.application.services.dify import DifyService
 
         await DifyService().cleanup(ctx)
     except Exception as exc:  # pragma: no cover - best effort cleanup

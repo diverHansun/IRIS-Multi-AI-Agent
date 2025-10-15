@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ..services.agent.basic import BasicAgentService
-from .base import BaseAdapter
+from src.application.services.agent.basic import BasicAgentService
+from src.application.engine_adapters.base import BaseAdapter
 
 
 class AgentAdapter(BaseAdapter):

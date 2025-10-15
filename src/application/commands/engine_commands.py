@@ -4,8 +4,8 @@ Engine-scoped commands such as /switch.
 
 from __future__ import annotations
 
-from ..services import get_current_service
-from .base import BaseCommand, CommandResult
+from src.application.services import get_current_service
+from src.application.commands.base import BaseCommand, CommandResult
 
 
 class SwitchEngineCommand(BaseCommand):
@@ -26,7 +26,7 @@ class SwitchEngineCommand(BaseCommand):
             return CommandResult.info(f"Already using engine '{engine}'.")
 
         if previous_engine == "dify":
-            from ..services.dify import DifyService
+            from src.application.services.dify import DifyService
 
             await DifyService().cleanup(ctx)
 

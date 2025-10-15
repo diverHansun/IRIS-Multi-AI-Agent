@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ..services.agentflow import AgentFlowService
-from .base import BaseAdapter
+from src.application.services.agentflow import AgentFlowService
+from src.application.engine_adapters.base import BaseAdapter
 
 
 class AgentFlowAdapter(BaseAdapter):

@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import List
 
-from ...services.dify import DifyService
-from ..base import BaseCommand, CommandResult
+from src.application.services.dify import DifyService
+from src.application.commands.base import BaseCommand, CommandResult
 
 
 class DifyUploadCommand(BaseCommand):

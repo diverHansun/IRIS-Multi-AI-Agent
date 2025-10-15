@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from .service import LLMService
+from src.application.services.llm.service import LLMService
 
 __all__ = ["LLMService"]

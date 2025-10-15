@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from ..base import BaseEngineService
+from src.application.services.base import BaseEngineService
 
 
 class AgentFlowService(BaseEngineService):

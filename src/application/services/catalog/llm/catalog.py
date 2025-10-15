@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from src.llm.managers import get_available_providers
 
-from .. import BaseCatalogService
+from src.application.services.catalog import BaseCatalogService
 
 
 class LLMCatalogService(BaseCatalogService):

@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from langchain_core.messages import HumanMessage
 
-from .streaming import stream_response
+from src.application.services.llm.streaming import stream_response
 
 
 def _build_context(history_messages: List[Any]) -> str:

@@ -4,8 +4,8 @@ System-level commands such as /help or /exit.
 
 from __future__ import annotations
 
-from ...services import get_current_service
-from ..base import BaseCommand, CommandResult
+from src.application.services import get_current_service
+from src.application.commands.base import BaseCommand, CommandResult
 
 
 class HelpCommand(BaseCommand):

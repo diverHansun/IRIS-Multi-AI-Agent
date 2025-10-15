@@ -9,7 +9,7 @@ from typing import Any, Dict
 from src.agents.basicagents.managers import agent_manager
 from src.core.providers.utils import list_ollama_models
 
-from .. import BaseCatalogService
+from src.application.services.catalog.agent import BaseCatalogService
 
 
 class BasicAgentCatalogService(BaseCatalogService):

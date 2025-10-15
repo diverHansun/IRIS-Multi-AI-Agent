@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.progress import BarColumn, FileSizeColumn, Progress, TimeRemainingColumn
 from tkinter import filedialog
 
-from .client import DifyClient, DifyClientError
+from src.application.services.dify.client import DifyClient, DifyClientError
 
 logger = logging.getLogger(__name__)
 

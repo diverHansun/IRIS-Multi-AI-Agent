@@ -4,10 +4,10 @@ from typing import Any, Dict
 
 from src.llm.managers import create_llm, get_llm_info, reload_llm_config
 
-from ..base import BaseEngineService
-from ..catalog import get_catalog_service
-from .conversation import handle_llm_query
-from .streaming import register_llm
+from src.application.services.base import BaseEngineService
+from src.application.services.catalog import get_catalog_service
+from src.application.services.llm.conversation import handle_llm_query
+from src.application.services.llm.streaming import register_llm
 
 
 class LLMService(BaseEngineService):

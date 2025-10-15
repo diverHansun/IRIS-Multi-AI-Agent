@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from .base import BaseCommand, CommandResult
+from src.application.commands.base import BaseCommand, CommandResult
 
 COMMAND_REGISTRY: Dict[str, BaseCommand] = {}
 
@@ -24,18 +24,18 @@ def register_command(command: BaseCommand) -> None:
 
 
 def register_default_commands() -> None:
-    from .agent.mode_commands import ModeCommand
-    from .agent.model_commands import ModelCommand
-    from .agent.tool_commands import ConnectorCommand, MCPCommand
-    from .agentflow.graph_commands import GraphCommand
-    from .agentflow.model_commands import AgentFlowModelCommand
-    from .agentflow.node_commands import NodesCommand, VisualizeCommand
-    from .dify.file_commands import DifyFilesCommand, DifyUploadCommand
-    from .dify.session_commands import DifyReconnectCommand, DifyResetCommand
-    from .engine_commands import SwitchEngineCommand
-    from .llm.llm_commands import LLMsCommand, ReloadCommand
-    from .llm.stream_commands import StreamCommand as LLMStreamCommand
-    from .shared.session_commands import (
+    from src.application.commands.agent.mode_commands import ModeCommand
+    from src.application.commands.agent.model_commands import ModelCommand
+    from src.application.commands.agent.tool_commands import ConnectorCommand, MCPCommand
+    from src.application.commands.agentflow.graph_commands import GraphCommand
+    from src.application.commands.agentflow.model_commands import AgentFlowModelCommand
+    from src.application.commands.agentflow.node_commands import NodesCommand, VisualizeCommand
+    from src.application.commands.dify.file_commands import DifyFilesCommand, DifyUploadCommand
+    from src.application.commands.dify.session_commands import DifyReconnectCommand, DifyResetCommand
+    from src.application.commands.engine_commands import SwitchEngineCommand
+    from src.application.commands.llm.llm_commands import LLMsCommand, ReloadCommand
+    from src.application.commands.llm.stream_commands import StreamCommand as LLMStreamCommand
+    from src.application.commands.shared.session_commands import (
         CleanupSessionsCommand,
         ClearSessionCommand,
         DeleteSessionCommand,
@@ -43,7 +43,7 @@ def register_default_commands() -> None:
         NewSessionCommand,
         RestoreSessionCommand,
     )
-    from .shared.system_commands import ExitCommand, HelpCommand, InfoCommand
+    from src.application.commands.shared.system_commands import ExitCommand, HelpCommand, InfoCommand
 
     commands: list[BaseCommand] = [
         SwitchEngineCommand(),
