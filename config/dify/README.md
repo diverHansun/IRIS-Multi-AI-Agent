@@ -6,13 +6,28 @@
 
 ## 配置项说明
 
+### 基础配置
 - `api_key`: Dify API 密钥，从环境变量 `DIFY_API_KEY` 读取（包含应用信息）
 - `base_url`: Dify API 基础URL，默认为 `https://api.dify.ai/v1`，可通过环境变量 `DIFY_BASE_URL` 覆盖
-- `timeout`: API 请求超时时间（秒）
+
+### 超时配置
+- `timeout`: 普通 API 请求超时时间（秒），默认 30
+- `streaming_timeout`: 流式响应超时时间（秒），默认 300，适应 Agent 模式的长推理时间
+
+### 显示配置
+- `buffer_size`: 字符缓冲区大小，默认 200，影响刷新频率
+- `delay_ms`: 每个块的显示延迟（毫秒），默认 10，控制输出速度
+- `display_refresh_rate`: 每秒最大刷新次数，默认 50
+- `max_content_length`: 最大响应长度，默认 1000000
+- `rate_limit_per_second`: 每秒最大块数，默认 50，防止刷屏
+
+### 文件上传配置
 - `supported_file_types`: 支持的文件类型列表
-- `max_file_size`: 最大文件大小（字节），默认10MB
-- `retry_attempts`: API 请求重试次数
-- `retry_delay`: 重试延迟时间（秒）
+- `max_file_size`: 最大文件大小（字节），默认 10485760（10MB）
+
+### 重试配置
+- `retry_attempts`: 网络失败重试次数，默认 3
+- `retry_delay`: 重试延迟时间（秒），默认 1.0
 
 ## 环境变量
 

@@ -1,0 +1,38 @@
+{
+  "api_key": "${DIFY_API_KEY}",
+  "base_url": "${DIFY_BASE_URL:-https://api.dify.ai/v1}",
+  "timeout": 30,
+  "streaming_timeout": 300,
+  "buffer_size": 200,
+  "delay_ms": 10,
+  "display_refresh_rate": 50,
+  "max_content_length": 1000000,
+  "rate_limit_per_second": 50,
+  "supported_file_types": [
+    ".txt",
+    ".md",
+    ".markdown",
+    ".pdf",
+    ".html",
+    ".xlsx",
+    ".xls",
+    ".docx",
+    ".csv",
+    ".eml",
+    ".msg",
+    ".pptx",
+    ".ppt",
+    ".xml",
+    ".epub",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".webp",
+    ".svg"
+  ],
+  "max_file_size": 10485760,
+  "retry_attempts": 3,
+  "retry_delay": 1.0
+}
+

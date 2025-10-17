@@ -8,13 +8,16 @@ client lifecycle, streaming output, and file management.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import aiohttp
 from rich.console import Console
 
 from src.application.services.base import BaseEngineService
@@ -30,7 +33,9 @@ class _DifyRuntime:
     Runtime wrapper that encapsulates the legacy Dify control behaviour.
     """
 
-    def __init__(self, console: Console, config_path: str = "config/dify/config.json") -> None:
+    def __init__(
+        self, console: Console, config_path: str = "config/dify/config.json"
+    ) -> None:
         self.console = console
         self.config_path = config_path
         self.config_data: Optional[Dict[str, Any]] = None
@@ -39,6 +44,16 @@ class _DifyRuntime:
         self.conversation_id: Optional[str] = None
         self.uploaded_files: List[Dict[str, Any]] = []
         self.initialized: bool = False
+
+        # Generate session ID and create logger adapter
+        self.session_id = str(uuid.uuid4())[:8]
+        self.logger = logging.LoggerAdapter(
+            logger,
+            {
+                "session_id": self.session_id,
+                "conversation_id": None,
+            },
+        )
 
     async def initialize(self, force_reinit: bool = False) -> Dict[str, Any]:
         """
@@ -62,22 +77,26 @@ class _DifyRuntime:
             api_key=self.config_data["api_key"],
             base_url=self.config_data["base_url"],
             timeout=self.config_data.get("timeout", 30),
+            streaming_timeout=self.config_data.get("streaming_timeout", 300),
         )
 
         self.streaming = DifyStreaming(self.console)
-        self.streaming.buffer_size = self.config_data.get("streaming_buffer_size", 200)
-        self.streaming.delay_ms = self.config_data.get("streaming_delay_ms", 20)
-        self.streaming.display_refresh_rate = self.config_data.get("streaming_display_refresh_rate", 15)
-        self.streaming.max_content_length = self.config_data.get("max_content_length", 1_000_000)
-        self.streaming.max_chunks_per_second = self.config_data.get("max_chunks_per_second", 50)
-
-        try:
-            await self._test_connection()
-        except DifyClientError as exc:
-            logger.error("Dify connection test failed: %s", exc)
-            return {"type": "error", "message": f"Connection test failed: {exc}"}
+        self.streaming.buffer_size = self.config_data.get("buffer_size", 200)
+        self.streaming.delay_ms = self.config_data.get("delay_ms", 10)
+        self.streaming.display_refresh_rate = self.config_data.get(
+            "display_refresh_rate", 50
+        )
+        self.streaming.max_content_length = self.config_data.get(
+            "max_content_length", 1_000_000
+        )
+        self.streaming.max_chunks_per_second = self.config_data.get(
+            "rate_limit_per_second", 50
+        )
 
         self.initialized = True
+        self.logger.info(
+            "Dify service initialized", extra={"base_url": self.config_data["base_url"]}
+        )
         return {"type": "success", "message": "Dify client initialised successfully."}
 
     def _load_config(self) -> Dict[str, Any]:
@@ -110,64 +129,121 @@ class _DifyRuntime:
         required = ("api_key", "base_url")
         for field in required:
             if not config.get(field):
-                self.console.print(f"[red]Config validation failed: missing '{field}'.[/]")
+                self.console.print(
+                    f"[red]Config validation failed: missing '{field}'.[/]"
+                )
                 return False
 
         api_key = config["api_key"]
         if not (api_key.startswith("app-") or api_key.startswith("sk-")):
-            self.console.print("[red]Invalid API key format. Should start with 'app-' or 'sk-'.[/]")
+            self.console.print(
+                "[red]Invalid API key format. Should start with 'app-' or 'sk-'.[/]"
+            )
             return False
 
         return True
 
-    async def _test_connection(self) -> None:
-        """
-        Send a lightweight request to ensure the client credentials work.
-        """
-        if self.client is None:
-            raise DifyClientError("Client not initialised.")
-
-        async for _ in self.client.chat_message(
-            query="health_check",
-            user_id="system_probe",
-            streaming=False,
-        ):
-            break
-
     async def handle_query(self, query: str, user_id: str) -> Dict[str, Any]:
+        """Handle query with automatic retry on network failures."""
         if not self.initialized or self.client is None or self.streaming is None:
             return {"type": "error", "message": "Dify client is not initialised."}
 
+        retry_attempts = self.config_data.get("retry_attempts", 3)
+        retry_delay = self.config_data.get("retry_delay", 1.0)
+
+        # Prepare files once before retry loop
         files_payload = None
+        files_count = 0
         if self.uploaded_files:
-            files_payload = [{k: v for k, v in item.items() if not k.startswith("_")} for item in self.uploaded_files]
-            logger.debug("Sending files payload: %s", files_payload)
-
-        try:
-            stream = self.client.chat_message(
-                query=query,
-                user_id=user_id,
-                streaming=True,
-                conversation_id=self.conversation_id,
-                files=files_payload,
+            files_payload = [
+                {k: v for k, v in item.items() if not k.startswith("_")}
+                for item in self.uploaded_files
+            ]
+            files_count = len(self.uploaded_files)
+            self.logger.debug(
+                "Prepared files payload", extra={"file_count": files_count}
             )
+            # Clear immediately to prevent reuse
+            self.uploaded_files.clear()
 
-            if self.uploaded_files:
-                self.console.print(f"[dim]Using {len(self.uploaded_files)} queued file(s); queue cleared.[/]")
-                self.uploaded_files.clear()
+        last_error = None
+        for attempt in range(retry_attempts):
+            try:
+                self.logger.info(
+                    f"Processing query (attempt {attempt + 1}/{retry_attempts})",
+                    extra={"user_id": user_id, "attempt": attempt + 1},
+                )
 
-            new_conversation_id = await self.streaming.display_stream(stream)
-            if new_conversation_id:
-                self.conversation_id = new_conversation_id
+                # Create stream (don't pass conversation_id on retry)
+                stream = self.client.chat_message(
+                    query=query,
+                    user_id=user_id,
+                    streaming=True,
+                    conversation_id=self.conversation_id if attempt == 0 else None,
+                    files=files_payload if attempt == 0 else None,  # Only first attempt
+                )
 
-            return {"type": "success", "message": ""}
-        except DifyClientError as exc:
-            await self.streaming.display_error(str(exc))
-            return {"type": "error", "message": str(exc)}
-        except Exception as exc:
-            logger.exception("Dify query processing failed: %s", exc)
-            await self.streaming.display_error(f"Query processing failed: {exc}")
-            return {"type": "error", "message": f"Query processing failed: {exc}"}
+                # Display file usage info on first attempt
+                if attempt == 0 and files_count > 0:
+                    self.console.print(
+                        f"[dim]Using {files_count} file(s). "
+                        f"Files cleared after this request.[/]"
+                    )
+
+                # Process stream
+                new_conversation_id = await self.streaming.display_stream(stream)
+                if new_conversation_id:
+                    self.conversation_id = new_conversation_id
+                    # Update logger context
+                    self.logger.extra["conversation_id"] = new_conversation_id
+
+                return {"type": "success", "message": ""}
+
+            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                last_error = exc
+                self.logger.warning(
+                    f"Network error on attempt {attempt + 1}: {type(exc).__name__}",
+                    extra={"error": str(exc), "attempt": attempt + 1},
+                )
+
+                if attempt < retry_attempts - 1:
+                    self.console.print(
+                        f"[yellow]Attempt {attempt + 1}/{retry_attempts} failed: "
+                        f"{type(exc).__name__}[/]"
+                    )
+                    self.console.print(f"[yellow]Retrying in {retry_delay}s...[/]")
+                    await asyncio.sleep(retry_delay)
+                else:
+                    # All attempts failed
+                    error_msg = (
+                        f"Network error after {retry_attempts} attempts: {str(exc)}"
+                    )
+                    if files_count > 0:
+                        error_msg += (
+                            "\nNote: Uploaded files were cleared. "
+                            "Please re-upload if needed."
+                        )
+                    self.console.print(f"[red]{error_msg}[/]")
+                    return {"type": "error", "message": error_msg}
+
+            except DifyClientError as exc:
+                # Don't retry API errors
+                self.logger.error(
+                    f"API error (not retrying): {exc}", extra={"error": str(exc)}
+                )
+                await self.streaming.display_error(str(exc))
+                return {"type": "error", "message": str(exc)}
+
+            except Exception as exc:
+                # Don't retry unexpected errors
+                self.logger.exception(
+                    f"Unexpected error: {exc}", extra={"error": str(exc)}
+                )
+                await self.streaming.display_error(f"Query processing failed: {exc}")
+                return {"type": "error", "message": f"Query processing failed: {exc}"}
+
+        # Should not reach here, but just in case
+        return {"type": "error", "message": str(last_error)}
 
     async def handle_upload(self, ctx, args: str) -> Dict[str, Any]:
         if not self.initialized or self.client is None or self.config_data is None:
@@ -191,7 +267,12 @@ class _DifyRuntime:
 
                 raw_type = file_result.get("type")
                 if raw_type in (None, "", "file"):
-                    file_type = "image" if file_extension in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"} else "document"
+                    file_type = (
+                        "image"
+                        if file_extension
+                        in {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+                        else "document"
+                    )
                 else:
                     file_type = raw_type
 
@@ -199,7 +280,8 @@ class _DifyRuntime:
                     {
                         "type": file_type,
                         "transfer_method": "local_file",
-                        "upload_file_id": raw_response.get("id") or file_result.get("file_id"),
+                        "upload_file_id": raw_response.get("id")
+                        or file_result.get("file_id"),
                         "_filename": file_result.get("filename", "unknown"),
                         "_size": file_result.get("size", 0),
                     }
@@ -208,9 +290,13 @@ class _DifyRuntime:
             count = len(uploaded_files)
             if count == 1:
                 name = uploaded_files[0].get("filename", "unknown")
-                self.console.print(f"[dim]Queued file: {name}. It will be used in the next conversation.[/]")
+                self.console.print(
+                    f"[dim]Queued file: {name}. It will be used in the next conversation.[/]"
+                )
             else:
-                self.console.print(f"[dim]Queued {count} files. They will be used in the next conversation.[/]")
+                self.console.print(
+                    f"[dim]Queued {count} files. They will be used in the next conversation.[/]"
+                )
 
             self.console.print(f"[blue]Pending files: {len(self.uploaded_files)}[/]")
 
@@ -231,11 +317,15 @@ class _DifyRuntime:
             filename = info.get("_filename", "unknown")
             file_id = info.get("upload_file_id", "unknown")
             type_color = "cyan" if file_type == "image" else "yellow"
-            self.console.print(f"  [{index}] [{type_color}]{file_type:<8}[/{type_color}] {filename} ({size_str})")
+            self.console.print(
+                f"  [{index}] [{type_color}]{file_type:<8}[/{type_color}] {filename} ({size_str})"
+            )
             self.console.print(f"      [dim]ID: {file_id}[/]")
 
         self.console.print(f"[dim]Total size: {self._format_size(total_size)}[/]")
-        self.console.print("[dim]Files are consumed on the next conversation automatically.[/]")
+        self.console.print(
+            "[dim]Files are consumed on the next conversation automatically.[/]"
+        )
 
     async def remove_file(self, index: int) -> Dict[str, Any]:
         if not self.uploaded_files:
@@ -243,7 +333,9 @@ class _DifyRuntime:
             return {"removed": 0, "failed": 0}
 
         if index < 1 or index > len(self.uploaded_files):
-            self.console.print(f"[red]Invalid index {index}. Valid range: 1-{len(self.uploaded_files)}.[/]")
+            self.console.print(
+                f"[red]Invalid index {index}. Valid range: 1-{len(self.uploaded_files)}.[/]"
+            )
             return {"removed": 0, "failed": 1}
 
         removed = self.uploaded_files.pop(index - 1)
@@ -262,13 +354,17 @@ class _DifyRuntime:
         for index in sorted(set(indices), reverse=True):
             if 1 <= index <= len(self.uploaded_files):
                 file_info = self.uploaded_files.pop(index - 1)
-                self.console.print(f"[green]Removed: {file_info.get('_filename', 'unknown')}[/]")
+                self.console.print(
+                    f"[green]Removed: {file_info.get('_filename', 'unknown')}[/]"
+                )
                 removed += 1
             else:
                 self.console.print(f"[yellow]Skipped invalid index: {index}[/]")
                 failed += 1
 
-        self.console.print(f"[dim]Removed {removed} file(s); {len(self.uploaded_files)} remain queued.[/]")
+        self.console.print(
+            f"[dim]Removed {removed} file(s); {len(self.uploaded_files)} remain queued.[/]"
+        )
         return {"removed": removed, "failed": failed}
 
     async def clear_files(self) -> None:
@@ -360,12 +456,16 @@ class DifyService(BaseEngineService):
             if init_result["type"] == "error":
                 ctx.console.print(f"[red]{init_result['message']}[/]")
                 return ""
-        result = await runtime.handle_query(query, user_id=ctx.session_id or "default_user")
+        result = await runtime.handle_query(
+            query, user_id=ctx.session_id or "default_user"
+        )
         if result["type"] == "error":
             ctx.console.print(f"[red]{result['message']}[/]")
         return ""
 
-    async def switch_model(self, ctx, provider: str, model: str | None = None) -> Dict[str, Any]:
+    async def switch_model(
+        self, ctx, provider: str, model: str | None = None
+    ) -> Dict[str, Any]:
         return {
             "type": "error",
             "message": "Dify relies on its managed cloud model and cannot switch providers.",

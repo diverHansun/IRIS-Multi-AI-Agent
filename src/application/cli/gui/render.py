@@ -11,7 +11,6 @@ from rich.table import Table
 
 GLOBAL_COMMANDS = [
     ("/switch <engine>", "Switch execution engine (llm | agent | agentflow | dify)"),
-
     ("/help", "Show contextual help"),
     ("/info", "Display current engine status"),
     ("/exit", "Exit the application"),
@@ -104,21 +103,23 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
     if dify_mode:
         dify_sections = [
             _format_command_section("Global Commands", GLOBAL_COMMANDS),
-            _format_command_section("???????", DIFY_FILE_COMMANDS),
-            _format_command_section("??????", DIFY_CONVERSATION_COMMANDS),
+            _format_command_section("File Management", DIFY_FILE_COMMANDS),
+            _format_command_section(
+                "Conversation Management", DIFY_CONVERSATION_COMMANDS
+            ),
         ]
 
         tips = dedent(
             """
-            ???:
-            - ???????????????ζ??????????Σ??????????????
-            - `files remove` ??? 1-based ????????????????????
-            - ???践????????棬????? `/switch agent` ????????????档
+            Tips:
+            - Files are queued after upload and sent with the next query
+            - `files remove` uses 1-based indices (shown in `/files` output)
+            - For complex workflows, use `/switch agent` to access full agent capabilities
             """
         ).strip()
 
         body = "\n\n".join(dify_sections) + f"\n\n{tips}"
-        console.print(Panel(body, title="Dify Mode Help", border_style="cyan"))
+        console.print(Panel(body, title="Dify Mode Help", border_style="green"))
         return
 
     sections = [
@@ -144,7 +145,9 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
     console.print(Panel(body, title="Help", border_style="green"))
 
 
-def render_info(console: Console, agent_info: Mapping[str, Any], mode_info: Mapping[str, Any]) -> None:
+def render_info(
+    console: Console, agent_info: Mapping[str, Any], mode_info: Mapping[str, Any]
+) -> None:
     """
     Render system information including agent details and mode state.
     """
@@ -172,7 +175,9 @@ def render_info(console: Console, agent_info: Mapping[str, Any], mode_info: Mapp
     if files_count is not None:
         lines.append(f"Queued Files: {files_count}")
 
-    console.print(Panel("\n".join(lines), title="System Information", border_style="blue"))
+    console.print(
+        Panel("\n".join(lines), title="System Information", border_style="blue")
+    )
 
 
 def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
@@ -212,7 +217,9 @@ def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
     if recommended:
         lines.append("Recommended Configurations:")
         for rec in recommended:
-            lines.append(f"  * {rec['provider_name']} {rec['model']}: {rec['description']}")
+            lines.append(
+                f"  * {rec['provider_name']} {rec['model']}: {rec['description']}"
+            )
         lines.append("")
 
     default_cfg = catalog.get("default", {})
@@ -224,7 +231,11 @@ def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
     console.print(Panel("\n".join(lines), title="LLM Catalog", border_style="magenta"))
 
 
-def render_sessions(console: Console, sessions: Iterable[Mapping[str, Any]], current_session_id: str | None) -> None:
+def render_sessions(
+    console: Console,
+    sessions: Iterable[Mapping[str, Any]],
+    current_session_id: str | None,
+) -> None:
     """
     Render session list using a table layout.
     """
@@ -245,7 +256,9 @@ def render_sessions(console: Console, sessions: Iterable[Mapping[str, Any]], cur
     console.print(table)
 
 
-def render_mcp_status(console: Console, status: Mapping[str, Any], verbose: bool = False) -> None:
+def render_mcp_status(
+    console: Console, status: Mapping[str, Any], verbose: bool = False
+) -> None:
     """
     Render the MCP status payload.
     """
@@ -275,14 +288,19 @@ def render_mcp_status(console: Console, status: Mapping[str, Any], verbose: bool
     console.print(Panel("\n".join(lines), title="MCP Status", border_style="magenta"))
 
 
-def render_mcp_tools(console: Console, tools: Iterable[Any], json_flag: bool = False) -> None:
+def render_mcp_tools(
+    console: Console, tools: Iterable[Any], json_flag: bool = False
+) -> None:
     """
     Render MCP tool information.
     """
 
     if json_flag:
         serialised = [
-            {"name": getattr(tool, "name", "unknown"), "description": getattr(tool, "description", "") or ""}
+            {
+                "name": getattr(tool, "name", "unknown"),
+                "description": getattr(tool, "description", "") or "",
+            }
             for tool in tools
         ]
         console.print_json(data=serialised)
@@ -303,7 +321,9 @@ def render_mcp_tools(console: Console, tools: Iterable[Any], json_flag: bool = F
     console.print(Panel("\n".join(lines), title="MCP Tools", border_style="magenta"))
 
 
-def render_connector_status(console: Console, status: Mapping[str, Any], verbose: bool = False) -> None:
+def render_connector_status(
+    console: Console, status: Mapping[str, Any], verbose: bool = False
+) -> None:
     """
     Render connector service status.
     """
@@ -325,16 +345,23 @@ def render_connector_status(console: Console, status: Mapping[str, Any], verbose
     if status.get("schema_error"):
         lines.append(f"Schema Error: {status['schema_error']}")
 
-    console.print(Panel("\n".join(lines), title="Connector Status", border_style="cyan"))
+    console.print(
+        Panel("\n".join(lines), title="Connector Status", border_style="cyan")
+    )
 
 
-def render_connector_tools(console: Console, tools: Mapping[str, str], json_flag: bool = False) -> None:
+def render_connector_tools(
+    console: Console, tools: Mapping[str, str], json_flag: bool = False
+) -> None:
     """
     Render connector tool list.
     """
 
     if json_flag:
-        serialised = [{"name": name, "description": description} for name, description in tools.items()]
+        serialised = [
+            {"name": name, "description": description}
+            for name, description in tools.items()
+        ]
         console.print_json(data=serialised)
         return
 
@@ -349,6 +376,3 @@ def render_connector_tools(console: Console, tools: Mapping[str, str], json_flag
         lines.append(f"... {len(tools) - 100} more tool(s) not shown")
 
     console.print(Panel("\n".join(lines), title="Connector Tools", border_style="cyan"))
-
-
-

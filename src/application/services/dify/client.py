@@ -21,7 +21,13 @@ class DifyClientError(Exception):
 class DifyClient:
     """Async HTTP client that wraps the Dify REST endpoints used by the CLI."""
 
-    def __init__(self, api_key: str, base_url: str, timeout: int = 30) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        timeout: int = 30,
+        streaming_timeout: int = 300,
+    ) -> None:
         """
         Initialise the client.
 
@@ -29,32 +35,39 @@ class DifyClient:
             api_key: Dify API key that authorises requests.
             base_url: Base URL of the Dify deployment.
             timeout: Default timeout (seconds) used for HTTP operations.
+            streaming_timeout: Timeout (seconds) for streaming operations.
         """
 
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        # Streaming requests tend to run longer than ordinary calls.
-        self.streaming_timeout = timeout * 4
+        self.streaming_timeout = streaming_timeout
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
         self._session: Optional[aiohttp.ClientSession] = None
+        self._connector: Optional[aiohttp.TCPConnector] = None
 
     async def __aenter__(self) -> "DifyClient":
-        self._session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=self.timeout)
-        )
+        await self._get_session()
         return self
 
     async def __aexit__(self, exc_type, exc, exc_tb) -> None:
         await self.close()
 
     async def _get_session(self) -> aiohttp.ClientSession:
+        """Get or create HTTP session with proper connector management."""
         if self._session is None or self._session.closed:
+            # Create connector with connection pooling
+            self._connector = aiohttp.TCPConnector(
+                limit=100,  # Total connection limit
+                limit_per_host=30,  # Per-host limit
+                ttl_dns_cache=300,  # DNS cache TTL
+            )
             self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.timeout)
+                connector=self._connector,
+                timeout=aiohttp.ClientTimeout(total=self.timeout),
             )
         return self._session
 
@@ -99,7 +112,9 @@ class DifyClient:
         if files:
             payload["files"] = files
 
-        timeout = aiohttp.ClientTimeout(total=self.streaming_timeout if streaming else self.timeout)
+        timeout = aiohttp.ClientTimeout(
+            total=self.streaming_timeout if streaming else self.timeout
+        )
 
         async with session.post(
             f"{self.base_url}/chat-messages",
@@ -132,7 +147,9 @@ class DifyClient:
                     try:
                         event = json.loads(payload.decode("utf-8"))
                     except json.JSONDecodeError:
-                        logger.warning("Failed to decode streaming payload: %s", payload)
+                        logger.warning(
+                            "Failed to decode streaming payload: %s", payload
+                        )
                         continue
 
                     logger.debug("Streaming event: %s", event)
@@ -149,7 +166,7 @@ class DifyClient:
         """
 
         if not os.path.exists(file_path):
-            raise DifyClientError(f"文件不存在: {file_path}")
+            raise DifyClientError(f"File not found: {file_path}")
 
         session = await self._get_session()
         url = f"{self.base_url}/files/upload"
@@ -187,13 +204,15 @@ class DifyClient:
             reader.close()
 
     async def close(self) -> None:
-        """
-        Close the underlying HTTP session.
-        """
+        """Close the underlying HTTP session and connector."""
         if self._session and not self._session.closed:
             await self._session.close()
-            await asyncio.sleep(0.05)
+        if self._connector:
+            await self._connector.close()
+        # Small delay to allow underlying connections to close
+        await asyncio.sleep(0.25)
         self._session = None
+        self._connector = None
 
     @staticmethod
     def _guess_mime_type(filename: str) -> str:
