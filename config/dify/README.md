@@ -17,7 +17,6 @@
 ### 显示配置
 - `buffer_size`: 字符缓冲区大小，默认 200，影响刷新频率
 - `delay_ms`: 每个块的显示延迟（毫秒），默认 10，控制输出速度
-- `display_refresh_rate`: 每秒最大刷新次数，默认 50
 - `max_content_length`: 最大响应长度，默认 1000000
 - `rate_limit_per_second`: 每秒最大块数，默认 50，防止刷屏
 

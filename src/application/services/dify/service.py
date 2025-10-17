@@ -83,9 +83,6 @@ class _DifyRuntime:
         self.streaming = DifyStreaming(self.console)
         self.streaming.buffer_size = self.config_data.get("buffer_size", 200)
         self.streaming.delay_ms = self.config_data.get("delay_ms", 10)
-        self.streaming.display_refresh_rate = self.config_data.get(
-            "display_refresh_rate", 50
-        )
         self.streaming.max_content_length = self.config_data.get(
             "max_content_length", 1_000_000
         )

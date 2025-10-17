@@ -32,7 +32,6 @@ class DifyStreaming:
         # Performance control parameters
         self.buffer_size = 200
         self.delay_ms = 20
-        self.display_refresh_rate = 15
         self.max_content_length = 1_000_000
         self.max_chunks_per_second = 50
 
