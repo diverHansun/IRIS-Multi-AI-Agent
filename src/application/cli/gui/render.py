@@ -241,17 +241,26 @@ def render_sessions(
     """
 
     table = Table(title="Sessions")
-    table.add_column("Active", style="cyan", justify="center")
-    table.add_column("Session ID", style="green")
-    table.add_column("Created At", style="yellow")
-    table.add_column("Notes", style="white")
+    table.add_column("Active", style="cyan", justify="center", width=8)
+    table.add_column("Session ID", style="green", no_wrap=True)
+    table.add_column("Messages", style="magenta", justify="right", width=10)
+    table.add_column("Created At", style="yellow", no_wrap=True)
+    table.add_column("Updated At", style="yellow", no_wrap=True)
 
     for session in sessions:
-        session_id = session.get("id", "")
-        created_at = session.get("created_at_display", session.get("created_at", ""))
-        notes = session.get("notes", "")
+        session_id = session.get("session_id", session.get("id", ""))
+        message_count = session.get("message_count", 0)
+        created_at = session.get("created_at", "")
+        updated_at = session.get("updated_at", "")
+        
+        # Format timestamps for better readability
+        if created_at and "T" in created_at:
+            created_at = created_at.split("T")[0] + " " + created_at.split("T")[1][:8]
+        if updated_at and "T" in updated_at:
+            updated_at = updated_at.split("T")[0] + " " + updated_at.split("T")[1][:8]
+        
         active_marker = "*" if session_id == current_session_id else ""
-        table.add_row(active_marker, session_id, created_at, notes)
+        table.add_row(active_marker, session_id, str(message_count), created_at, updated_at)
 
     console.print(table)
 
