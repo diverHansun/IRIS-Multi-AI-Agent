@@ -1,14 +1,50 @@
 import asyncio
 import json
 import os
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional
 
 from langchain_core.tools import BaseTool
 
 from .config_loader import load_config, find_config_path
 from .errors import MCPInitializationError, MCPNotAvailableError
 from .tool_adapter import apply_naming_and_filter, schema_summary
+from .types import ServerConfig
+
+
+def _timedelta_to_milliseconds(value: Optional[timedelta]) -> Optional[int]:
+    if value is None:
+        return None
+    return int(value.total_seconds() * 1000)
+
+
+def _build_insecure_httpx_factory() -> Callable[..., Any]:
+    def factory(
+        headers: Optional[Dict[str, str]] = None,
+        timeout: Any = None,
+        auth: Any = None,
+    ) -> Any:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("httpx is required for Streamable HTTP connections") from exc
+
+        client_kwargs: Dict[str, Any] = {
+            "follow_redirects": True,
+            "verify": False,
+        }
+        if headers is not None:
+            client_kwargs["headers"] = headers
+        if timeout is not None:
+            client_kwargs["timeout"] = timeout
+        else:
+            client_kwargs["timeout"] = httpx.Timeout(30.0)
+        if auth is not None:
+            client_kwargs["auth"] = auth
+
+        return httpx.AsyncClient(**client_kwargs)
+
+    return factory
 
 
 class GlobalMCPManager:
@@ -29,6 +65,85 @@ class GlobalMCPManager:
     _config_path: Optional[str] = None
     _last_reload: Optional[str] = None
     _deps_available: Optional[bool] = None
+
+    @staticmethod
+    def _build_connection_entry(server: ServerConfig) -> Dict[str, Any]:
+        if server.transport == "stdio":
+            entry: Dict[str, Any] = {
+                "transport": server.transport,
+                "command": server.command,
+                "args": server.args,
+            }
+            if server.cwd:
+                entry["cwd"] = server.cwd
+            if server.env:
+                entry["env"] = server.env
+            return entry
+
+        if not server.url:
+            raise ValueError(f"Server '{server.name}' is missing 'url' for Streamable HTTP transport")
+
+        entry = {
+            "transport": server.transport,
+            "url": server.url,
+        }
+        if server.headers:
+            entry["headers"] = server.headers
+
+        options = server.streamable_options
+        if options.timeout is not None:
+            entry["timeout"] = options.timeout
+        if options.sse_read_timeout is not None:
+            entry["sse_read_timeout"] = options.sse_read_timeout
+        if options.terminate_on_close is not None:
+            entry["terminate_on_close"] = options.terminate_on_close
+        if options.insecure_skip_verify:
+            entry["httpx_client_factory"] = _build_insecure_httpx_factory()
+
+        return entry
+
+    @staticmethod
+    def _streamable_status_options(server: ServerConfig) -> Optional[Dict[str, Any]]:
+        options = server.streamable_options
+        summary: Dict[str, Any] = {}
+
+        timeout_ms = _timedelta_to_milliseconds(options.timeout)
+        if timeout_ms is not None:
+            summary["timeout_ms"] = timeout_ms
+
+        sse_timeout_ms = _timedelta_to_milliseconds(options.sse_read_timeout)
+        if sse_timeout_ms is not None:
+            summary["sse_read_timeout_ms"] = sse_timeout_ms
+
+        if options.terminate_on_close is not None:
+            summary["terminate_on_close"] = options.terminate_on_close
+
+        if options.insecure_skip_verify:
+            summary["insecure_skip_verify"] = True
+
+        return summary or None
+
+    @classmethod
+    def _build_status_entry(cls, server: ServerConfig) -> Dict[str, Any]:
+        entry: Dict[str, Any] = {
+            "name": server.name,
+            "transport": server.transport,
+            "status": "initializing",
+            "tools_count": None,
+            "last_error": None,
+        }
+
+        if server.transport == "stdio":
+            entry["command"] = server.command
+        else:
+            entry["url"] = server.url
+            if server.headers:
+                entry["headers"] = {key: "***" for key in server.headers.keys()}
+            options_summary = cls._streamable_status_options(server)
+            if options_summary:
+                entry["options"] = options_summary
+
+        return entry
 
     @classmethod
     def _ensure_lock(cls) -> asyncio.Lock:
@@ -86,29 +201,12 @@ class GlobalMCPManager:
             # build server config for MultiServerMCPClient
             server_config: Dict[str, Dict[str, Any]] = {}
             for name, sc in cfg.servers.items():
-                entry: Dict[str, Any] = {
-                    "transport": sc.transport,
-                    "command": sc.command,
-                    "args": sc.args,
-                }
-                if sc.cwd:
-                    entry["cwd"] = sc.cwd
-                if sc.env:
-                    entry["env"] = sc.env
-                # Some adapter versions don't support timeout_ms; omit to avoid TypeError
-                server_config[name] = entry
+                server_config[name] = cls._build_connection_entry(sc)
 
             # Pre-populate status with configured servers for better diagnostics
             cls._status["servers"] = [
-                {
-                    "name": name,
-                    "transport": sc.transport,
-                    "command": sc.command,
-                    "status": "initializing",
-                    "tools_count": None,
-                    "last_error": None,
-                }
-                for name, sc in cfg.servers.items()
+                cls._build_status_entry(sc)
+                for sc in cfg.servers.values()
             ]
 
             # start client and get tools
