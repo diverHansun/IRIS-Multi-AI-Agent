@@ -1,15 +1,15 @@
 # 核心框架
-langchain==0.3.27
-langchain-community==0.3.30
-langchain-core==0.3.78
-langchain-text-splitters==0.3.11
+langchain==1.0.0
+langchain-community==0.4
+langchain-core==1.0.0
+langchain-text-splitters==1.0.0
 
 # LLM集成
 zhipuai==2.1.5.20250825
-langchain-ollama==0.3.10
-langchain-openai==0.3.34
-openai==1.106.1
-ollama==0.5.3
+langchain-ollama==1.0.0
+langchain-openai==1.0.0
+openai==2.5.0
+ollama==0.6.0
 
 # 配置管理
 python-dotenv==1.1.1
@@ -20,7 +20,6 @@ pydantic-settings==2.10.1
 requests==2.32.5
 beautifulsoup4==4.13.5
 urllib3==2.5.0
-langchain-tavily==0.2.11
 
 # HTTP客户端和异步支持
 aiohttp==3.12.15

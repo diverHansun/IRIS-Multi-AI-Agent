@@ -222,3 +222,5 @@ config/dify/chatflows/*.yaml
 config/dify/workflows/*.yml
 config/dify/workflows/*.yaml
 
+#docs
+coding_guide.md
