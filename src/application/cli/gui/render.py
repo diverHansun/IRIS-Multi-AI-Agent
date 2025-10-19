@@ -204,7 +204,9 @@ def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
             if provider.get("error"):
                 lines.append(f"  Error: {provider['error']}")
         else:
-            models_detail = provider.get("models_detail", [])
+            raw_models = provider.get("models_detail") or []
+            models_detail = raw_models.values() if isinstance(raw_models, dict) else raw_models
+            models_detail = list(models_detail)
             if models_detail:
                 lines.append("  Supported Models:")
                 for entry in models_detail:
