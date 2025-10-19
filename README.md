@@ -362,7 +362,27 @@ ollama pull gpt-oss:20b
 
 ## 📝 七、更新日志
 
-### v4.0.0 (2025-10-13) 🎉
+### v4.1.0 (2025-10-19) 🎉
+- **LangChain 1.0.0 迁移**: 全面升级到LangChain 1.0.0新版API
+  - **Agent架构重构**: 从旧版`AgentExecutor`迁移到新版`CompiledStateGraph`
+  - **统一Agent创建**: 使用`create_agent()`替代`create_react_agent()`和`create_tool_calling_agent()`
+  - **简化Prompt系统**: 从复杂`PromptTemplate`迁移到简单`system_prompt`字符串
+  - **新版状态管理**: 集成LangGraph原生`checkpointer`机制，替代`RunnableWithMessageHistory`
+- **输入输出格式适配**:
+  - 输入格式: `{"input": str}` → `{"messages": [HumanMessage(...)]}`
+  - 输出格式: 保持兼容，自动解析新版消息格式为旧版结构
+  - 工具调用信息: 从`intermediate_steps`迁移到`AIMessage.tool_calls`
+- **记忆系统增强**: 
+  - 新增`BaseAgentCheckpointer`封装类，统一checkpointer配置
+  - 支持原生LangGraph状态持久化和会话管理
+  - 保持向后兼容，确保现有记忆功能正常
+- **代码质量提升**:
+  - 更新所有Agent Adapter实现LangChain 1.0.0接口
+  - 完善错误处理和日志记录
+  - 添加详细的迁移文档和架构设计说明
+- **向后兼容**: 保持所有外部API不变，内部实现完全重构
+
+### v4.0.0 (2025-10-13) 
 - **架构全面重构**: 实现分层解耦的现代化架构
   - **统一配置层**: ProviderRegistry作为唯一配置入口，消除重复读取
   - **依赖注入**: Adapter通过构造函数接收配置，避免全局状态依赖

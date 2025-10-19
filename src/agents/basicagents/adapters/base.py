@@ -1,13 +1,14 @@
-"""
-Agent Adapter Base Class
+"""Base class for agent adapters.
 
-Handles provider configuration lookup via ProviderRegistry and prepares agent
-specific parameters for downstream factories.
+Responsible for resolving provider configuration and preparing parameters
+used when constructing LangChain agents.
 """
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
+
+from langgraph.graph.state import CompiledStateGraph
 
 from src.core.providers.provider_registry import (
     ProviderRegistry,
@@ -65,10 +66,7 @@ class AgentAdapter(ABC):
         return overrides.copy()
 
     def get_agent_params(self, **user_params: Any) -> Dict[str, Any]:
-        """
-        Merge defaults, overrides, and user supplied parameters.
-        User supplied values take precedence when not None.
-        """
+        """Merge defaults, overrides, and user supplied parameters."""
         params = self.get_agent_mode_defaults()
         params.update(self.get_agent_mode_overrides())
 
@@ -76,12 +74,24 @@ class AgentAdapter(ABC):
             if value is not None:
                 params[key] = value
 
-        logger.debug("Agent params for %s/%s: %s", self.provider, self.model, params)
+        logger.debug(
+            "Resolved agent params for provider=%s model=%s: %s",
+            self.provider,
+            self.model,
+            params,
+        )
         return params
 
     @abstractmethod
-    def create_agent_executor(self, llm, tools, **params):
-        """Create an AgentExecutor using the processed parameters."""
+    def create_agent_graph(
+        self,
+        llm: Any,
+        tools: Sequence[Any],
+        *,
+        checkpointer: Optional[Any] = None,
+        **params: Any,
+    ) -> CompiledStateGraph:
+        """Create a CompiledStateGraph using the prepared parameters."""
 
     def get_model_info(self) -> Dict[str, Any]:
         """Return metadata for the associated model."""
