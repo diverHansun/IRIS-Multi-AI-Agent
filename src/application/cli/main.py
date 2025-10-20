@@ -160,6 +160,12 @@ def _render_payload(ctx: AppState, payload: Optional[dict]) -> None:
         formatted = gui_formatter.format_session_list(sessions, current)
         gui_render.render_sessions(ctx.console, formatted, current)
         return
+    if kind == "tools_summary":
+        gui_render.render_tools_summary(ctx.console, payload)
+        return
+    if kind == "tools_list":
+        gui_render.render_tools_list(ctx.console, payload)
+        return
 
     if "agent" in payload and "mode" in payload:
         gui_render.render_info(ctx.console, payload["agent"], payload["mode"])

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from textwrap import dedent
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, List, Mapping, Sequence
 
 from rich.console import Console
 from rich.panel import Panel
@@ -26,18 +26,19 @@ SESSION_COMMANDS = [
 ]
 
 LLM_ENGINE_COMMANDS = [
-    ("/model <provider> [model]", "Switch provider/model for the LLM engine"),
+    ("/model <provider> <model>", "Switch provider/model for the LLM engine"),
     ("/stream on|off", "Enable or disable LLM streaming output"),
     ("/llms", "Show the available LLM model catalog"),
     ("/reload", "Reload LLM provider configuration"),
 ]
 
 AGENT_ENGINE_COMMANDS = [
-    ("/model <provider> [model]", "Switch provider/model for the agent engine"),
+    ("/model <provider> <model>", "Switch provider/model for the agent engine"),
     ("/mode basic|deep", "Toggle agent mode"),
 ]
 
 AGENT_TOOL_COMMANDS = [
+    ("/tools [--list]", "Display available tools (summary or detailed table)"),
     ("/mcp status [-v]", "Inspect MCP servers and registered tools"),
     ("/mcp tools [--json]", "List MCP tools (prefixed with mcp_)"),
     ("/mcp reload", "Reload MCP configuration"),
@@ -47,7 +48,7 @@ AGENT_TOOL_COMMANDS = [
 ]
 
 DIFY_FILE_COMMANDS = [
-    ("/upload [paths...]", "Upload files (dialog opens when no path is provided)"),
+    ("/upload <paths...>", "Upload files (dialog opens when no path is provided)"),
     ("/files", "List files queued for the next conversation"),
     ("/files remove <index ...>", "Remove files by 1-based index"),
     ("/files clear", "Clear queued files without using them"),
@@ -387,3 +388,64 @@ def render_connector_tools(
         lines.append(f"... {len(tools) - 100} more tool(s) not shown")
 
     console.print(Panel("\n".join(lines), title="Connector Tools", border_style="cyan"))
+
+
+def render_tools_summary(console: Console, payload: Mapping[str, Any]) -> None:
+    """
+    Render unified tool summary view.
+    """
+
+    total = payload.get("total", 0)
+    providers = payload.get("providers", [])
+
+    lines: List[str] = [f"Available Tools ({total} total):"]
+
+    for provider in providers:
+        display_name = provider.get("display_name", "Unknown")
+        count = provider.get("count", 0)
+        samples = provider.get("samples", [])
+        warning = provider.get("warning")
+
+        if samples:
+            sample_text = ", ".join(samples)
+        elif count:
+            sample_text = "No sample tools available."
+        else:
+            sample_text = "No tools available."
+
+        lines.append(f"{display_name} ({count}): {sample_text}")
+
+        if warning:
+            lines.append(f"  ! {warning}")
+
+    console.print(Panel("\n".join(lines), title="Tool Summary", border_style="blue"))
+
+
+def render_tools_list(console: Console, payload: Mapping[str, Any]) -> None:
+    """
+    Render detailed tool table.
+    """
+
+    tools = payload.get("tools", [])
+    warnings = payload.get("warnings", [])
+    total = payload.get("total", len(tools))
+
+    if not tools:
+        console.print(Panel("No tools available.", title="Tool List", border_style="blue"))
+    else:
+        table = Table(title=f"Tool List ({total})", show_lines=False)
+        table.add_column("Tool Name", justify="left")
+        table.add_column("Provider", justify="left")
+        table.add_column("Description", justify="left")
+
+        for entry in tools:
+            table.add_row(
+                entry.get("name", "unknown"),
+                entry.get("provider", "unknown"),
+                entry.get("description", ""),
+            )
+
+        console.print(table)
+
+    for warning in warnings:
+        console.print(f"[yellow]{warning}[/]")

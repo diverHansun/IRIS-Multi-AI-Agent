@@ -26,7 +26,6 @@ def register_command(command: BaseCommand) -> None:
 def register_default_commands() -> None:
     from src.application.commands.agent.mode_commands import ModeCommand
     from src.application.commands.agent.model_commands import ModelCommand
-    from src.application.commands.agent.tool_commands import ConnectorCommand, MCPCommand
     from src.application.commands.agentflow.graph_commands import GraphCommand
     from src.application.commands.agentflow.model_commands import AgentFlowModelCommand
     from src.application.commands.agentflow.node_commands import NodesCommand, VisualizeCommand
@@ -43,13 +42,16 @@ def register_default_commands() -> None:
         NewSessionCommand,
         RestoreSessionCommand,
     )
+    from src.application.commands.shared.mcp_connector_commands import ConnectorCommand, MCPCommand
     from src.application.commands.shared.system_commands import ExitCommand, HelpCommand, InfoCommand
+    from src.application.commands.shared.tools_commands import ToolsCommand
 
     commands: list[BaseCommand] = [
         SwitchEngineCommand(),
         HelpCommand(),
         InfoCommand(),
         ExitCommand(),
+        ToolsCommand(),
         NewSessionCommand(),
         ClearSessionCommand(),
         ListSessionsCommand(),
