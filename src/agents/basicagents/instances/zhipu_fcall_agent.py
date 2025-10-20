@@ -137,13 +137,13 @@ class ZhipuFunctionCallingAgent:
 
             api_key_override = params.get("api_key") or self.kwargs.get("api_key")
 
-            self.llm = llm_manager.create_llm(
+            self.llm = await llm_manager.create_llm(
                 provider="zhipu",
                 model=model_name,
                 mode="agent",
                 **params
             )
-            
+
             # 2. 创建智谱AI原生客户端（用于Function Calling）
             api_key = api_key_override or settings.zhipu_api_key
             if not api_key:

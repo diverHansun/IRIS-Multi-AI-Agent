@@ -42,7 +42,7 @@ class ZhipuAgent(BaseAgent):
         if params.get("temperature") is not None:
             self.temperature = params["temperature"]
 
-        llm = llm_manager.create_llm(
+        llm = await llm_manager.create_llm(
             provider="zhipu",
             model=model_name,
             mode="agent",

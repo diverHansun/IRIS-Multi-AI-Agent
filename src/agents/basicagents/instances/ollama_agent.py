@@ -54,7 +54,7 @@ class OllamaAgent(BaseAgent):
         model_name = params.pop("model", self.model)
         self.model = model_name
 
-        llm = llm_manager.create_llm(
+        llm = await llm_manager.create_llm(
             provider="ollama",
             model=model_name,
             mode="agent",

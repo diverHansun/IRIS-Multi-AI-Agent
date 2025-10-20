@@ -15,15 +15,20 @@ class LLMService(BaseEngineService):
     def _config(ctx) -> Dict[str, Any]:
         return ctx.get_engine_config("llm")
 
-    def _ensure_llm(self, ctx) -> Any:
+    async def _ensure_llm(self, ctx) -> Any:
         config = self._config(ctx)
         llm = config.get("llm_instance")
         provider = config.get("provider")
         model = config.get("model")
         if llm is None:
-            llm = create_llm(provider, model, mode="llm")
+            llm = await create_llm(provider, model, mode="llm")
             config["llm_instance"] = llm
             register_llm(provider, llm)
+
+            # Update config with resolved model if it was auto-resolved
+            if hasattr(llm, 'model') and llm.model != model:
+                config["model"] = llm.model
+
         return llm
 
     def _get_model_info(self, provider: str, model: str | None) -> Dict[str, Any]:
@@ -39,7 +44,7 @@ class LLMService(BaseEngineService):
         config = self._config(ctx)
         config.setdefault("streaming", True)
         try:
-            llm = self._ensure_llm(ctx)
+            llm = await self._ensure_llm(ctx)
         except Exception as exc:
             return {
                 "type": "error",
@@ -73,7 +78,7 @@ class LLMService(BaseEngineService):
 
     async def handle_query(self, ctx, query: str) -> str:
         config = self._config(ctx)
-        llm = self._ensure_llm(ctx)
+        llm = await self._ensure_llm(ctx)
         provider = config.get("provider", "unknown")
         streaming = bool(config.get("streaming", True))
         return await handle_llm_query(ctx, llm, provider, query, streaming=streaming)
@@ -87,7 +92,7 @@ class LLMService(BaseEngineService):
             config.pop("model", None)
         config["llm_instance"] = None
         try:
-            llm = self._ensure_llm(ctx)
+            llm = await self._ensure_llm(ctx)
             info = self._get_model_info(config["provider"], config.get("model"))
         except Exception as exc:
             return {
