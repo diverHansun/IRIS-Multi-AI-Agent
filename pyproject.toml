@@ -19,6 +19,7 @@ dependencies = [
     "langchain-mcp-adapters==0.1.11",
     "langchain-ollama==1.0.0",
     "langchain-openai==1.0.0",
+    "langchain-tavily==0.2.12",
     "langchain-text-splitters==1.0.0",
     "mcp==1.13.1",
     "numpy==2.2.6",

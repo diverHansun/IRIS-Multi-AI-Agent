@@ -20,6 +20,7 @@ pydantic-settings==2.10.1
 requests==2.32.5
 beautifulsoup4==4.13.5
 urllib3==2.5.0
+langchain-tavily==0.2.12
 
 # HTTP客户端和异步支持
 aiohttp==3.12.15
