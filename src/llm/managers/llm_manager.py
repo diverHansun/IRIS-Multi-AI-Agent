@@ -75,7 +75,7 @@ class LLMManager:
         logger.info("Reloading LLM configuration")
         return self.provider_registry.reload_config()
 
-    def create_llm(
+    async def create_llm(
         self,
         provider: Union[str, LLMProvider],
         model: Optional[str] = None,
@@ -102,7 +102,20 @@ class LLMManager:
         explicit_api_key = user_params.pop("api_key", None)
 
         adapter = self._create_adapter(provider_key, model_name, mode)
+
+        # Resolve auto model for Ollama provider
+        if provider_key == "OLLAMA" and model_name == "auto":
+            base_url = (
+                user_params.get("base_url")
+                or kwargs.get("base_url")
+                or settings.ollama_base_url
+            )
+            model_name = await adapter.resolve_auto_model(base_url)
+            logger.info("Resolved Ollama 'auto' to actual model: %s", model_name)
+
         llm_params = adapter.get_llm_params(**user_params)
+        llm_params["model"] = model_name  # Ensure resolved model is used
+
         final_params = self._prepare_instance_params(
             provider_key=provider_key,
             provider_enum=provider_enum,
@@ -310,8 +323,8 @@ def get_available_providers() -> List[Dict[str, Any]]:
     return llm_manager.get_available_providers()
 
 
-def create_llm(provider: str, model: str = None, **kwargs):
-    return llm_manager.create_llm(provider, model, **kwargs)
+async def create_llm(provider: str, model: str = None, **kwargs):
+    return await llm_manager.create_llm(provider, model, **kwargs)
 
 
 def get_llm_info(provider: str, model: str = None) -> Dict[str, Any]:
