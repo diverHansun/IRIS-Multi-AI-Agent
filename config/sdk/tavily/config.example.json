@@ -1,0 +1,53 @@
+{
+  "api": {
+    "base_url": "https://api.tavily.com",
+    "timeout": 30,
+    "max_retries": 3,
+    "retry_delay": 1.0
+  },
+  "search": {
+    "max_results": 5,
+    "search_depth": "basic",
+    "topic": "general",
+    "include_answer": false,
+    "include_raw_content": false,
+    "include_images": false,
+    "include_image_descriptions": false,
+    "include_favicon": false,
+    "time_range": null,
+    "country": null,
+    "auto_parameters": false
+  },
+  "extract": {
+    "extract_depth": "basic",
+    "include_images": false,
+    "include_favicon": false,
+    "format": "markdown"
+  },
+  "map": {
+    "max_depth": 1,
+    "max_breadth": 20,
+    "limit": 50,
+    "allow_external": false,
+    "categories": null
+  },
+  "crawl": {
+    "max_depth": 1,
+    "max_breadth": 20,
+    "limit": 50,
+    "allow_external": false,
+    "include_images": false,
+    "extract_depth": "basic",
+    "include_favicon": false,
+    "format": "markdown",
+    "categories": null
+  },
+  "rate_limit": {
+    "requests_per_minute": 60,
+    "enable_rate_limiting": true
+  },
+  "cache": {
+    "enable_cache": false,
+    "cache_expire_seconds": 300
+  }
+}

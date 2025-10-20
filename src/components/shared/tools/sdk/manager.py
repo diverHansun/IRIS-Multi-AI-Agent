@@ -1,14 +1,14 @@
 """
-SDK工具管理器
+SDK Tool Manager
 
-提供统一的接口来管理和获取所有SDK工具
+Provides unified interface to manage and access all SDK tools
 """
 from typing import List, Dict, Any, Callable
 from langchain_core.tools import BaseTool
 
 from .calculate.math_tools import get_available_math_tools
 from .search.search_tools import get_available_search_tools
-from .search.tavily_search_tool import get_available_tavily_tools
+from .tavily_search import get_available_tavily_tools
 from .time.adapter import get_available_time_tools
 from .amap.adapter import get_available_amap_tools
 from .notion.adapter import get_available_notion_tools
@@ -17,124 +17,137 @@ from .okx_market.adapter import get_available_okx_tools
 
 class SDKToolManager:
     """
-    SDK工具统一管理器
-    提供统一接口获取和管理各种SDK工具
+    SDK Tool Manager
+    Provides unified interface to access and manage various SDK tools
     """
-    
+
     @staticmethod
     def get_all_tools() -> List[BaseTool]:
         """
-        获取所有SDK工具
-        
+        Get all available SDK tools
+
         Returns:
-            List[BaseTool]: 所有SDK工具列表
+            List[BaseTool]: List of all SDK tools
         """
         tools = []
-        
-        # 数学工具
+
+        # Math tools
         math_tools = get_available_math_tools()
         if math_tools:
             tools.extend(math_tools)
-        
-        # 搜索工具
+
+        # Search tools - Tavily
         tavily_tools = get_available_tavily_tools()
         if tavily_tools:
             tools.extend(tavily_tools)
 
+        # Search tools - General
         search_tools = get_available_search_tools()
         if search_tools:
             tools.extend(search_tools)
-        
-        # 时间工具
+
+        # Time tools
         time_tools = get_available_time_tools()
         if time_tools:
             tools.extend(time_tools)
-        
-        # 高德地图工具
+
+        # Amap tools
         amap_tools = get_available_amap_tools()
         if amap_tools:
             tools.extend(amap_tools)
-        
-        # Notion工具
+
+        # Notion tools
         try:
             notion_tools = get_available_notion_tools()
             if notion_tools:
                 tools.extend(notion_tools)
         except Exception:
-            pass  # Notion工具可选，失败时跳过
-        
-        # OKX加密货币工具
+            pass  # Notion tools are optional, skip on failure
+
+        # OKX cryptocurrency tools
         okx_tools = get_available_okx_tools()
         if okx_tools:
             tools.extend(okx_tools)
-        
+
         return tools
-    
+
     @staticmethod
     def get_tools_by_category() -> Dict[str, List[BaseTool]]:
         """
-        按类别获取工具
-        
+        Get tools organized by category
+
         Returns:
-            Dict[str, List[BaseTool]]: 按类别分组的工具字典
+            Dict[str, List[BaseTool]]: Dictionary of tools grouped by category
         """
         tavily_tools = get_available_tavily_tools()
         search_tools = get_available_search_tools()
-        
-        # 合并所有搜索工具
+
+        # Combine all search tools (Tavily + general search)
         all_search_tools = []
         if tavily_tools:
             all_search_tools.extend(tavily_tools)
-        all_search_tools.extend(search_tools)
-        
-        return {
+        if search_tools:
+            all_search_tools.extend(search_tools)
+
+        categories = {
             "calculate": get_available_math_tools(),
             "search": all_search_tools,
+            "tavily": tavily_tools if tavily_tools else [],
             "time": get_available_time_tools(),
             "amap": get_available_amap_tools(),
-            "notion": get_available_notion_tools(),
             "okx": get_available_okx_tools()
         }
-    
+
+        # Add Notion tools with error handling
+        try:
+            categories["notion"] = get_available_notion_tools()
+        except Exception:
+            categories["notion"] = []
+
+        return categories
+
     @staticmethod
     def get_tool_by_name(tool_name: str) -> BaseTool:
         """
-        根据工具名称获取特定工具
-        
+        Get specific tool by name
+
         Args:
-            tool_name (str): 工具名称
-            
+            tool_name: Tool name
+
         Returns:
-            BaseTool: 指定工具
+            BaseTool: The requested tool
+
+        Raises:
+            ValueError: If tool with given name is not found
         """
         all_tools = SDKToolManager.get_all_tools()
         for tool in all_tools:
             if tool.name == tool_name:
                 return tool
-        raise ValueError(f"未找到名为 '{tool_name}' 的工具")
-    
+        raise ValueError(f"Tool '{tool_name}' not found")
+
     @staticmethod
     def get_available_tools_count() -> int:
         """
-        获取可用工具总数
-        
+        Get total count of available tools
+
         Returns:
-            int: 可用工具数量
+            int: Number of available tools
         """
         return len(SDKToolManager.get_all_tools())
-    
+
     @staticmethod
     def get_tools_info() -> Dict[str, Any]:
         """
-        获取工具统计信息
-        
+        Get tool statistics information
+
         Returns:
-            Dict[str, Any]: 工具统计信息
+            Dict[str, Any]: Tool statistics including counts and names by category
         """
         categories = SDKToolManager.get_tools_by_category()
         info = {}
         total_count = 0
-        
+
         for category, tools in categories.items():
             count = len(tools) if tools else 0
             info[category] = {
@@ -142,6 +155,6 @@ class SDKToolManager:
                 "tools": [tool.name for tool in tools] if tools else []
             }
             total_count += count
-        
+
         info["total"] = total_count
         return info
