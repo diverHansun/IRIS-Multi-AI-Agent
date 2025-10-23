@@ -1,0 +1,35 @@
+{
+  "default": {
+    "base_url": "http://localhost:11235",
+    "timeout": 60,
+    "stream_timeout": 120,
+    "retry_attempts": 2,
+    "token": null
+  },
+
+  "browser": {
+    "browser_type": "chromium",
+    "headless": true,
+    "viewport_width": 1080,
+    "viewport_height": 600,
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/116.0.0.0 Safari/537.36",
+    "ignore_https_errors": true,
+    "java_script_enabled": true,
+    "enable_stealth": false
+  },
+
+  "crawler": {
+    "word_count_threshold": 200,
+    "only_text": false,
+    "excluded_tags": ["nav", "footer", "aside", "script", "style"],
+    "wait_until": "domcontentloaded",
+    "page_timeout": 60000,
+    "return_format": "markdown",
+    "content_filter_type": null,
+    "pruning_threshold": 0.48,
+    "prefer_fit_markdown": false,
+    "max_token_length": null,
+    "cache_mode": "bypass",
+    "verbose": true
+  }
+}

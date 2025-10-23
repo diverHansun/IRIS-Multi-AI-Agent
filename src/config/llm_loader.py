@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class LLMConfigLoader:
     """LLM配置加载器，从JSON文件加载模型配置"""
 
-    def __init__(self, config_dir: str = "config/llms"):
+    def __init__(self, config_dir: str = "config/models"):
         """
         初始化配置加载器
 

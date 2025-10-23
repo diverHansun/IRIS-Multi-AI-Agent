@@ -23,7 +23,7 @@ class Crawl4AIConfig:
         """Find the config file in the standard locations"""
         possible_paths = [
             os.getenv("CRAWL4AI_CONFIG_PATH"),
-            "config/connector/crawl4ai/config.json",
+            "config/tools/connector/crawl4ai/config.json",
         ]
         
         for path in possible_paths:

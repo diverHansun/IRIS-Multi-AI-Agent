@@ -7,11 +7,11 @@ from typing import Optional
 
 class PromptRegistry:
     """
-    Loads provider/locale-specific prompt templates from config/prompts.
+    Loads provider/locale-specific prompt templates from config/agents/basic/prompts.
 
     Search order (agent_type currently supports "react_json"):
-    1) Provider-specific: config/prompts/providers/{provider}_template.md (lowercased provider)
-    2) Locale default:    config/prompts/react_json_{locale}.md (e.g., zh_CN / en_US)
+    1) Provider-specific: config/agents/basic/prompts/providers/{provider}_template.md (lowercased provider)
+    2) Locale default:    config/agents/basic/prompts/react_json_{locale}.md (e.g., zh_CN / en_US)
     3) Fallbacks:         zh_CN -> en_US
 
     Usage:
@@ -19,7 +19,7 @@ class PromptRegistry:
         rendered = PromptRegistry.render(text, tools_block="...")
     """
 
-    BASE_DIR = Path("config/prompts")
+    BASE_DIR = Path("config/agents/basic/prompts")
 
     @classmethod
     def get_prompt(
@@ -54,7 +54,7 @@ class PromptRegistry:
         if en_path.is_file():
             return en_path.read_text(encoding="utf-8")
 
-        raise FileNotFoundError("No prompt template found in config/prompts")
+        raise FileNotFoundError("No prompt template found in config/agents/basic/prompts")
 
     @staticmethod
     def render(template_text: str, tools_block: str) -> str:

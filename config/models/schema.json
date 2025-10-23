@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LLM Providers Configuration Schema",
+  "type": "object",
+  "required": ["schema_version", "providers"],
+  "properties": {
+    "_comment": {
+      "type": "string",
+      "description": "配置文件说明注释"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "providers": {
+      "type": "object",
+      "patternProperties": {
+        "^[A-Z_]+$": {
+          "type": "object",
+          "required": ["name", "default_model", "mode_defaults", "models"],
+          "properties": {
+            "name": { "type": "string" },
+            "default_model": { "type": "string" },
+            "api_key_env": { "type": ["string", "null"] },
+            "class": { "type": ["string", "null"] },
+            "mode_defaults": { "$ref": "#/definitions/mode_defaults" },
+            "models": {
+              "type": "object",
+              "patternProperties": {
+                "^[a-zA-Z0-9._-]+$": { "$ref": "#/definitions/model" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "definitions": {
+    "mode_defaults": {
+      "type": "object",
+      "properties": {
+        "llm": { "type": "object" },
+        "agent": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "model": {
+      "type": "object",
+      "required": ["name", "description", "supports_tools"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "recommended": { "type": "boolean" },
+        "model_features": { "type": "array", "items": { "type": "string" } },
+        "supports_tools": { "type": "boolean" },
+        "default_temperature": { "type": "number" },
+        "temperature_fixed": { "type": "boolean" },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "context_window": { "type": "integer", "minimum": 1 },
+        "parameters": { "type": "object" },
+        "size": { "type": "string" },
+        "modified_at": { "type": "string" },
+        "mode_overrides": { "$ref": "#/definitions/mode_defaults" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

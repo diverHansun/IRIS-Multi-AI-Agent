@@ -160,17 +160,17 @@ def load_config_from_json(config_path: Optional[str] = None) -> Dict[str, Any]:
     Load configuration from JSON file
 
     Args:
-        config_path: Path to config file, defaults to config/sdk/tavily/config.json
+        config_path: Path to config file, defaults to config/tools/sdk/tavily/config.json
 
     Returns:
         Dictionary with configuration values
     """
     if config_path is None:
         # Default path - navigate from src/components/shared/tools/sdk/tavily_search/config.py
-        # up to project root (6 levels) then to config/sdk/tavily/config.json
+        # up to project root (6 levels) then to config/tools/sdk/tavily/config.json
         current_file = Path(__file__).resolve()
         project_root = current_file.parent.parent.parent.parent.parent.parent.parent
-        config_path = project_root / "config" / "sdk" / "tavily" / "config.json"
+        config_path = project_root / "config" / "tools" / "sdk" / "tavily" / "config.json"
     else:
         config_path = Path(config_path)
 
