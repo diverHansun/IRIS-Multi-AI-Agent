@@ -58,7 +58,9 @@ class SubAgentManager:
 
     def get_available_subagents(self) -> Dict[str, Dict[str, Any]]:
         """Return supported subagent definitions."""
-        return self.models_config.get("subagents", {})
+        # models_config is already the subagents dict from subagents.json
+        # Structure: {"research": {...}, "coding": {...}, "analysis": {...}}
+        return self.models_config if self.models_config else {}
 
     def get_subagent_config(self, subagent_type: str) -> Dict[str, Any]:
         """Return resolved provider/model configuration for a subagent."""
@@ -66,8 +68,8 @@ class SubAgentManager:
 
     def _resolve_subagent_config(self, subagent_type: str) -> Dict[str, Any]:
         """Fetch configuration for a subagent type."""
-        subagents = self.models_config.get("subagents", {})
-        config = subagents.get(subagent_type)
+        # models_config is already the subagents dict
+        config = self.models_config.get(subagent_type)
         if not config:
             msg = f"Unknown subagent type: {subagent_type}"
             logger.error(msg)
