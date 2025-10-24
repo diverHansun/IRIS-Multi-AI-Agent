@@ -1,0 +1,25 @@
+{
+  "enabled": true,
+  "max_concurrent": 3,
+  "timeout": 300,
+  "subagents": {
+    "research": {
+      "tools": [
+        "internet_search",
+        "file_read"
+      ]
+    },
+    "coding": {
+      "tools": [
+        "code_analysis",
+        "file_edit"
+      ]
+    },
+    "analysis": {
+      "tools": [
+        "data_query",
+        "report_generation"
+      ]
+    }
+  }
+}

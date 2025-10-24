@@ -6,6 +6,9 @@ Provides separated provider configuration management for LLM and BasicAgents mod
 
 from .llm_provider_registry import LLMProviderRegistry, llm_registry
 from .basicagents_provider_registry import BasicAgentsProviderRegistry, basicagents_registry
+from .deepagents_provider_registry import DeepAgentsProviderRegistry
+
+deepagents_provider_registry = DeepAgentsProviderRegistry()
 from .utils.ollama import (
     list_ollama_models,
     get_ollama_models_http,
@@ -19,10 +22,12 @@ __all__ = [
     # Recommended API (module-level instances)
     'llm_registry',
     'basicagents_registry',
+    'deepagents_provider_registry',
 
     # Classes (for advanced users)
     'LLMProviderRegistry',
     'BasicAgentsProviderRegistry',
+    'DeepAgentsProviderRegistry',
 
     # Ollama utilities
     'list_ollama_models',
