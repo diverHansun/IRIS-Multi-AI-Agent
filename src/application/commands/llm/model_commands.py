@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from src.application.commands.base import BaseCommand, CommandResult
-from src.application.services.agent.basic import BasicAgentService
+from src.application.services.llm import LLMService
 
 
-class ModelCommand(BaseCommand):
+class LLMModelCommand(BaseCommand):
     name = "model"
-    engine_scope = ("agent",)
-    help_text = "Switch provider/model for the basic agent engine."
+    engine_scope = ("llm",)
+    help_text = "Switch provider/model for the LLM engine."
 
     async def execute(self, ctx, args: str) -> CommandResult:
         parts = args.split()
@@ -16,10 +16,10 @@ class ModelCommand(BaseCommand):
         provider = parts[0].lower()
         model = parts[1] if len(parts) > 1 else None
 
-        if ctx.current_engine != "agent":
-            return CommandResult.error("/model for agents is only available in the agent engine.")
+        if ctx.current_engine != "llm":
+            return CommandResult.error("/model for LLMs is only available in the llm engine.")
 
-        service = BasicAgentService()
+        service = LLMService()
         result = await service.switch_model(ctx, provider, model)
         return CommandResult(
             type=result["type"],
@@ -28,4 +28,5 @@ class ModelCommand(BaseCommand):
         )
 
 
-__all__ = ["ModelCommand"]
+__all__ = ["LLMModelCommand"]
+

@@ -35,6 +35,7 @@ def register_default_commands() -> None:
     from src.application.commands.engine_commands import SwitchEngineCommand
     from src.application.commands.llm.llm_commands import LLMsCommand, ReloadCommand
     from src.application.commands.llm.stream_commands import StreamCommand as LLMStreamCommand
+    from src.application.commands.llm.model_commands import LLMModelCommand
     from src.application.commands.shared.session_commands import (
         CleanupSessionsCommand,
         ClearSessionCommand,
@@ -63,6 +64,7 @@ def register_default_commands() -> None:
         ModeCommand(),
         UseCommand(),
         DeepCommand(),
+        LLMModelCommand(),
         LLMsCommand(),
         ReloadCommand(),
         LLMStreamCommand(),
