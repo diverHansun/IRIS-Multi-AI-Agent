@@ -1,0 +1,158 @@
+{
+  "schema_version": "1.0",
+  "description": "BasicAgents provider configuration with complete API and agent parameters",
+  "providers": {
+    "ZHIPU": {
+      "name": "Zhipu AI",
+      "api_key_env": "ZHIPU_API_KEY",
+      "base_url": null,
+      "base_url_env": null,
+      "default_model": "glm-4.5-flash",
+      "models": {
+        "glm-4-plus": {
+          "name": "GLM-4-Plus",
+          "description": "Zhipu AI flagship model with comprehensive capabilities",
+          "agent_type": "react",
+          "temperature": 0.2,
+          "max_tokens": 2048,
+          "context_window": 128000,
+          "max_iterations": 8,
+          "max_execution_time": 300,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        },
+        "glm-4.5": {
+          "name": "GLM-4.5",
+          "description": "Next-gen MoE architecture model with 128K context, specialized in code reasoning and tool calling",
+          "agent_type": "function_calling",
+          "temperature": 0.1,
+          "max_tokens": 8192,
+          "context_window": 128000,
+          "max_iterations": 15,
+          "max_execution_time": 180,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false,
+          "thinking_mode": true
+        },
+        "glm-4.5-flash": {
+          "name": "GLM-4.5-Flash",
+          "description": "Free lightning version with 128K context and fast reasoning",
+          "agent_type": "function_calling",
+          "temperature": 0.1,
+          "max_tokens": 96000,
+          "context_window": 128000,
+          "max_iterations": 15,
+          "max_execution_time": 200,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false,
+          "thinking_mode": true
+        }
+      }
+    },
+    "OPENAI": {
+      "name": "OpenAI",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1",
+      "base_url_env": "OPENAI_BASE_URL",
+      "default_model": "gpt-4o-mini",
+      "models": {
+        "gpt-5": {
+          "name": "GPT-5",
+          "description": "Next-gen language model with enhanced reasoning and creativity",
+          "agent_type": "function_calling",
+          "temperature": 1.0,
+          "temperature_fixed": true,
+          "max_tokens": 8192,
+          "context_window": 8192,
+          "max_iterations": 15,
+          "max_execution_time": 600,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        },
+        "gpt-5-mini": {
+          "name": "GPT-5-mini",
+          "description": "Cost-optimized GPT-5 version with fast performance",
+          "agent_type": "function_calling",
+          "temperature": 1.0,
+          "temperature_fixed": true,
+          "max_tokens": 32768,
+          "context_window": 32768,
+          "max_iterations": 15,
+          "max_execution_time": 600,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        },
+        "gpt-4o": {
+          "name": "GPT-4o",
+          "description": "OpenAI GPT-4 optimized version with balanced performance and cost",
+          "agent_type": "function_calling",
+          "temperature": 0.1,
+          "max_tokens": 4096,
+          "context_window": 131072,
+          "max_iterations": 10,
+          "max_execution_time": 300,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        },
+        "gpt-4o-mini": {
+          "name": "GPT-4o-mini",
+          "description": "Lightweight GPT-4o version with fast speed and low cost",
+          "agent_type": "function_calling",
+          "temperature": 0.1,
+          "max_tokens": 16384,
+          "context_window": 131072,
+          "max_iterations": 10,
+          "max_execution_time": 300,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        },
+        "gpt-4.1-nano": {
+          "name": "GPT-4.1-nano",
+          "description": "Low-cost GPT for debugging and testing",
+          "agent_type": "function_calling",
+          "temperature": 0.1,
+          "max_tokens": 4096,
+          "context_window": 4096,
+          "max_iterations": 8,
+          "max_execution_time": 300,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        }
+      }
+    },
+    "OLLAMA": {
+      "name": "Ollama Local Models",
+      "api_key_env": null,
+      "base_url": "http://localhost:11434",
+      "base_url_env": "OLLAMA_BASE_URL",
+      "default_model": "auto",
+      "extra_params": {
+        "timeout": 60,
+        "keep_alive": "5m"
+      },
+      "models": {
+        "auto": {
+          "name": "Auto-detect Model",
+          "description": "Automatically detect and use available local model",
+          "agent_type": "react",
+          "temperature": 0.0,
+          "max_tokens": 4096,
+          "context_window": 8192,
+          "max_iterations": 3,
+          "max_execution_time": 30,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0",
+  "description": "LLM provider configuration with pure LLM parameters only",
+  "providers": {
+    "ZHIPU": {
+      "name": "Zhipu AI",
+      "api_key_env": "ZHIPU_API_KEY",
+      "base_url": null,
+      "base_url_env": null,
+      "default_model": "glm-4.5-flash",
+      "models": {
+        "glm-4-plus": {
+          "name": "GLM-4-Plus",
+          "description": "Zhipu AI flagship model with comprehensive capabilities",
+          "temperature": 0.2,
+          "max_tokens": 2048,
+          "context_window": 128000,
+          "supports_tools": true,
+          "streaming": true
+        },
+        "glm-4.5": {
+          "name": "GLM-4.5",
+          "description": "Next-gen MoE architecture model with 128K context",
+          "temperature": 0.1,
+          "max_tokens": 8192,
+          "context_window": 128000,
+          "supports_tools": true,
+          "streaming": true,
+          "thinking_mode": true
+        },
+        "glm-4.5-flash": {
+          "name": "GLM-4.5-Flash",
+          "description": "Free lightning version with 128K context",
+          "temperature": 0.5,
+          "max_tokens": 96000,
+          "context_window": 128000,
+          "supports_tools": true,
+          "streaming": true,
+          "thinking_mode": true
+        }
+      }
+    },
+    "OPENAI": {
+      "name": "OpenAI",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1",
+      "base_url_env": "OPENAI_BASE_URL",
+      "default_model": "gpt-4o-mini",
+      "models": {
+        "gpt-5": {
+          "name": "GPT-5",
+          "description": "Next-gen language model with enhanced reasoning",
+          "temperature": 1.0,
+          "temperature_fixed": true,
+          "max_tokens": 8192,
+          "context_window": 8192,
+          "supports_tools": true,
+          "streaming": true
+        },
+        "gpt-5-mini": {
+          "name": "GPT-5-mini",
+          "description": "Cost-optimized GPT-5 version",
+          "temperature": 1.0,
+          "temperature_fixed": true,
+          "max_tokens": 32768,
+          "context_window": 32768,
+          "supports_tools": true,
+          "streaming": true
+        },
+        "gpt-4o": {
+          "name": "GPT-4o",
+          "description": "OpenAI GPT-4 optimized version",
+          "temperature": 0.1,
+          "max_tokens": 4096,
+          "context_window": 131072,
+          "supports_tools": true,
+          "streaming": true
+        },
+        "gpt-4o-mini": {
+          "name": "GPT-4o-mini",
+          "description": "Lightweight GPT-4o version",
+          "temperature": 0.1,
+          "max_tokens": 16384,
+          "context_window": 131072,
+          "supports_tools": true,
+          "streaming": true
+        },
+        "gpt-4.1-nano": {
+          "name": "GPT-4.1-nano",
+          "description": "Low-cost GPT for debugging",
+          "temperature": 0.1,
+          "max_tokens": 4096,
+          "context_window": 4096,
+          "supports_tools": true,
+          "streaming": true
+        }
+      }
+    },
+    "OLLAMA": {
+      "name": "Ollama Local Models",
+      "api_key_env": null,
+      "base_url": "http://localhost:11434",
+      "base_url_env": "OLLAMA_BASE_URL",
+      "default_model": "auto",
+      "extra_params": {
+        "timeout": 60,
+        "keep_alive": "5m"
+      },
+      "models": {
+        "auto": {
+          "name": "Auto-detect Model",
+          "description": "Automatically detect and use available local model",
+          "temperature": 0.1,
+          "max_tokens": 4096,
+          "context_window": 8192,
+          "supports_tools": true,
+          "streaming": true
+        }
+      }
+    }
+  }
+}

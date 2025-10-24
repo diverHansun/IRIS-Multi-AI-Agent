@@ -1,0 +1,99 @@
+{
+  "_comment": "LLM Provider Configuration Example - Pure LLM Parameters Only",
+  "_usage": "This file demonstrates LLM-specific configuration without agent parameters",
+  "_reference": "See schema.json for field definitions and validation rules",
+  "_note": "Remove comments (lines starting with '_') when creating actual config files",
+
+  "schema_version": "1.0",
+  "description": "LLM provider configuration with pure LLM parameters only",
+
+  "providers": {
+
+    "ANTHROPIC": {
+      "name": "Anthropic",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "base_url": "https://api.anthropic.com/v1",
+      "base_url_env": "ANTHROPIC_BASE_URL",
+      "default_model": "claude-3-5-sonnet",
+
+      "models": {
+        "claude-3-5-sonnet": {
+          "name": "Claude 3.5 Sonnet",
+          "description": "Most intelligent model with balanced speed and capabilities",
+          "temperature": 0.1,
+          "max_tokens": 8192,
+          "context_window": 200000,
+          "supports_tools": true,
+          "streaming": true
+        },
+
+        "claude-3-opus": {
+          "name": "Claude 3 Opus",
+          "description": "Most powerful Claude model for complex tasks",
+          "temperature": 0.1,
+          "max_tokens": 8192,
+          "context_window": 200000,
+          "supports_tools": true,
+          "streaming": true
+        },
+
+        "claude-3-haiku": {
+          "name": "Claude 3 Haiku",
+          "description": "Fastest model for simple tasks and testing",
+          "temperature": 0.2,
+          "max_tokens": 4096,
+          "context_window": 200000,
+          "supports_tools": true,
+          "streaming": true
+        }
+      }
+    },
+
+    "CUSTOM_PROVIDER": {
+      "name": "Custom Provider",
+      "api_key_env": "CUSTOM_API_KEY",
+      "base_url": "https://api.custom.com/v1",
+      "base_url_env": "CUSTOM_BASE_URL",
+      "default_model": "custom-pro",
+
+      "models": {
+        "custom-pro": {
+          "name": "Custom Pro Model",
+          "description": "Full-featured model with thinking mode",
+          "temperature": 0.5,
+          "max_tokens": 8192,
+          "context_window": 128000,
+          "supports_tools": true,
+          "streaming": true,
+          "thinking_mode": true
+        },
+
+        "custom-lite": {
+          "name": "Custom Lite Model",
+          "description": "Lightweight model with fixed temperature",
+          "temperature": 1.0,
+          "temperature_fixed": true,
+          "max_tokens": 4096,
+          "context_window": 32768,
+          "supports_tools": true,
+          "streaming": true
+        }
+      }
+    },
+
+    "LOCAL_MODEL": {
+      "name": "Local Model Provider",
+      "api_key_env": null,
+      "base_url": "http://localhost:8000",
+      "base_url_env": "LOCAL_MODEL_URL",
+      "default_model": "auto",
+
+      "models": {},
+
+      "extra_params": {
+        "timeout": 60,
+        "keep_alive": "5m"
+      }
+    }
+  }
+}
