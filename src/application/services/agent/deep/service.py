@@ -115,7 +115,22 @@ class DeepAgentService(BaseEngineService):
     def get_info(self, ctx) -> Dict[str, Any]:
         config = self._config(ctx)
         agent = config.get("agent_instance")
-        agent_info = agent.get_info() if agent and hasattr(agent, "get_info") else {}
+
+        if agent and hasattr(agent, "get_info"):
+            # Agent is initialized, return full info
+            agent_info = agent.get_info()
+        else:
+            # Agent not yet initialized, return config-based metadata
+            agent_info = {
+                "provider": config.get("provider", "unknown"),
+                "model": config.get("model", "unknown"),
+                "function_type": config.get("function_type", "research"),
+                "tool_count": 0,
+                "tools": [],
+                "status": "not_initialized",
+                "message": "Agent will be initialized on first query",
+            }
+
         return {
             "agent": agent_info,
             "mode": {
