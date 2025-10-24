@@ -65,6 +65,19 @@ class BaseDeepAgentFactory(ABC):
         if adapter.base_url:
             model_settings["base_url"] = adapter.base_url
 
+        # Extract API key from environment using api_key_env
+        if adapter.api_key_env:
+            import os
+            api_key = os.getenv(adapter.api_key_env)
+            if api_key:
+                model_settings["api_key"] = api_key
+            else:
+                logger.warning(
+                    "API key environment variable %s is not set for provider %s",
+                    adapter.api_key_env,
+                    adapter.provider,
+                )
+
         runtime = create_deep_agent_runtime(
             model=adapter.get_model_identifier(),
             system_prompt=system_prompt,
@@ -128,6 +141,36 @@ class BaseDeepAgentFactory(ABC):
             try:
                 config = subagent_manager.get_subagent_config(subagent_type)
                 model_identifier = adapter.get_model_identifier_for(config["provider"], config["model"])
+
+                # Create actual LLM instance with correct base_url and api_key
+                from langchain.chat_models import init_chat_model
+                import os
+
+                model_settings = {
+                    key: value
+                    for key, value in config.items()
+                    if key in {"temperature", "max_tokens", "top_p", "timeout", "max_output_tokens"}
+                }
+
+                # Add base_url if configured
+                if "base_url" in config:
+                    model_settings["base_url"] = config["base_url"]
+
+                # Add api_key from environment
+                if "api_key_env" in config:
+                    api_key = os.getenv(config["api_key_env"])
+                    if api_key:
+                        model_settings["api_key"] = api_key
+                    else:
+                        logger.warning(
+                            "API key environment variable %s not set for subagent %s",
+                            config["api_key_env"],
+                            subagent_type,
+                        )
+
+                # Create LLM instance
+                subagent_llm = init_chat_model(model_identifier, **model_settings)
+
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("Failed to resolve subagent configuration for %s: %s", subagent_type, exc)
                 continue
@@ -143,7 +186,7 @@ class BaseDeepAgentFactory(ABC):
                 description=description,
                 system_prompt=prompt,
                 tools=tools,
-                model=model_identifier,
+                model=subagent_llm,  # Pass LLM instance instead of string identifier
                 metadata={
                     "provider": config["provider"],
                     "model_config": config,
