@@ -33,14 +33,17 @@ LLM_ENGINE_COMMANDS = [
 ]
 
 AGENT_ENGINE_COMMANDS = [
-    ("/model <provider> <model>", "Switch provider/model for the agent engine"),
+    ("/switch agent", "Switch to the agent engine"),
     ("/mode basic|deep", "Toggle agent mode"),
 ]
 
+BASIC_AGENT_COMMANDS = [
+    ("/model <provider> <model>", "Switch provider/model for the basic agent"),
+]
 DEEP_AGENT_COMMANDS = [
     ("/use <function>", "Select deep agent function (research|coding|analysis)"),
     ("/deep status", "Show active deep agent details"),
-    ("/deep filesystem <mode>", "Adjust filesystem middleware permissions"),
+    ("/deep filesystem <mode>", "Adjust filesystem middleware permissions (read-only|ask-before-edit|auto-edit)"),
     ("/deep subagents <list|status>", "Inspect available or active subagents"),
     ("/deep middleware status", "View middleware configuration summary"),
     ("/deep config <show|reload>", "Inspect or reload deep agent configuration"),
@@ -98,6 +101,7 @@ def print_welcome(console: Console) -> None:
         _format_command_section("Session Management", SESSION_COMMANDS),
         _format_command_section("LLM Engine", LLM_ENGINE_COMMANDS),
         _format_command_section("Agent Engine", AGENT_ENGINE_COMMANDS),
+        _format_command_section("Basic Agent Commands", BASIC_AGENT_COMMANDS),
         _format_command_section("Deep Agent Commands", DEEP_AGENT_COMMANDS),
         _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
     ]
@@ -138,6 +142,7 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
         _format_command_section("Session Management", SESSION_COMMANDS),
         _format_command_section("LLM Engine", LLM_ENGINE_COMMANDS),
         _format_command_section("Agent Engine", AGENT_ENGINE_COMMANDS),
+        _format_command_section("Basic Agent Commands", BASIC_AGENT_COMMANDS),
         _format_command_section("Deep Agent Commands", DEEP_AGENT_COMMANDS),
         _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
     ]
