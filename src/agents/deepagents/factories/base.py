@@ -11,6 +11,7 @@ from src.agents.deepagents.instances.base_deep_agent import BaseDeepAgent
 from src.agents.deepagents.managers.subagent_manager import SubAgentManager
 from src.components.deepagents.runtime import create_deep_agent_runtime
 from src.components.deepagents.runtime_middlewares import SubAgent
+from src.components.shared.tools.unified_manager import UnifiedToolManager
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,14 @@ class BaseDeepAgentFactory(ABC):
             middleware_config=resolved_middleware,
         )
 
+        tools = user_params.get("tools")
+        tool_manager = None
+        if not tools:
+            tool_manager = UnifiedToolManager(auto_register_defaults=True)
+            await tool_manager.initialize_all()
+            tools = tool_manager.get_all_tools()
+        tool_names = [getattr(tool, "name", repr(tool)) for tool in tools] if tools else []
+
         model_settings = adapter.get_model_parameters()
         if adapter.base_url:
             model_settings["base_url"] = adapter.base_url
@@ -59,7 +68,7 @@ class BaseDeepAgentFactory(ABC):
         runtime = create_deep_agent_runtime(
             model=adapter.get_model_identifier(),
             system_prompt=system_prompt,
-            tools=user_params.get("tools"),
+            tools=tools,
             model_settings=model_settings,
             middleware_config=resolved_middleware,
             subagents=subagent_specs,
@@ -78,6 +87,8 @@ class BaseDeepAgentFactory(ABC):
             "subagents": subagent_metadata,
             "provider_config": provider_config,
             "model_identifier": adapter.get_model_identifier(),
+            "tools": tool_names,
+            "tool_count": len(tool_names),
         }
         metadata.update(adapter.build_metadata())
 

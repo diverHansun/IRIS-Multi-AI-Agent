@@ -33,6 +33,7 @@ class DeepAgentService(BaseEngineService):
         config = self._config(ctx)
         config["agent_type"] = "deep"
         config.setdefault("function_type", "research")
+        config.setdefault("middleware", {})
         agent = config.get("agent_instance")
 
         if agent is None:
@@ -41,6 +42,10 @@ class DeepAgentService(BaseEngineService):
             info = agent.get_info() if hasattr(agent, "get_info") else {}
 
         config["agent_instance"] = agent
+        config["provider"] = info.get("provider") or config.get("provider")
+        config["model"] = info.get("model") or config.get("model")
+        if info_middleware := info.get("middleware"):
+            config["middleware"] = info_middleware
 
         return {
             "type": "success",

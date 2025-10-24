@@ -30,15 +30,19 @@ async def _instantiate_agent(
     model: str | None,
     function_type: str,
 ) -> Tuple[Any, str, str]:
-    resolved_provider = (provider or "").upper()
-    resolved_model = model
+    providers = deepagents_provider_registry.list_providers()
 
-    if not resolved_provider:
-        resolved_provider, default_model = _default_provider_and_model()
-        resolved_model = resolved_model or default_model
-    if not resolved_model:
-        _, default_model = _default_provider_and_model()
-        resolved_model = default_model
+    resolved_provider = (provider or "").upper()
+    if resolved_provider not in providers:
+        resolved_provider, resolved_model = _default_provider_and_model()
+    else:
+        model_map = providers[resolved_provider].get("models", {})
+        if not model_map:
+            raise RuntimeError(f"No models configured for provider {resolved_provider}.")
+        if not model or model not in model_map:
+            resolved_model = next(iter(model_map.keys()))
+        else:
+            resolved_model = model
 
     agent = await deep_agent_manager.create_deep_agent(
         provider=resolved_provider,
