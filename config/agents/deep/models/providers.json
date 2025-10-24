@@ -17,7 +17,7 @@
     }
   },
   "TONGYI": {
-    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "api_key_env": "TONGYI_API_KEY",
     "description": "Qwen models for code centric workflows.",
     "models": {
@@ -34,7 +34,7 @@
     }
   },
   "ZHIPU": {
-    "base_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
     "api_key_env": "ZHIPU_API_KEY",
     "description": "GLM models for research heavy tasks.",
     "models": {
