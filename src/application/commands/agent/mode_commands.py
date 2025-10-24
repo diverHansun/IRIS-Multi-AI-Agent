@@ -24,9 +24,11 @@ class ModeCommand(BaseCommand):
 
         config["agent_type"] = target
         config["agent_instance"] = None
+        if target == "deep":
+            config.setdefault("function_type", "research")
 
         if target == "deep":
-            return CommandResult.error("Deep agent mode is not available yet.")
+            return CommandResult.success("Switched to deep agent mode.")
 
         return CommandResult.success("Switched to basic agent mode.")
 

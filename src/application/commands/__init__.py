@@ -24,8 +24,9 @@ def register_command(command: BaseCommand) -> None:
 
 
 def register_default_commands() -> None:
+    from src.application.commands.agent.basic import ModelCommand
     from src.application.commands.agent.mode_commands import ModeCommand
-    from src.application.commands.agent.model_commands import ModelCommand
+    from src.application.commands.agent.deep import DeepCommand, UseCommand
     from src.application.commands.agentflow.graph_commands import GraphCommand
     from src.application.commands.agentflow.model_commands import AgentFlowModelCommand
     from src.application.commands.agentflow.node_commands import NodesCommand, VisualizeCommand
@@ -60,6 +61,8 @@ def register_default_commands() -> None:
         CleanupSessionsCommand(),
         ModelCommand(),
         ModeCommand(),
+        UseCommand(),
+        DeepCommand(),
         LLMsCommand(),
         ReloadCommand(),
         LLMStreamCommand(),

@@ -37,6 +37,15 @@ AGENT_ENGINE_COMMANDS = [
     ("/mode basic|deep", "Toggle agent mode"),
 ]
 
+DEEP_AGENT_COMMANDS = [
+    ("/use <function>", "Select deep agent function (research|coding|analysis)"),
+    ("/deep status", "Show active deep agent details"),
+    ("/deep filesystem <mode>", "Adjust filesystem middleware permissions"),
+    ("/deep subagents <list|status>", "Inspect available or active subagents"),
+    ("/deep middleware status", "View middleware configuration summary"),
+    ("/deep config <show|reload>", "Inspect or reload deep agent configuration"),
+]
+
 AGENT_TOOL_COMMANDS = [
     ("/tools [--list]", "Display available tools (summary or detailed table)"),
     ("/mcp status [-v]", "Inspect MCP servers and registered tools"),
@@ -89,6 +98,7 @@ def print_welcome(console: Console) -> None:
         _format_command_section("Session Management", SESSION_COMMANDS),
         _format_command_section("LLM Engine", LLM_ENGINE_COMMANDS),
         _format_command_section("Agent Engine", AGENT_ENGINE_COMMANDS),
+        _format_command_section("Deep Agent Commands", DEEP_AGENT_COMMANDS),
         _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
     ]
 
@@ -128,6 +138,7 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
         _format_command_section("Session Management", SESSION_COMMANDS),
         _format_command_section("LLM Engine", LLM_ENGINE_COMMANDS),
         _format_command_section("Agent Engine", AGENT_ENGINE_COMMANDS),
+        _format_command_section("Deep Agent Commands", DEEP_AGENT_COMMANDS),
         _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
     ]
 
@@ -137,6 +148,8 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
         - /switch agent               Switch to the Agent engine
         - /mode basic                 Use the basic agent mode
         - /model openai gpt-4o        Switch provider and model
+        - /use coding                 Activate coding deep-agent function
+        - /deep status                Inspect deep agent configuration
         - /stream on                  Enable LLM streaming output
         - /switch dify                Switch to the Dify engine
         """
@@ -159,6 +172,9 @@ def render_info(
     streaming = mode_info.get("streaming", True)
     mode = mode_info.get("mode", "llm")
     session_id = mode_info.get("session_id", "N/A")
+    agent_type = mode_info.get("agent_type")
+    function_type = mode_info.get("function_type") or agent_info.get("function_type")
+    middleware_info = mode_info.get("middleware") or agent_info.get("middleware")
     conversation_id = agent_info.get("conversation_id")
     files_count = agent_info.get("files_count")
 
@@ -170,6 +186,19 @@ def render_info(
         f"Streaming: {'Enabled' if streaming else 'Disabled'}",
         f"Session ID: {session_id}",
     ]
+
+    if agent_type:
+        lines.append(f"Agent Type: {agent_type}")
+    if agent_type == "deep":
+        lines.append(f"Deep Function: {function_type or 'N/A'}")
+        if middleware_info:
+            if isinstance(middleware_info, dict):
+                middleware_summary = ", ".join(sorted(middleware_info.keys()))
+            elif isinstance(middleware_info, list):
+                middleware_summary = ", ".join(middleware_info)
+            else:
+                middleware_summary = str(middleware_info)
+            lines.append(f"Middleware: {middleware_summary or 'N/A'}")
 
     if conversation_id:
         lines.append(f"Conversation ID: {conversation_id}")
