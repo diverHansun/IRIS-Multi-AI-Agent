@@ -12,12 +12,16 @@ def get_current_service(ctx) -> BaseEngineService:
 
         return LLMService()
     if engine == "agent":
-        from src.application.services.agent.basic import BasicAgentService
-
         agent_type = ctx.get_engine_config("agent").get("agent_type", "basic").lower()
         if agent_type in {"basic", ""}:
+            from src.application.services.agent.basic import BasicAgentService
+
             return BasicAgentService()
-        raise NotImplementedError("Deep agent mode is not available yet.")
+        if agent_type == "deep":
+            from src.application.services.agent.deep import DeepAgentService
+
+            return DeepAgentService()
+        raise ValueError(f"Unknown agent type '{agent_type}'")
     if engine == "agentflow":
         from src.application.services.agentflow import AgentFlowService
 
