@@ -18,10 +18,10 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 
 from .runtime_middlewares import (
-    CompiledSubAgent,
     FilesystemMiddleware,
     PatchToolCallsMiddleware,
     SubAgent,
+    CompiledSubAgent,
     SubAgentMiddleware,
 )
 
@@ -81,6 +81,12 @@ def create_deep_agent_runtime(
         general_purpose_agent=True,
         task_description=subagents_cfg.get("task_description"),
     )
+
+    # Get task tool from SubAgentMiddleware and add to tools list
+    task_tool = subagent_middleware.get_task_tool()
+    if task_tool:
+        tools = list(tools) if tools else []
+        tools.append(task_tool)
 
     deepagent_middleware: List[AgentMiddleware] = [
         TodoListMiddleware(),
