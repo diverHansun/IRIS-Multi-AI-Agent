@@ -1,10 +1,9 @@
 """
 Core Providers Module
 
-Provides shared Provider abstractions and configuration management.
+Provides separated provider configuration management for LLM and BasicAgents modules.
 """
 
-from .provider_registry import ProviderRegistry, provider_registry, LLMProvider
 from .llm_provider_registry import LLMProviderRegistry, llm_registry
 from .basicagents_provider_registry import BasicAgentsProviderRegistry, basicagents_registry
 from .utils.ollama import (
@@ -18,15 +17,12 @@ from .utils.ollama import (
 
 __all__ = [
     # Recommended API (module-level instances)
-    'provider_registry',
     'llm_registry',
     'basicagents_registry',
 
     # Classes (for advanced users)
-    'ProviderRegistry',
     'LLMProviderRegistry',
     'BasicAgentsProviderRegistry',
-    'LLMProvider',
 
     # Ollama utilities
     'list_ollama_models',
