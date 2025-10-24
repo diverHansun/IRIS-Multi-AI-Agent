@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from src.config import settings
-from src.core.providers import provider_registry
+from src.core.providers import llm_registry
 from src.llm.adapters import (
     ZhipuAdapter,
     OpenAIAdapter,
@@ -45,7 +45,7 @@ class LLMManager:
     """
 
     def __init__(self):
-        self.provider_registry = provider_registry
+        self.provider_registry = llm_registry
         self._api_keys: Dict[LLMProvider, str] = {}
         self._adapter_map = {
             "ZHIPU": ZhipuAdapter,
@@ -58,7 +58,7 @@ class LLMManager:
             "OLLAMA": OllamaLLM,
         }
         self._load_api_keys()
-        logger.info("LLM Manager initialised")
+        logger.info("LLM Manager initialized")
 
     def _load_api_keys(self) -> None:
         """Load API keys from settings."""

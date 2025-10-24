@@ -2,16 +2,16 @@
 LLM Adapter Base Class
 
 Provides a shared abstraction for provider specific LLM adapters.
-Configuration access is delegated to ProviderRegistry to avoid repeated file I/O.
+Configuration access is delegated to LLMProviderRegistry to avoid repeated file I/O.
 """
 
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
 
-from src.core.providers.provider_registry import (
-    ProviderRegistry,
-    provider_registry as default_registry,
+from src.core.providers.llm_provider_registry import (
+    LLMProviderRegistry,
+    llm_registry as default_registry,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ class LLMAdapter(ABC):
         self,
         provider: str,
         model: Optional[str],
-        provider_registry: Optional[ProviderRegistry] = None,
+        provider_registry: Optional[LLMProviderRegistry] = None,
         mode: str = "llm",
     ):
         self.provider_registry = provider_registry or default_registry

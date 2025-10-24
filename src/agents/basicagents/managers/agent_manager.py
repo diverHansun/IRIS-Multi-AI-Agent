@@ -1,7 +1,12 @@
 """
-Agent Manager - Agent创建和管理的统一入口
+Agent Manager - Unified entry point for agent creation and management.
 
-负责协调LLM和Agent的创建，应用配置参数。
+Responsible for coordinating agent creation and applying configuration parameters.
+
+Following SOLID principles:
+- SRP: Manages only agent creation workflow
+- OCP: Extendable via factory pattern
+- DIP: Depends on BasicAgentsProviderRegistry abstraction
 """
 
 import logging
@@ -12,21 +17,20 @@ logger = logging.getLogger(__name__)
 
 class AgentManager:
     """
-    Agent管理器
+    Agent manager for BasicAgents module.
 
-    职责:
-    - 协调Agent创建流程
-    - 集成LLM Adapter和Agent Adapter
-    - 应用配置文件中的agent参数
+    Responsibilities:
+    - Coordinate agent creation workflow
+    - Integrate Agent Adapter and Factory
+    - Apply agent configuration parameters
     """
 
     def __init__(self):
-        """初始化Agent管理器"""
-        # 使用共享provider_registry替代llm_manager
-        from src.core.providers import provider_registry
+        """Initialize Agent Manager."""
+        from src.core.providers import basicagents_registry
         from src.agents.basicagents.factories.registry import FactoryRegistry
 
-        self.provider_registry = provider_registry
+        self.provider_registry = basicagents_registry
         self.factory_registry = FactoryRegistry()
 
         logger.info("AgentManager initialized")
@@ -39,26 +43,26 @@ class AgentManager:
         **user_params
     ):
         """
-        创建Agent实例
+        Create Agent instance.
 
         Args:
-            provider: Provider名称 (zhipu, openai, ollama)
-            model: 模型名称，None时使用默认模型
-            agent_type: Agent类型 ("auto", "react", "function_calling")
-            **user_params: 用户自定义参数，可覆盖配置文件的默认值
-                - temperature: 温度参数
-                - max_iterations: 最大迭代次数
-                - max_execution_time: 最大执行时间
-                - enable_memory: 是否启用记忆
-                - verbose: 是否详细输出
-                等
+            provider: Provider name (zhipu, openai, ollama)
+            model: Model name. If None, uses default model
+            agent_type: Agent type ("auto", "react", "function_calling")
+            **user_params: User-provided parameters to override config defaults
+                - temperature: Temperature parameter
+                - max_iterations: Maximum iterations
+                - max_execution_time: Maximum execution time
+                - enable_memory: Enable memory
+                - verbose: Verbose output
+                etc.
 
         Returns:
-            初始化完成的Agent实例
+            Initialized Agent instance
 
         Example:
             >>> from src.agents.basicagents.managers import agent_manager
-            >>> agent = agent_manager.create_agent(
+            >>> agent = await agent_manager.create_agent(
             ...     provider="zhipu",
             ...     model="glm-4.5",
             ...     verbose=True
@@ -66,29 +70,30 @@ class AgentManager:
         """
         provider = provider.upper()
 
-        # 1. 获取Provider配置
+        # Get provider configuration to resolve default model
         provider_config = self._get_provider_config(provider)
         if not model:
             model = provider_config.get("default_model")
 
         logger.info(f"Creating agent: {provider}/{model}")
 
-        # 2. 创建LLM Adapter (来自llm模块)
-        llm_adapter = self._create_llm_adapter(provider, model)
-
-        # 3. 创建Agent Adapter (来自本模块)
+        # Create Agent Adapter (includes LLM creation capability)
         agent_adapter = self._create_agent_adapter(provider, model)
 
-        # 4. 获取Factory并创建Agent
+        # Create LLM using agent adapter
+        llm = agent_adapter.create_llm(**user_params)
+
+        # Get Factory and create Agent
         factory = self.factory_registry.get_factory(provider)
         if not factory:
             raise ValueError(f"No factory found for provider: {provider}")
 
-        # 使用Factory创建Agent（会调用create_agent_with_adapters）
+        # Use Factory to create Agent
         agent = await factory.create_agent_with_adapters(
             model=model,
-            llm_adapter=llm_adapter,
+            llm_adapter=None,  # No longer needed, adapter creates LLM directly
             agent_adapter=agent_adapter,
+            llm=llm,  # Pass created LLM directly
             **user_params
         )
 
@@ -96,9 +101,19 @@ class AgentManager:
         return agent
 
     def _get_provider_config(self, provider: str) -> Dict[str, Any]:
-        """获取Provider配置"""
+        """
+        Get provider configuration.
+
+        Args:
+            provider: Provider name
+
+        Returns:
+            Provider configuration dict
+
+        Raises:
+            ValueError: If provider not found
+        """
         try:
-            # 从共享provider_registry获取配置
             config = self.provider_registry.get_provider_config(provider)
             if not config:
                 raise ValueError(f"Provider {provider} not found")
@@ -107,32 +122,20 @@ class AgentManager:
             logger.error(f"Failed to get provider config: {e}")
             raise
 
-    def _create_llm_adapter(self, provider: str, model: str):
-        """创建LLM适配器 (来自llm模块)"""
-        from src.llm.adapters import (
-            ZhipuAdapter,
-            OpenAIAdapter,
-            OllamaAdapter,
-        )
-
-        adapter_map = {
-            "ZHIPU": ZhipuAdapter,
-            "OPENAI": OpenAIAdapter,
-            "OLLAMA": OllamaAdapter,
-        }
-
-        adapter_class = adapter_map.get(provider)
-        if not adapter_class:
-            raise ValueError(f"No LLM adapter found for provider: {provider}")
-
-        return adapter_class(
-            model=model,
-            provider_registry=self.provider_registry,
-            mode="agent",
-        )
-
     def _create_agent_adapter(self, provider: str, model: str):
-        """创建Agent适配器 (来自本模块)"""
+        """
+        Create Agent adapter.
+
+        Args:
+            provider: Provider name
+            model: Model name
+
+        Returns:
+            Agent adapter instance
+
+        Raises:
+            ValueError: If no adapter found for provider
+        """
         from src.agents.basicagents.adapters import (
             ZhipuAgentAdapter,
             OpenAIAgentAdapter,
@@ -154,114 +157,56 @@ class AgentManager:
             provider_registry=self.provider_registry,
         )
 
-    def _get_agent_class(self, provider: str, model: str, agent_type: str):
-        """
-        获取Agent类
-
-        Args:
-            provider: Provider名称
-            model: 模型名称
-            agent_type: Agent类型 ("auto", "react", "function_calling")
-
-        Returns:
-            Agent类
-        """
-        from src.agents.basicagents.instances import (
-            ZhipuAgent,
-            ZhipuFCallAgent,
-            OpenAIAgent,
-            OllamaAgent,
-        )
-
-        # 自动选择Agent类型
-        if agent_type == "auto":
-            if provider == "ZHIPU":
-                # glm-4.5系列使用Function Calling
-                if model in ["glm-4.5", "glm-4.5-flash"]:
-                    return ZhipuFCallAgent
-                else:
-                    return ZhipuAgent
-            elif provider == "OPENAI":
-                return OpenAIAgent
-            elif provider == "OLLAMA":
-                return OllamaAgent
-            else:
-                raise ValueError(f"Unknown provider: {provider}")
-
-        # 手动指定Agent类型
-        elif agent_type == "function_calling":
-            if provider == "ZHIPU":
-                return ZhipuFCallAgent
-            elif provider == "OPENAI":
-                return OpenAIAgent
-            else:
-                raise ValueError(f"Provider {provider} does not support function calling")
-
-        elif agent_type == "react":
-            if provider == "ZHIPU":
-                return ZhipuAgent
-            elif provider == "OPENAI":
-                return OpenAIAgent
-            elif provider == "OLLAMA":
-                return OllamaAgent
-            else:
-                raise ValueError(f"Unknown provider: {provider}")
-
-        else:
-            raise ValueError(f"Unknown agent_type: {agent_type}")
-
     def get_available_agents(self) -> List[Dict[str, Any]]:
         """
-        获取可用的Agent列表
+        Get list of available agents.
 
         Returns:
-            可用Agent列表，包含provider、model、agent_type等信息
+            List of available agents with provider, model, agent_type info
         """
         agents = []
 
-        # 从provider_registry获取所有provider配置
+        # Get all provider configurations from BasicAgents registry
         all_providers = self.provider_registry.list_providers()
         for provider_key, provider_config in all_providers.items():
             provider = provider_key.lower()
             models = provider_config.get("models", {})
 
-            # 对于Ollama，需要动态检测本地可用模型
+            # For Ollama, dynamically detect available local models
             if provider == "ollama":
                 try:
-                    # 动态获取Ollama本地模型
                     import asyncio
                     from src.core.providers.utils import list_ollama_models
-                    
-                    # 检查是否在事件循环中
+
+                    # Check if already in event loop
                     try:
                         loop = asyncio.get_running_loop()
-                        # 如果在事件循环中，创建新的线程来运行异步函数
+                        # If in event loop, create new thread to run async function
                         import concurrent.futures
-                        import threading
-                        
+
                         def run_async():
                             return asyncio.run(list_ollama_models())
-                        
-                        # 在新线程中运行异步函数
+
+                        # Run async function in new thread
                         with concurrent.futures.ThreadPoolExecutor() as executor:
                             future = executor.submit(run_async)
                             local_models = future.result(timeout=10)
                     except RuntimeError:
-                        # 没有运行的事件循环，直接运行
+                        # No running event loop, run directly
                         local_models = asyncio.run(list_ollama_models())
-                    
-                    # 为每个本地模型创建一个代理项
+
+                    # Create agent entry for each local model
                     for model_name in local_models:
                         agents.append({
                             "provider": provider,
                             "model": model_name,
                             "agent_type": "react",
-                            "supports_tools": True,  # Ollama模型通常支持工具调用
-                            "recommended": True,  # 本地模型视为推荐
-                            "description": f"Ollama本地模型: {model_name}",
+                            "supports_tools": True,
+                            "recommended": True,
+                            "description": f"Ollama local model: {model_name}",
                         })
-                    
-                    # 如果没有本地模型，至少添加一个基础项
+
+                    # If no local models, add placeholder entry
                     if not local_models:
                         agents.append({
                             "provider": provider,
@@ -269,32 +214,24 @@ class AgentManager:
                             "agent_type": "react",
                             "supports_tools": True,
                             "recommended": False,
-                            "description": "Ollama本地模型（无模型）",
+                            "description": "Ollama local model (no models available)",
                         })
                 except Exception as e:
-                    logger.warning(f"无法获取Ollama模型列表: {e}")
-                    # 即使无法获取具体的本地模型，也要添加一个基础的Ollama代理项
+                    logger.warning(f"Failed to get Ollama model list: {e}")
+                    # Add basic Ollama entry even if can't get specific models
                     agents.append({
                         "provider": provider,
-                        "model": "unknown",  # 表示模型还未知
+                        "model": "unknown",
                         "agent_type": "react",
                         "supports_tools": True,
                         "recommended": False,
-                        "description": "Ollama本地模型服务",
+                        "description": "Ollama local model service",
                     })
             else:
-                # 对于其他提供商，使用预定义的模型列表
+                # For other providers, use predefined model list
                 for model_name, model_config in models.items():
-                    # 确定Agent类型
-                    if provider == "zhipu":
-                        if model_name in ["glm-4.5", "glm-4.5-flash"]:
-                            agent_type = "function_calling"
-                        else:
-                            agent_type = "react"
-                    elif provider == "openai":
-                        agent_type = "function_calling"
-                    else:
-                        agent_type = "react"
+                    # Determine agent type from config
+                    agent_type = model_config.get("agent_type", "react")
 
                     agents.append({
                         "provider": provider,
@@ -308,26 +245,26 @@ class AgentManager:
         return agents
 
 
-# 全局Agent管理器实例
+# Global Agent manager instance
 agent_manager = AgentManager()
 
 
-# 便捷函数
+# Convenience functions
 async def create_agent(provider: str, model: str = None, **kwargs):
     """
-    创建Agent实例的便捷函数
+    Convenience function to create Agent instance.
 
     Args:
-        provider: Provider名称
-        model: 模型名称
-        **kwargs: 其他参数
+        provider: Provider name
+        model: Model name
+        **kwargs: Other parameters
 
     Returns:
-        Agent实例
+        Agent instance
     """
     return await agent_manager.create_agent(provider, model, **kwargs)
 
 
 def get_available_agents() -> List[Dict[str, Any]]:
-    """获取可用Agent列表的便捷函数"""
+    """Convenience function to get available agent list."""
     return agent_manager.get_available_agents()

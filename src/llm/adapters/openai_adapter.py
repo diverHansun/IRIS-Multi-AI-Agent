@@ -5,7 +5,7 @@ OpenAI LLM Adapter.
 import logging
 from typing import Any, Dict, Optional
 
-from src.core.providers.provider_registry import ProviderRegistry
+from src.core.providers.llm_provider_registry import LLMProviderRegistry
 
 from .base import LLMAdapter
 
@@ -18,7 +18,7 @@ class OpenAIAdapter(LLMAdapter):
     def __init__(
         self,
         model: Optional[str],
-        provider_registry: Optional[ProviderRegistry] = None,
+        provider_registry: Optional[LLMProviderRegistry] = None,
         mode: str = "llm",
     ):
         super().__init__(

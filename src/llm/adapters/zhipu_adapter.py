@@ -1,13 +1,13 @@
 """
 Zhipu AI LLM Adapter
 
-负责读取配置并应用智谱特有的参数逻辑。
+Responsible for reading configuration and applying Zhipu-specific parameter logic.
 """
 
 import logging
 from typing import Any, Dict, Optional
 
-from src.core.providers.provider_registry import ProviderRegistry
+from src.core.providers.llm_provider_registry import LLMProviderRegistry
 
 from .base import LLMAdapter
 
@@ -20,7 +20,7 @@ class ZhipuAdapter(LLMAdapter):
     def __init__(
         self,
         model: Optional[str],
-        provider_registry: Optional[ProviderRegistry] = None,
+        provider_registry: Optional[LLMProviderRegistry] = None,
         mode: str = "llm",
     ):
         super().__init__(

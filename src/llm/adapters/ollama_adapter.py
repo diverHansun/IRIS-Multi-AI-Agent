@@ -2,13 +2,13 @@
 Ollama LLM Adapter.
 
 Applies provider defaults and Ollama specific adjustments such as temperature
-optimisation for agent mode and convenience flags.
+optimization for agent mode and convenience flags.
 """
 
 import logging
 from typing import Any, Dict, Optional
 
-from src.core.providers.provider_registry import ProviderRegistry
+from src.core.providers.llm_provider_registry import LLMProviderRegistry
 from src.core.providers.utils import list_ollama_models
 
 from .base import LLMAdapter
@@ -22,7 +22,7 @@ class OllamaAdapter(LLMAdapter):
     def __init__(
         self,
         model: Optional[str],
-        provider_registry: Optional[ProviderRegistry] = None,
+        provider_registry: Optional[LLMProviderRegistry] = None,
         mode: str = "llm",
     ):
         super().__init__(
