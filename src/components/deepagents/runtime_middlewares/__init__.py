@@ -164,6 +164,8 @@ class SubAgentMiddleware(AgentMiddleware):
         self.task_description = task_description or "Delegate complex or parallelisable work to subagents."
         self.tools: List[Any] = []
         self.system_prompt = self._build_system_prompt()
+        self._subagent_runnables: Dict[str, Any] = {}
+        self._create_subagent_runnables()
 
     def _build_system_prompt(self) -> str:
         if not self.subagents:
@@ -200,15 +202,81 @@ class SubAgentMiddleware(AgentMiddleware):
             )
         return await handler(request)
 
+    def _create_subagent_runnables(self) -> None:
+        """Create runnable instances for each subagent using langchain.agents.create_agent."""
+        from langchain.agents import create_agent
+
+        for subagent_spec in self.subagents:
+            if isinstance(subagent_spec, CompiledSubAgent):
+                # Already compiled, use directly
+                self._subagent_runnables[subagent_spec.name] = subagent_spec.runnable
+            else:
+                # Create agent from SubAgent spec
+                subagent_model = subagent_spec.model if subagent_spec.model else self.default_model
+                subagent_tools = list(subagent_spec.tools) if subagent_spec.tools else list(self.default_tools)
+
+                # Create the subagent
+                subagent_runnable = create_agent(
+                    subagent_model,
+                    system_prompt=subagent_spec.system_prompt,
+                    tools=subagent_tools,
+                    middleware=self.default_middleware,
+                    checkpointer=False,
+                )
+                self._subagent_runnables[subagent_spec.name] = subagent_runnable
+
+    def get_task_tool(self) -> Any | None:
+        """Create and return the task tool for subagent delegation.
+
+        This method should be called by the runtime builder to get the task tool
+        before creating the agent, NOT dynamically added in middleware hooks.
+        """
+        if not self._subagent_runnables:
+            return None
+
+        from langchain_core.tools import StructuredTool
+        from pydantic import BaseModel, Field
+
+        class TaskInput(BaseModel):
+            subagent_type: str = Field(description=f"Type of subagent to use. Options: {', '.join(self._subagent_runnables.keys())}")
+            description: str = Field(description="Detailed task description for the subagent")
+
+        async def invoke_task(subagent_type: str, description: str) -> str:
+            """Invoke a subagent to handle a specific task."""
+            if subagent_type not in self._subagent_runnables:
+                return f"Error: Unknown subagent type '{subagent_type}'. Available: {list(self._subagent_runnables.keys())}"
+
+            subagent = self._subagent_runnables[subagent_type]
+            try:
+                result = await subagent.ainvoke({"messages": [{"role": "user", "content": description}]})
+                # Extract the final message content
+                messages = result.get("messages", [])
+                if messages:
+                    return messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
+                return "SubAgent completed but returned no response."
+            except Exception as exc:
+                return f"SubAgent execution failed: {exc}"
+
+        task_tool = StructuredTool(
+            name="task",
+            description=f"Delegate complex tasks to specialized subagents. Available types: {', '.join(self._subagent_runnables.keys())}",
+            func=lambda **kwargs: None,  # Sync not supported
+            coroutine=invoke_task,
+            args_schema=TaskInput,
+        )
+
+        return task_tool
+
     def describe(self) -> Dict[str, Any]:
         return {
             "subagents": [
                 {
-                    "name": subagent.name,
+                    "name": subagent.name if hasattr(subagent, 'name') else "unknown",
                     "description": getattr(subagent, "description", ""),
                     "model": getattr(subagent, "model", None),
                 }
                 for subagent in self.subagents
             ],
             "general_purpose_agent": self.general_purpose_agent,
+            "subagent_count": len(self._subagent_runnables),
         }
