@@ -23,39 +23,36 @@ config/agents/deep/
 ```json
 {
   "providers": {
-    "anthropic": {
-      "base_url": "https://api.anthropic.com/v1",
-      "api_key_env": "ANTHROPIC_API_KEY",
-      "models": {
-        "claude-4.5-sonnet": {
-          "name": "Claude 4.5 Sonnet",
-          "temperature": 0.1,
-          "max_tokens": 8000
+      "anthropic": {
+        "base_url": "https://api.openai-proxy.org/v1",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "models": {
+          "claude-4.5-sonnet": {
+            "temperature": 0.6,
+            "max_tokens": 4096
+          }
+        }
+      },
+      "tongyi": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "api_key_env": "TONGYI_API_KEY",
+        "models": {
+          "qwen3-coder": {
+            "temperature": 0.6,
+            "max_tokens": 4096
+          }
+        }
+      },
+      "zhipu": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "api_key_env": "ZHIPU_API_KEY",
+        "models": {
+          "glm-4.6": {
+            "temperature": 0.6,
+            "max_tokens": 4096
+          }
         }
       }
-    },
-    "tongyi": {
-      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "api_key_env": "TONGYI_API_KEY",
-      "models": {
-        "qwen3-coder": {
-          "name": "Qwen3 Coder",
-          "temperature": 0.1,
-          "max_tokens": 4000
-        }
-      }
-    },
-    "zhipu": {
-      "base_url": "https://open.bigmodel.cn/api/paas/v4",
-      "api_key_env": "ZHIPU_API_KEY",
-      "models": {
-        "glm-4.6": {
-          "name": "GLM-4.6",
-          "temperature": 0.1,
-          "max_tokens": 6000
-        }
-      }
-    }
   }
 }
 ```
@@ -64,36 +61,62 @@ config/agents/deep/
 ```json
 {
   "research": {
-    "anthropic": {
-      "claude-4.5-sonnet": {
-        "name": "Claude Research",
-        "temperature": 0.1,
-        "max_tokens": 4000
-      }
-    },
-    "zhipu": {
-      "glm-4.6": {
-        "name": "GLM Research",
-        "temperature": 0.1,
-        "max_tokens": 3000
+    "providers": {
+      "anthropic": {
+        "base_url": "https://api.openai-proxy.org/v1",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "models": {
+          "claude-4.5-sonnet": {
+            "temperature": 0.6,
+            "max_tokens": 4096,
+            "context_window": 200000,
+            "supports_tools": true
+          }
+        }
+      },
+      "zhipu": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        "api_key_env": "ZHIPU_API_KEY",
+        "models": {
+          "glm-4.6": {
+            "temperature": 0.6,
+            "max_tokens": 4096,
+            "context_window": 128000,
+            "supports_tools": true
+          }
+        }
       }
     }
   },
   "coding": {
-    "tongyi": {
-      "qwen3-coder": {
-        "name": "Qwen3 Coder",
-        "temperature": 0.2,
-        "max_tokens": 2000
+    "providers": {
+      "tongyi": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "api_key_env": "TONGYI_API_KEY",
+        "models": {
+          "qwen3-coder": {
+            "temperature": 0.6,
+            "max_tokens": 4096,
+            "context_window": 32000,
+            "supports_tools": true
+          }
+        }
       }
     }
   },
   "analysis": {
-    "anthropic": {
-      "claude-4.5-sonnet": {
-        "name": "Claude Analysis",
-        "temperature": 0.1,
-        "max_tokens": 3000
+    "providers": {
+      "anthropic": {
+        "base_url": "https://api.openai-proxy.org/v1",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "models": {
+          "claude-4.5-sonnet": {
+            "temperature": 0.6,
+            "max_tokens": 4096,
+            "context_window": 200000,
+            "supports_tools": true
+          }
+        }
       }
     }
   }

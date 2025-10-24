@@ -40,13 +40,13 @@ Deep Agent Status:
 - Active Subagents: research, coding
 ```
 
-#### `/deep filesystem <mode>`
-Controls filesystem middleware behavior.
+#### `/deep filesystem <permission_mode>`
+Controls filesystem middleware permission behavior.
 
-**Modes:**
-- `read-only`: Only allows file reading operations
-- `ask-before-edit`: Prompts user before file modifications
-- `auto-edit`: Allows automatic file editing (high risk)
+**Permission Modes:**
+- `read-only`: Only allows file reading operations (read_file, list_files, search_files)
+- `ask-before-edit`: Prompts user before file modifications (includes write_file, edit_file, delete_file)
+- `auto-edit`: Allows automatic file editing (high risk, all operations without confirmation)
 
 **Usage:**
 ```bash
@@ -57,8 +57,53 @@ Controls filesystem middleware behavior.
 
 **Response:**
 ```
-Filesystem mode switched to: read-only
+Filesystem permission mode switched to: read-only
+Available tools: read_file, list_files, search_files
 Allowed paths: /workspace/, /data/, /tmp/
+Security: Path validation enabled, max file size: 10MB
+```
+
+#### `/deep subagents <action>`
+Manages subagent information and status.
+
+**Actions:**
+- `list`: List available subagent types
+- `status`: Display current subagent status
+
+**Usage:**
+```bash
+/deep subagents list
+/deep subagents status
+```
+
+**Response:**
+```
+Available Subagents:
+- research: Claude 4.5 Sonnet, GLM-4.6
+- coding: Qwen3 Coder
+- analysis: Claude 4.5 Sonnet
+
+Active Subagents: 0/3
+Max Concurrent: 3
+```
+
+#### `/deep middleware <action>`
+Manages middleware status and configuration.
+
+**Actions:**
+- `status`: Display middleware status
+
+**Usage:**
+```bash
+/deep middleware status
+```
+
+**Response:**
+```
+Middleware Status:
+- filesystem: enabled (read-only mode)
+- subagents: enabled (3 types available)
+- patch_tool_calls: enabled
 ```
 
 #### `/deep config <action>`
@@ -77,9 +122,9 @@ Manages deep agent configuration.
 **Response:**
 ```
 Configuration loaded from:
+- config/agents/deep/models/providers.json
 - config/agents/deep/middleware/filesystem.json
 - config/agents/deep/middleware/subagents.json
-- config/agents/deep/models/subagents.json
 ```
 
 ## Implementation
