@@ -67,21 +67,41 @@ class BaseDeepAgent:
                 "messages": [],
                 "tool_calls": 0,
                 "tool_names": [],
+                "subagent_calls": [],
                 "session_id": session_id,
             }
 
         output_message = self._extract_output_message(result)
         output_text = ""
+
+        # Extract tool calls and names from ALL messages, not just the last one
         tool_calls = 0
         tool_names: List[str] = []
+        subagent_calls: List[Dict[str, str]] = []  # Track subagent delegations
+        messages = result.get("messages", [])
+        for message in messages:
+            if isinstance(message, AIMessage) and hasattr(message, "tool_calls"):
+                message_tool_calls = message.tool_calls or []
+                tool_calls += len(message_tool_calls)
+                for tool_call in message_tool_calls:
+                    if isinstance(tool_call, dict):
+                        name = tool_call.get("name")
+                        if name and name not in tool_names:
+                            tool_names.append(name)
+
+                        # Check if this is a task tool (subagent delegation)
+                        if name == "task":
+                            args = tool_call.get("args", {})
+                            subagent_type = args.get("subagent_type", "unknown")
+                            task_desc = args.get("description", "")
+                            subagent_calls.append({
+                                "subagent_type": subagent_type,
+                                "description": task_desc[:100] + "..." if len(task_desc) > 100 else task_desc
+                            })
+
+        # Extract output text
         if isinstance(output_message, AIMessage):
             output_text = self._message_content_to_text(output_message.content)
-            tool_calls = len(output_message.tool_calls or [])
-            tool_names = [
-                tool_call.get("name")
-                for tool_call in (output_message.tool_calls or [])
-                if isinstance(tool_call, dict) and tool_call.get("name")
-            ]
         elif output_message is not None:
             output_text = self._message_content_to_text(getattr(output_message, "content", output_message))
 
@@ -91,6 +111,7 @@ class BaseDeepAgent:
             "messages": result.get("messages", []),
             "tool_calls": tool_calls,
             "tool_names": tool_names,
+            "subagent_calls": subagent_calls,  # Include subagent delegation info
             "session_id": session_id,
         }
 
