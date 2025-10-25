@@ -2,31 +2,39 @@
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, List
 
 from src.application.commands.base import BaseCommand, CommandResult
 
-COMMAND_REGISTRY: Dict[str, BaseCommand] = {}
+# Registry now stores a list of commands per name to support engine-scoped commands
+COMMAND_REGISTRY: Dict[str, List[BaseCommand]] = {}
 
 
 async def dispatch(name: str, ctx, args: str) -> CommandResult:
-    command = COMMAND_REGISTRY.get(name)
-    if command is None:
+    commands = COMMAND_REGISTRY.get(name)
+    if not commands:
         return CommandResult.error(f"Unknown command '{name}'")
-    if not command.is_available(ctx.current_engine):
-        return CommandResult.error(f"Command '{name}' is not available in current engine.")
-    return await command.execute(ctx, args)
+
+    # Find the first command that is available for the current engine
+    for command in commands:
+        if command.is_available(ctx.current_engine):
+            return await command.execute(ctx, args)
+
+    return CommandResult.error(f"Command '{name}' is not available in current engine.")
 
 
 def register_command(command: BaseCommand) -> None:
+    """Register a command. Multiple commands can share the same name if they have different engine_scopes."""
     for cmd_name in command.get_all_names():
-        COMMAND_REGISTRY[cmd_name] = command
+        if cmd_name not in COMMAND_REGISTRY:
+            COMMAND_REGISTRY[cmd_name] = []
+        COMMAND_REGISTRY[cmd_name].append(command)
 
 
 def register_default_commands() -> None:
-    from src.application.commands.agent.basic import ModelCommand as BasicModelCommand
+    from src.application.commands.agent.model_commands import ModelCommand
     from src.application.commands.agent.mode_commands import ModeCommand
-    from src.application.commands.agent.deep import DeepCommand, ModelCommand as DeepModelCommand, UseCommand
+    from src.application.commands.agent.deep import DeepCommand, UseCommand
     from src.application.commands.agentflow.graph_commands import GraphCommand
     from src.application.commands.agentflow.model_commands import AgentFlowModelCommand
     from src.application.commands.agentflow.node_commands import NodesCommand, VisualizeCommand
@@ -60,8 +68,7 @@ def register_default_commands() -> None:
         RestoreSessionCommand(),
         DeleteSessionCommand(),
         CleanupSessionsCommand(),
-        BasicModelCommand(),
-        DeepModelCommand(),
+        ModelCommand(),
         ModeCommand(),
         UseCommand(),
         DeepCommand(),
