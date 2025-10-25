@@ -6,6 +6,7 @@ we retain full control over prompting and configuration.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
@@ -14,6 +15,8 @@ from langchain.agents.middleware.types import AgentState, ModelRequest, ModelRes
 from langchain_core.messages import RemoveMessage, ToolMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.runtime import Runtime
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "FilesystemMiddleware",
@@ -244,7 +247,13 @@ class SubAgentMiddleware(AgentMiddleware):
         async def invoke_task(subagent_type: str, description: str) -> str:
             """Invoke a subagent to handle a specific task."""
             if subagent_type not in self._subagent_runnables:
-                return f"Error: Unknown subagent type '{subagent_type}'. Available: {list(self._subagent_runnables.keys())}"
+                error_msg = f"Error: Unknown subagent type '{subagent_type}'. Available: {list(self._subagent_runnables.keys())}"
+                logger.warning(error_msg)
+                return error_msg
+
+            # Log subagent invocation
+            logger.info(f"[SubAgent] Main agent delegating task to '{subagent_type}' subagent")
+            logger.debug(f"[SubAgent] Task description: {description[:100]}...")
 
             subagent = self._subagent_runnables[subagent_type]
             try:
@@ -252,10 +261,15 @@ class SubAgentMiddleware(AgentMiddleware):
                 # Extract the final message content
                 messages = result.get("messages", [])
                 if messages:
-                    return messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
+                    response = messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
+                    logger.info(f"[SubAgent] '{subagent_type}' completed successfully")
+                    return response
+                logger.warning(f"[SubAgent] '{subagent_type}' completed but returned no response")
                 return "SubAgent completed but returned no response."
             except Exception as exc:
-                return f"SubAgent execution failed: {exc}"
+                error_msg = f"SubAgent execution failed: {exc}"
+                logger.error(f"[SubAgent] '{subagent_type}' failed: {exc}")
+                return error_msg
 
         task_tool = StructuredTool(
             name="task",
