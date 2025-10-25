@@ -1,6 +1,6 @@
 {
   "ANTHROPIC": {
-    "base_url": "https://api.openai-proxy.org/anthropic",
+    "base_url": "https://api.openai-proxy.org/v1",
     "api_key_env": "ANTHROPIC_API_KEY",
     "description": "Anthropic Claude models configured for deep agents.",
     "models": {

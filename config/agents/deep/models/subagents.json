@@ -8,7 +8,7 @@
           "claude-4.5-sonnet": {
             "temperature": 0.6,
             "max_tokens": 4096,
-            "context_window": 200000,
+            "context_window": 20000,
             "supports_tools": true
           }
         }
