@@ -37,7 +37,8 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         if tool_calls:
             tool_names = result.get("tool_names") or []
             if tool_names:
-                ctx.console.print(f"[dim]Used {tool_calls} tool calls: {', '.join(tool_names)}[/]")
+                # Display unique tool count and names
+                ctx.console.print(f"[dim]Used {len(tool_names)} tools ({tool_calls} calls): {', '.join(tool_names)}[/]")
             else:
                 ctx.console.print(f"[dim]Used {tool_calls} tool calls[/]")
         return answer

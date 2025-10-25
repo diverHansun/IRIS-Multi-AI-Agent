@@ -241,11 +241,13 @@ class BaseAgent(ABC):
         return steps
 
     def _extract_tool_names(self, intermediate_steps: List[Any]) -> List[str]:
-        """Collect tool names from intermediate steps."""
+        """Collect unique tool names from intermediate steps."""
         names: List[str] = []
         for step in intermediate_steps:
             if isinstance(step, tuple) and step and isinstance(step[0], AgentAction):
-                names.append(step[0].tool)
+                tool_name = step[0].tool
+                if tool_name not in names:
+                    names.append(tool_name)
         return names
 
     def _normalize_message_content(self, content: Any) -> str:
