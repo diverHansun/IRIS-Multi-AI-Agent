@@ -31,8 +31,6 @@ class DeepCommand(BaseCommand):
         handlers = {
             "status": self._handle_status,
             "filesystem": self._handle_filesystem,
-            "subagents": self._handle_subagents,
-            "middleware": self._handle_middleware,
             "config": self._handle_config,
         }
 
@@ -47,16 +45,16 @@ class DeepCommand(BaseCommand):
             "Usage:\n"
             "  /deep status\n"
             "  /deep filesystem <read-only|ask-before-edit|auto-edit>\n"
-            "  /deep subagents <list|status>\n"
-            "  /deep middleware status\n"
-            "  /deep config <show|reload>"
+            "  /deep config reload"
         )
 
     def _handle_status(self, ctx, _: list[str]) -> CommandResult:
+        """Display comprehensive deep agent status including middleware."""
         config = ctx.get_engine_config("agent")
         agent = config.get("agent_instance")
         info: Dict[str, Any] = agent.get_info() if agent and hasattr(agent, "get_info") else {}
 
+        # Extract subagent information
         subagent_meta = info.get("subagents") or []
         if isinstance(subagent_meta, list):
             subagent_names = [
@@ -67,21 +65,39 @@ class DeepCommand(BaseCommand):
         else:
             subagent_names = []
 
+        # Get middleware status
+        middleware_cfg = config.get("middleware", {})
+        filesystem_service = FilesystemMiddlewareService(middleware_cfg.get("filesystem", {}))
+        subagents_service = SubagentsMiddlewareService(middleware_cfg.get("subagents", {}))
+        patch_service = PatchToolCallsService(middleware_cfg.get("patch_tool_calls", {}))
+
+        middleware_status = {
+            "filesystem": filesystem_service.describe(),
+            "subagents": subagents_service.describe(),
+            "patch_tool_calls": patch_service.describe(),
+        }
+
         payload = {
             "provider": info.get("provider") or config.get("provider"),
             "model": info.get("model") or config.get("model"),
-            "middleware": info.get("middleware") or config.get("middleware"),
             "function_type": info.get("function_type") or config.get("function_type"),
             "subagents": subagent_names,
+            "middleware": middleware_status,
         }
+
         function_value = payload.get("function_type") or "research"
+        fs_mode = middleware_status["filesystem"].get("mode", "unknown")
+        fs_enabled = "enabled" if middleware_status["filesystem"].get("enabled") else "disabled"
+
         message = (
             "Deep Agent Status:\n"
             f"- Provider: {payload.get('provider')}\n"
             f"- Model: {payload.get('model')}\n"
             f"- Function: {function_value}\n"
-            f"- Subagents: {', '.join(subagent_names) if subagent_names else 'none'}\n"
-            f"- Middleware: {payload.get('middleware')}"
+            f"- Active Subagents: {', '.join(subagent_names) if subagent_names else 'none'}\n"
+            f"- Filesystem: {fs_enabled} (mode: {fs_mode})\n"
+            f"- Subagents Middleware: {'enabled' if middleware_status['subagents']['enabled'] else 'disabled'}\n"
+            f"- Patch Tool Calls: {'enabled' if middleware_status['patch_tool_calls']['enabled'] else 'disabled'}"
         )
         return CommandResult.success(message, payload=payload)
 
@@ -114,94 +130,14 @@ class DeepCommand(BaseCommand):
             payload=service.describe(),
         )
 
-    def _handle_subagents(self, ctx, args: list[str]) -> CommandResult:
-        if not args:
-            return CommandResult.error("Usage: /deep subagents <list|status>")
-
-        action = args[0].lower()
-        middleware_cfg = ctx.get_engine_config("agent").setdefault("middleware", {}).setdefault("subagents", {})
-        service = SubagentsMiddlewareService(middleware_cfg)
-
-        if action == "list":
-            available = service.describe().get("available_subagents", [])
-            message = "Available Subagents:\n- " + "\n- ".join(available) if available else "No subagents configured."
-            return CommandResult.success(message, payload={"available_subagents": available})
-
-        if action == "status":
-            # Get active subagents from agent's middleware instead of subagent_manager
-            config = ctx.get_engine_config("agent")
-            agent = config.get("agent_instance")
-            agent_info = agent.get_info() if agent and hasattr(agent, "get_info") else {}
-
-            # Get SubAgent names from metadata
-            subagent_meta = agent_info.get("subagents") or []
-            if isinstance(subagent_meta, list):
-                active = [
-                    entry.get("name")
-                    for entry in subagent_meta
-                    if isinstance(entry, dict) and entry.get("name")
-                ]
-            else:
-                active = []
-
-            payload = {
-                "active_subagents": active,
-                "max_concurrent": service.max_concurrent,
-                "timeout": service.timeout,
-            }
-            message = (
-                "Subagents Status:\n"
-                f"- Active: {', '.join(active) if active else 'none'}\n"
-                f"- Max Concurrent: {service.max_concurrent}\n"
-                f"- Timeout: {service.timeout}s"
-            )
-            return CommandResult.success(message, payload=payload)
-
-        return CommandResult.error("Usage: /deep subagents <list|status>")
-
-    def _handle_middleware(self, ctx, args: list[str]) -> CommandResult:
-        if not args or args[0].lower() != "status":
-            return CommandResult.error("Usage: /deep middleware status")
-
-        middleware_cfg = ctx.get_engine_config("agent").get("middleware", {})
-        filesystem_service = FilesystemMiddlewareService(middleware_cfg.get("filesystem", {}))
-        subagents_service = SubagentsMiddlewareService(middleware_cfg.get("subagents", {}))
-        patch_service = PatchToolCallsService(middleware_cfg.get("patch_tool_calls", {}))
-
-        payload = {
-            "filesystem": filesystem_service.describe(),
-            "subagents": subagents_service.describe(),
-            "patch_tool_calls": patch_service.describe(),
-        }
-
-        message = (
-            "Middleware Status:\n"
-            f"- filesystem: {'enabled' if payload['filesystem']['enabled'] else 'disabled'} "
-            f"(mode: {payload['filesystem']['mode']})\n"
-            f"- subagents: {'enabled' if payload['subagents']['enabled'] else 'disabled'}\n"
-            f"- patch_tool_calls: {'enabled' if payload['patch_tool_calls']['enabled'] else 'disabled'}"
-        )
-        return CommandResult.success(message, payload=payload)
 
     def _handle_config(self, ctx, args: list[str]) -> CommandResult:
-        if not args:
-            return CommandResult.error("Usage: /deep config <show|reload>")
+        """Reload deep agent configuration from files."""
+        if not args or args[0].lower() != "reload":
+            return CommandResult.error("Usage: /deep config reload")
 
-        action = args[0].lower()
-        if action == "show":
-            data = {
-                "providers": deepagents_provider_registry.list_providers(),
-                "middleware": deepagents_provider_registry.get_middleware_config(),
-                "subagent_models": deepagents_provider_registry.get_models_config(),
-            }
-            message = json.dumps(data, indent=2, ensure_ascii=False)
-            return CommandResult.success(message, payload=data)
-
-        if action == "reload":
-            deepagents_provider_registry.reload()
-            return CommandResult.success("Deep agent configuration reloaded.")
-
-        return CommandResult.error("Usage: /deep config <show|reload>")
+        deepagents_provider_registry.reload()
+        return CommandResult.success("Deep agent configuration reloaded.")
 
 
 __all__ = ["DeepCommand"]
