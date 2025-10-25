@@ -265,3 +265,4 @@ def _load_template(self, template_path: str) -> str:
 - **Template Preprocessing**: Templates are preprocessed for common variables
 - **Variable Validation**: Variables are validated before substitution
 - **Memory Management**: Unused templates are removed from cache
+
