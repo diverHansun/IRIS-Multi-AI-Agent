@@ -16,6 +16,7 @@
       "/home/"
     ],
     "max_file_size": 10485760,
+    "max_file_lines": 50000,
     "excluded_extensions": [
       ".exe",
       ".bat",
@@ -37,6 +38,7 @@
           "/home/"
         ],
         "max_file_size": 10485760,
+        "max_file_lines": 50000,
         "excluded_extensions": [
           ".exe",
           ".bat",
@@ -59,6 +61,7 @@
           "/home/"
         ],
         "max_file_size": 5242880,
+        "max_file_lines": 40000,
         "excluded_extensions": [
           ".exe",
           ".bat",
@@ -80,6 +83,7 @@
           "/root/"
         ],
         "max_file_size": 10485760,
+        "max_file_lines": 50000,
         "excluded_extensions": [
           ".exe",
           ".bat"

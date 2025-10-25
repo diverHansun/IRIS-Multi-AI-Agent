@@ -55,13 +55,28 @@ def create_deep_agent_runtime(
     filesystem_middleware = FilesystemMiddleware(
         long_term_memory=use_long_term_memory or filesystem_cfg.get("long_term_memory", False),
         tool_token_limit_before_evict=filesystem_cfg.get("tool_token_limit_before_evict"),
+        allowed_paths=filesystem_cfg.get("security", {}).get("allowed_paths"),
+        excluded_paths=filesystem_cfg.get("security", {}).get("excluded_paths"),
+        excluded_extensions=filesystem_cfg.get("security", {}).get("excluded_extensions"),
+        max_file_size=filesystem_cfg.get("security", {}).get("max_file_size"),
+        max_file_lines=filesystem_cfg.get("security", {}).get("max_file_lines"),
     )
+
+    filesystem_tools = filesystem_middleware.get_tools()
+    if filesystem_tools:
+        tools = list(tools) if tools else []
+        tools.extend(filesystem_tools)
 
     default_subagent_middleware: List[AgentMiddleware] = [
         TodoListMiddleware(),
         FilesystemMiddleware(
             long_term_memory=use_long_term_memory or filesystem_cfg.get("long_term_memory", False),
             tool_token_limit_before_evict=filesystem_cfg.get("tool_token_limit_before_evict"),
+            allowed_paths=filesystem_cfg.get("security", {}).get("allowed_paths"),
+            excluded_paths=filesystem_cfg.get("security", {}).get("excluded_paths"),
+            excluded_extensions=filesystem_cfg.get("security", {}).get("excluded_extensions"),
+            max_file_size=filesystem_cfg.get("security", {}).get("max_file_size"),
+            max_file_lines=filesystem_cfg.get("security", {}).get("max_file_lines"),
         ),
         SummarizationMiddleware(
             model=model,

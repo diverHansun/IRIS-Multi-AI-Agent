@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import AgentState, ModelRequest, ModelResponse
 from langchain_core.messages import RemoveMessage, ToolMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.runtime import Runtime
+
+from .filesystem import FilesystemMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -47,64 +49,6 @@ class CompiledSubAgent:
     description: str
     runnable: Any
 
-
-class FilesystemMiddleware(AgentMiddleware):
-    """Inject filesystem guardrails into the system prompt."""
-
-    def __init__(
-        self,
-        *,
-        long_term_memory: bool = False,
-        allowed_paths: Optional[Iterable[str]] = None,
-        excluded_paths: Optional[Iterable[str]] = None,
-        tool_token_limit_before_evict: Optional[int] = None,
-    ) -> None:
-        super().__init__()
-        self.long_term_memory = long_term_memory
-        self.allowed_paths = list(allowed_paths or [])
-        self.excluded_paths = list(excluded_paths or [])
-        self.tool_token_limit_before_evict = tool_token_limit_before_evict
-        self.tools: List[Any] = []
-        self.system_prompt = self._build_system_prompt()
-
-    def _build_system_prompt(self) -> str:
-        lines = [
-            "When interacting with the filesystem, use the provided tools responsibly.",
-            "Never read or write outside the approved directories.",
-        ]
-        if self.allowed_paths:
-            lines.append(f"Allowed paths: {', '.join(self.allowed_paths)}.")
-        if self.excluded_paths:
-            lines.append(f"Restricted paths: {', '.join(self.excluded_paths)}.")
-        if self.long_term_memory:
-            lines.append("Long-term memory persistence is enabled for authorised files.")
-        return "\n".join(lines)
-
-    def wrap_model_call(self, request: ModelRequest, handler) -> ModelResponse:
-        if self.system_prompt:
-            request.system_prompt = (
-                f"{request.system_prompt}\n\n{self.system_prompt}"
-                if request.system_prompt
-                else self.system_prompt
-            )
-        return handler(request)
-
-    async def awrap_model_call(self, request: ModelRequest, handler) -> ModelResponse:
-        if self.system_prompt:
-            request.system_prompt = (
-                f"{request.system_prompt}\n\n{self.system_prompt}"
-                if request.system_prompt
-                else self.system_prompt
-            )
-        return await handler(request)
-
-    def describe(self) -> Dict[str, Any]:
-        return {
-            "long_term_memory": self.long_term_memory,
-            "allowed_paths": self.allowed_paths,
-            "excluded_paths": self.excluded_paths,
-            "tool_token_limit_before_evict": self.tool_token_limit_before_evict,
-        }
 
 
 class PatchToolCallsMiddleware(AgentMiddleware):
