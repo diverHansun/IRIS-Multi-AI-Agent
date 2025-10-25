@@ -132,7 +132,7 @@ class BaseDeepAgentFactory(ABC):
         adapter: BaseDeepAgentAdapter,
         subagent_manager: SubAgentManager,
         middleware_config: Dict[str, Any],
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    ) -> Tuple[List[SubAgent], List[Dict[str, Any]]]:
         specs: List[SubAgent] = []
         metadata: List[Dict[str, Any]] = []
         configured_subagents = middleware_config.get("subagents", {}).get("subagents", {})
@@ -176,7 +176,8 @@ class BaseDeepAgentFactory(ABC):
                 continue
 
             prompt = adapter.get_subagent_prompt(subagent_type)
-            tools = configured_subagents.get(subagent_type, {}).get("tools", [])
+            # Don't use tools from config - let SubAgentMiddleware use default_tools instead
+            # tools = configured_subagents.get(subagent_type, {}).get("tools", [])
             description = configured_subagents.get(subagent_type, {}).get(
                 "description",
                 f"{subagent_type} specialist",
@@ -185,7 +186,7 @@ class BaseDeepAgentFactory(ABC):
                 name=subagent_type,
                 description=description,
                 system_prompt=prompt,
-                tools=tools,
+                tools=[],  # Empty list - SubAgentMiddleware will use default_tools
                 model=subagent_llm,  # Pass LLM instance instead of string identifier
                 metadata={
                     "provider": config["provider"],
@@ -197,8 +198,8 @@ class BaseDeepAgentFactory(ABC):
                 {
                     "name": subagent_type,
                     "model": model_identifier,
-                    "tools": tools,
-                    "description": subagent_spec["description"],
+                    "tools": [],  # Tools will be inherited from default_tools
+                    "description": subagent_spec.description,
                 }
             )
         return specs, metadata
