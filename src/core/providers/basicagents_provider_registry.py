@@ -84,7 +84,7 @@ class BasicAgentsProviderRegistry:
         Returns:
             Provider configuration dict or None if not found
         """
-        provider_key = provider.upper()
+        provider_key = provider.lower()
         return self._providers.get(provider_key)
 
     def list_providers(self) -> Dict[str, Dict[str, Any]]:
@@ -136,7 +136,7 @@ class BasicAgentsProviderRegistry:
         Raises:
             ValueError: If provider or model not found
         """
-        provider_key = provider.upper()
+        provider_key = provider.lower()
         provider_config = self.get_provider_config(provider_key)
 
         if not provider_config:

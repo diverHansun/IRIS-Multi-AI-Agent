@@ -22,7 +22,7 @@ class DeepAgentsProviderRegistry:
         """Reload configuration from disk."""
         self._cache.clear()
         providers = self._load_main_providers_config()
-        self._providers = {key.upper(): value for key, value in providers.items()}
+        self._providers = {key.lower(): value for key, value in providers.items()}
         self._middleware_cache = None
         self._models_cache = None
 
@@ -36,7 +36,7 @@ class DeepAgentsProviderRegistry:
 
     def get_deep_agent_config(self, provider: str, model: str) -> Dict[str, Any]:
         """Return merged configuration for a provider/model combination."""
-        provider_key = provider.upper()
+        provider_key = provider.lower()
         provider_cfg = self._providers.get(provider_key)
         if not provider_cfg:
             raise ValueError(f"Provider {provider} not found in deep agents configuration")

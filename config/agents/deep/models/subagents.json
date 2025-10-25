@@ -1,19 +1,7 @@
 {
   "research": {
     "providers": {
-      "ANTHROPIC": {
-        "base_url": "https://api.openai-proxy.org/anthropic",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "models": {
-          "claude-4.5-sonnet": {
-            "temperature": 0.6,
-            "max_tokens": 4096,
-            "context_window": 20000,
-            "supports_tools": true
-          }
-        }
-      },
-      "ZHIPU": {
+      "zhipu": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "api_key_env": "ZHIPU_API_KEY",
         "models": {
@@ -29,7 +17,7 @@
   },
   "coding": {
     "providers": {
-      "TONGYI": {
+      "tongyi": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "api_key_env": "TONGYI_API_KEY",
         "models": {
@@ -45,11 +33,11 @@
   },
   "analysis": {
     "providers": {
-      "ANTHROPIC": {
-        "base_url": "https://api.openai-proxy.org/anthropic",
+      "anthropic": {
+        "base_url": "https://api.openai-proxy.org/v1",
         "api_key_env": "ANTHROPIC_API_KEY",
         "models": {
-          "claude-4.5-sonnet": {
+          "claude-haiku-4-5": {
             "temperature": 0.6,
             "max_tokens": 4096,
             "context_window": 200000,

@@ -50,7 +50,7 @@ class AgentAdapter(ABC):
             provider_registry: Optional custom registry instance
         """
         self.provider_registry = provider_registry or default_registry
-        self.provider = provider.upper()
+        self.provider = provider.lower()
 
         # Get complete agent configuration
         try:

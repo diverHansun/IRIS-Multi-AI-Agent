@@ -17,7 +17,7 @@ class OpenAIAgentFactory(BaseAgentFactory):
     """OpenAI Agent工厂"""
 
     def __init__(self):
-        super().__init__(provider="OPENAI")
+        super().__init__(provider="openai")
 
     async def create_agent(
         self,

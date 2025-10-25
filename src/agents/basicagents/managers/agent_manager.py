@@ -68,7 +68,7 @@ class AgentManager:
             ...     verbose=True
             ... )
         """
-        provider = provider.upper()
+        provider = provider.lower()
 
         # Get provider configuration to resolve default model
         provider_config = self._get_provider_config(provider)
@@ -143,9 +143,9 @@ class AgentManager:
         )
 
         adapter_map = {
-            "ZHIPU": ZhipuAgentAdapter,
-            "OPENAI": OpenAIAgentAdapter,
-            "OLLAMA": OllamaAgentAdapter,
+            "zhipu": ZhipuAgentAdapter,
+            "openai": OpenAIAgentAdapter,
+            "ollama": OllamaAgentAdapter,
         }
 
         adapter_class = adapter_map.get(provider)

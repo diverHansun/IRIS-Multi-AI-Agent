@@ -21,7 +21,7 @@ class BaseAgentFactory(ABC):
         Args:
             provider: LLM提供商名称 (ZHIPU, OPENAI, OLLAMA)
         """
-        self.provider = provider.upper()
+        self.provider = provider.lower()
 
     @abstractmethod
     async def create_agent(

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "description": "BasicAgents provider configuration with complete API and agent parameters",
   "providers": {
-    "ZHIPU": {
+    "zhipu": {
       "name": "Zhipu AI",
       "api_key_env": "ZHIPU_API_KEY",
       "base_url": null,
@@ -52,7 +52,7 @@
         }
       }
     },
-    "OPENAI": {
+    "openai": {
       "name": "OpenAI",
       "api_key_env": "OPENAI_API_KEY",
       "base_url": "https://api.openai.com/v1",
@@ -128,7 +128,7 @@
         }
       }
     },
-    "OLLAMA": {
+    "ollama": {
       "name": "Ollama Local Models",
       "api_key_env": null,
       "base_url": "http://localhost:11434",

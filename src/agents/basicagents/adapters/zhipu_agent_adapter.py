@@ -29,7 +29,7 @@ class ZhipuAgentAdapter(AgentAdapter):
             model: Model name. If None, uses default model
             provider_registry: Optional custom registry instance
         """
-        super().__init__("ZHIPU", model, provider_registry=provider_registry)
+        super().__init__("zhipu", model, provider_registry=provider_registry)
 
     def _create_llm_instance(
         self,

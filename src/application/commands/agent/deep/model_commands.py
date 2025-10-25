@@ -23,7 +23,7 @@ class ModelCommand(BaseCommand):
 
         config = ctx.get_engine_config("agent")
         if config.get("agent_type") != "deep":
-            return CommandResult.error("/model in deep mode is only available when agent_type is 'deep'.")
+            return CommandResult.error("Use /model for basic mode. Current mode is basic.")
 
         service = DeepAgentService()
         result = await service.switch_model(ctx, provider, model)

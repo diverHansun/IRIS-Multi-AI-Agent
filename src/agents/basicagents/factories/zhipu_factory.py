@@ -17,7 +17,7 @@ class ZhipuAgentFactory(BaseAgentFactory):
     """智谱AI Agent工厂"""
 
     def __init__(self):
-        super().__init__(provider="ZHIPU")
+        super().__init__(provider="zhipu")
         self._fcall_models = ["glm-4.5", "glm-4.5-flash"]
 
     async def create_agent(

@@ -19,6 +19,10 @@ class ModelCommand(BaseCommand):
         if ctx.current_engine != "agent":
             return CommandResult.error("/model for agents is only available in the agent engine.")
 
+        config = ctx.get_engine_config("agent")
+        if config.get("agent_type") == "deep":
+            return CommandResult.error("Use /model for deep mode. Current mode is deep.")
+
         service = BasicAgentService()
         result = await service.switch_model(ctx, provider, model)
         return CommandResult(

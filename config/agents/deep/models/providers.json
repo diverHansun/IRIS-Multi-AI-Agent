@@ -1,5 +1,5 @@
 {
-  "ANTHROPIC": {
+  "anthropic": {
     "base_url": "https://api.openai-proxy.org/v1",
     "api_key_env": "ANTHROPIC_API_KEY",
     "description": "Anthropic Claude models configured for deep agents.",
@@ -16,7 +16,7 @@
       }
     }
   },
-  "TONGYI": {
+  "tongyi": {
     "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "api_key_env": "TONGYI_API_KEY",
     "description": "Qwen models for code centric workflows.",
@@ -24,7 +24,7 @@
       "qwen3-coder": {
         "temperature": 0.6,
         "max_tokens": 4096,
-        "context_window": 32000,
+        "context_window": 200000,
         "supports_tools": true,
         "middleware": {
           "filesystem": "default",
@@ -33,7 +33,7 @@
       }
     }
   },
-  "ZHIPU": {
+  "zhipu": {
     "base_url": "https://open.bigmodel.cn/api/paas/v4",
     "api_key_env": "ZHIPU_API_KEY",
     "description": "GLM models for research heavy tasks.",
@@ -41,7 +41,7 @@
       "glm-4.6": {
         "temperature": 0.6,
         "max_tokens": 4096,
-        "context_window": 128000,
+        "context_window": 200000,
         "supports_tools": true,
         "middleware": {
           "filesystem": "default",

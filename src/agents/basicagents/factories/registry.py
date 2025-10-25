@@ -41,10 +41,10 @@ class FactoryRegistry:
 
     def _register_default_factories(self) -> None:
         """Register default factories"""
-        self.register_factory("ZHIPU", ZhipuAgentFactory())
-        self.register_factory("OPENAI", OpenAIAgentFactory())
-        self.register_factory("OLLAMA", OllamaAgentFactory())
-        logger.debug("Registered default Agent factories: ZHIPU, OPENAI, OLLAMA")
+        self.register_factory("zhipu", ZhipuAgentFactory())
+        self.register_factory("openai", OpenAIAgentFactory())
+        self.register_factory("ollama", OllamaAgentFactory())
+        logger.debug("Registered default Agent factories: zhipu, openai, ollama")
 
     def register_factory(self, provider: str, factory: BaseAgentFactory) -> None:
         """
@@ -54,7 +54,7 @@ class FactoryRegistry:
             provider: Provider name
             factory: Factory instance
         """
-        provider_key = provider.upper()
+        provider_key = provider.lower()
         self._factories[provider_key] = factory
         logger.debug(f"Registered Agent factory: {provider_key} -> {factory.__class__.__name__}")
 
@@ -68,7 +68,7 @@ class FactoryRegistry:
         Returns:
             Factory instance or None if not found
         """
-        provider_key = provider.upper()
+        provider_key = provider.lower()
         factory = self._factories.get(provider_key)
 
         if factory is None:
@@ -86,7 +86,7 @@ class FactoryRegistry:
         Returns:
             True if factory exists
         """
-        return provider.upper() in self._factories
+        return provider.lower() in self._factories
 
     def list_providers(self) -> List[str]:
         """List all registered providers"""
