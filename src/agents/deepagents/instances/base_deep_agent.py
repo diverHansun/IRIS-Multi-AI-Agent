@@ -21,11 +21,14 @@ class BaseDeepAgent:
         adapter: BaseDeepAgentAdapter,
         runtime: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        global_memory_manager: Optional[Any] = None,
     ) -> None:
         self.adapter = adapter
         self.runtime = runtime
         self.metadata = metadata or {}
         self.system_prompt: Optional[str] = self.metadata.get("system_prompt")
+        self.global_memory_manager = global_memory_manager
+        self.enable_memory = global_memory_manager is not None
 
     @property
     def function_type(self) -> str:
@@ -58,7 +61,13 @@ class BaseDeepAgent:
         messages = [HumanMessage(content=query)]
 
         try:
-            result = await self.runtime.ainvoke({"messages": messages})
+            # Build config with session_id for memory persistence
+            config = {"configurable": {"thread_id": session_id}} if self.enable_memory else None
+
+            if config:
+                result = await self.runtime.ainvoke({"messages": messages}, config=config)
+            else:
+                result = await self.runtime.ainvoke({"messages": messages})
         except Exception as exc:  # pylint: disable=broad-except
             logger.error("Deep agent invocation failed: %s", exc, exc_info=True)
             return {
@@ -105,6 +114,10 @@ class BaseDeepAgent:
         elif output_message is not None:
             output_text = self._message_content_to_text(getattr(output_message, "content", output_message))
 
+        # Record conversation in global memory if available
+        if self.enable_memory and self.global_memory_manager and output_text:
+            self._record_conversation(session_id, query, output_text)
+
         return {
             "success": True,
             "output": output_text,
@@ -134,6 +147,25 @@ class BaseDeepAgent:
         if not messages:
             return None
         return messages[-1]
+
+    def _record_conversation(self, session_id: str, query: str, output: str) -> None:
+        """Store the conversation turn in the global memory manager."""
+        if not self.enable_memory or not self.global_memory_manager:
+            return
+
+        add_conversation = getattr(self.global_memory_manager, "add_conversation", None)
+        if callable(add_conversation):
+            try:
+                add_conversation(session_id, query, output, current_llm_info=None)
+            except Exception as exc:
+                logger.warning("Failed to record conversation: %s", exc)
+
+        save_session = getattr(self.global_memory_manager, "save_session", None)
+        if callable(save_session):
+            try:
+                save_session(session_id)
+            except Exception as exc:
+                logger.warning("Failed to save session: %s", exc)
 
     @staticmethod
     def _message_content_to_text(content: Any) -> str:

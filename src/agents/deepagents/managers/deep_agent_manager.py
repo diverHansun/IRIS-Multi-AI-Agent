@@ -30,11 +30,17 @@ class DeepAgentManager:
         model: str,
         *,
         function_type: str = "research",
+        global_memory_manager: Optional[Any] = None,
         **user_params: Any,
     ) -> Any:
         """Create a DeepAgent instance for the requested function type."""
         provider_key = provider.upper()
         function_type = user_params.pop("function_type", function_type)
+
+        # Extract global_memory_manager from user_params if provided there
+        if global_memory_manager is None:
+            global_memory_manager = user_params.pop("global_memory_manager", None)
+
         logger.info("Creating deep agent for provider=%s model=%s function=%s", provider_key, model, function_type)
 
         provider_config, resolved_model = self._get_provider_config(provider_key, model)
@@ -53,6 +59,7 @@ class DeepAgentManager:
             logger.error(msg)
             raise ValueError(msg)
 
+        # Pass global_memory_manager to factory
         agent = await factory.create_agent(
             provider=provider_key,
             model=resolved_model,
@@ -60,6 +67,7 @@ class DeepAgentManager:
             subagent_manager=self.subagent_manager,
             provider_config=provider_config,
             middleware_config=middleware_config,
+            global_memory_manager=global_memory_manager,
             **user_params,
         )
 

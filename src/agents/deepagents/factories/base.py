@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Tuple, Type
+from abc import ABC
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from src.agents.deepagents.adapters.base import BaseDeepAgentAdapter
 from src.agents.deepagents.instances.base_deep_agent import BaseDeepAgent
@@ -12,6 +12,7 @@ from src.agents.deepagents.managers.subagent_manager import SubAgentManager
 from src.components.deepagents.runtime import create_deep_agent_runtime
 from src.components.deepagents.runtime_middlewares import SubAgent
 from src.components.shared.tools.unified_manager import UnifiedToolManager
+from src.components.shared.memory.checkpointer import create_default_checkpointer
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class BaseDeepAgentFactory(ABC):
         subagent_manager: SubAgentManager,
         provider_config: Dict[str, Any],
         middleware_config: Dict[str, Any],
+        global_memory_manager: Optional[Any] = None,
         **user_params: Any,
     ) -> BaseDeepAgent:
         """Create the deep agent."""
@@ -78,6 +80,13 @@ class BaseDeepAgentFactory(ABC):
                     adapter.provider,
                 )
 
+        # Initialize checkpointer for memory persistence if not provided
+        checkpointer = user_params.get("checkpointer")
+        if checkpointer is None and global_memory_manager is not None:
+            checkpointer_wrapper = create_default_checkpointer()
+            checkpointer = checkpointer_wrapper.checkpointer
+            logger.info("Created default checkpointer for deep agent with global memory")
+
         runtime = create_deep_agent_runtime(
             model=adapter.get_model_identifier(),
             system_prompt=system_prompt,
@@ -87,7 +96,7 @@ class BaseDeepAgentFactory(ABC):
             subagents=subagent_specs,
             use_long_term_memory=resolved_middleware.get("filesystem", {}).get("long_term_memory", False),
             interrupt_on=user_params.get("interrupt_on"),
-            checkpointer=user_params.get("checkpointer"),
+            checkpointer=checkpointer,
             store=user_params.get("store"),
             cache=user_params.get("cache"),
             name=user_params.get("name"),
@@ -105,7 +114,11 @@ class BaseDeepAgentFactory(ABC):
         }
         metadata.update(adapter.build_metadata())
 
-        agent = self.agent_cls(adapter=adapter, metadata=metadata)
+        agent = self.agent_cls(
+            adapter=adapter,
+            metadata=metadata,
+            global_memory_manager=global_memory_manager,
+        )
         agent.set_runtime(runtime)
         return agent
 
