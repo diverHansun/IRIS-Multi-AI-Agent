@@ -128,7 +128,22 @@ class DeepCommand(BaseCommand):
             return CommandResult.success(message, payload={"available_subagents": available})
 
         if action == "status":
-            active = list(subagent_manager.active_subagents.keys())
+            # Get active subagents from agent's middleware instead of subagent_manager
+            config = ctx.get_engine_config("agent")
+            agent = config.get("agent_instance")
+            agent_info = agent.get_info() if agent and hasattr(agent, "get_info") else {}
+
+            # Get SubAgent names from metadata
+            subagent_meta = agent_info.get("subagents") or []
+            if isinstance(subagent_meta, list):
+                active = [
+                    entry.get("name")
+                    for entry in subagent_meta
+                    if isinstance(entry, dict) and entry.get("name")
+                ]
+            else:
+                active = []
+
             payload = {
                 "active_subagents": active,
                 "max_concurrent": service.max_concurrent,
