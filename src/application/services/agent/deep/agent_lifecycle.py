@@ -32,7 +32,7 @@ async def _instantiate_agent(
 ) -> Tuple[Any, str, str]:
     providers = deepagents_provider_registry.list_providers()
 
-    resolved_provider = (provider or "").upper()
+    resolved_provider = (provider or "").lower()
     if resolved_provider not in providers:
         resolved_provider, resolved_model = _default_provider_and_model()
     else:

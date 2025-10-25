@@ -14,10 +14,10 @@ class BaseDeepAgentAdapter(ABC):
     function_type: str
     PROMPT_REGISTRY = DeepAgentPromptRegistry()
     PROVIDER_ALIASES: Dict[str, str] = {
-        "ANTHROPIC": "openai",  # 统一使用 OpenAI 兼容接口
-        "TONGYI": "openai",
-        "ZHIPU": "openai",
-        "OPENAI": "openai",
+        "anthropic": "openai",  # 统一使用 OpenAI 兼容接口
+        "tongyi": "openai",
+        "zhipu": "openai",
+        "openai": "openai",
     }
 
     def __init__(self, *, provider: str, model: str, provider_config: Dict[str, Any]) -> None:
@@ -108,7 +108,7 @@ class BaseDeepAgentAdapter(ABC):
         return f"{alias}:{model}"
 
     def _provider_alias(self, provider: str) -> str:
-        alias = self.PROVIDER_ALIASES.get(provider.upper())
+        alias = self.PROVIDER_ALIASES.get(provider.lower())
         if not alias:
             raise ValueError(f"Provider {provider} is not supported yet.")
         return alias

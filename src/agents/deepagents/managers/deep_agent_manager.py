@@ -34,7 +34,7 @@ class DeepAgentManager:
         **user_params: Any,
     ) -> Any:
         """Create a DeepAgent instance for the requested function type."""
-        provider_key = provider.upper()
+        provider_key = provider.lower()
         function_type = user_params.pop("function_type", function_type)
 
         # Extract global_memory_manager from user_params if provided there

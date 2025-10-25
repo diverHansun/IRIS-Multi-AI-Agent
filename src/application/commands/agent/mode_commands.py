@@ -34,17 +34,17 @@ class ModeCommand(BaseCommand):
 
             providers = deepagents_provider_registry.list_providers()
             if providers:
-                # Use ZHIPU/glm-4.6 as default if available
-                if "ZHIPU" in providers:
-                    zhipu_models = providers["ZHIPU"].get("models", {})
+                # Use zhipu/glm-4.6 as default if available
+                if "zhipu" in providers:
+                    zhipu_models = providers["zhipu"].get("models", {})
                     if "glm-4.6" in zhipu_models:
-                        config["provider"] = "ZHIPU"
+                        config["provider"] = "zhipu"
                         config["model"] = "glm-4.6"
                     else:
-                        # Use first available ZHIPU model
+                        # Use first available zhipu model
                         if zhipu_models:
                             first_model = next(iter(zhipu_models.keys()))
-                            config["provider"] = "ZHIPU"
+                            config["provider"] = "zhipu"
                             config["model"] = first_model
                 else:
                     # Fallback to first available provider/model

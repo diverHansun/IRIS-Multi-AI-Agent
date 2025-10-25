@@ -77,7 +77,7 @@ class DeepAgentService(BaseEngineService):
                 "message": "Provider must be specified for deep agent.",
                 "payload": {"available_providers": providers},
             }
-        if provider.upper() not in providers:
+        if provider.lower() not in providers:
             return {
                 "type": "error",
                 "message": f"Unsupported deep agent provider: {provider}",
