@@ -14,7 +14,7 @@ class BaseDeepAgentAdapter(ABC):
     function_type: str
     PROMPT_REGISTRY = DeepAgentPromptRegistry()
     PROVIDER_ALIASES: Dict[str, str] = {
-        "ANTHROPIC": "anthropic",
+        "ANTHROPIC": "openai",  # 统一使用 OpenAI 兼容接口
         "TONGYI": "openai",
         "ZHIPU": "openai",
         "OPENAI": "openai",

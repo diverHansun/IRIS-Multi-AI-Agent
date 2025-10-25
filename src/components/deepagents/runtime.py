@@ -9,7 +9,6 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware, InterruptOnCon
 from langchain.agents.middleware.summarization import SummarizationMiddleware
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain.chat_models import init_chat_model
-from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.cache.base import BaseCache
@@ -83,7 +82,6 @@ def create_deep_agent_runtime(
             max_tokens_before_summary=170000,
             messages_to_keep=6,
         ),
-        AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore"),
         PatchToolCallsMiddleware(),
     ]
 
@@ -112,7 +110,6 @@ def create_deep_agent_runtime(
             max_tokens_before_summary=170000,
             messages_to_keep=6,
         ),
-        AnthropicPromptCachingMiddleware(unsupported_model_behavior="ignore"),
         PatchToolCallsMiddleware(),
     ]
 
