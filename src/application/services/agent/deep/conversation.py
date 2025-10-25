@@ -22,6 +22,17 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     if result.get("success"):
         answer = result.get("output", "No response generated.")
         ctx.console.print(f"[bold blue]DeepAgent >[/] {answer}")
+
+        # Display subagent delegations if any
+        subagent_calls = result.get("subagent_calls", [])
+        if subagent_calls:
+            ctx.console.print(f"[bold cyan]SubAgent Delegations:[/]")
+            for call in subagent_calls:
+                subagent_type = call.get("subagent_type", "unknown")
+                description = call.get("description", "")
+                ctx.console.print(f"  [cyan]→ {subagent_type}:[/] {description}")
+
+        # Display tool usage
         tool_calls = result.get("tool_calls", 0)
         if tool_calls:
             tool_names = result.get("tool_names") or []
