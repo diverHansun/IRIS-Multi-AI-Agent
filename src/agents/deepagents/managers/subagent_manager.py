@@ -3,96 +3,73 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
 
 class SubAgentManager:
-    """Factory for spawning and tracking subagents."""
+    """
+    Factory for spawning and tracking subagents.
 
-    def __init__(self, provider_registry: Optional[Any] = None) -> None:
-        if provider_registry is None:
-            from src.core.providers import deepagents_provider_registry
+    This manager now uses SubAgentsProviderRegistry for clean parameter
+    management and follows the official DeepAgents pattern for subagent creation.
+    """
 
-            provider_registry = deepagents_provider_registry
+    def __init__(self, subagents_registry=None) -> None:
+        """
+        Initialize SubAgent manager.
 
-        self.provider_registry = provider_registry
-        self.models_config = provider_registry.get_models_config()
+        Args:
+            subagents_registry: Optional SubAgentsProviderRegistry instance.
+                If None, uses the global registry.
+        """
+        if subagents_registry is None:
+            from src.core.providers import subagents_registry as default_registry
+
+            subagents_registry = default_registry
+
+        self.subagents_registry = subagents_registry
         self.active_subagents: Dict[str, Any] = {}
 
-    async def create_subagent(
-        self,
-        subagent_type: str,
-        task_description: str,
-        *,
-        overrides: Optional[Dict[str, Any]] = None,
-    ) -> Any:
-        """Create a subagent based on configuration."""
-        config = self._resolve_subagent_config(subagent_type)
-        params = {**config, "task_description": task_description}
-        if overrides:
-            params.update(overrides)
-
-        provider = params.pop("provider")
-        model = params.pop("model")
-        agent_type = params.pop("agent_type", "basic")
-
-        logger.debug(
-            "Spawning subagent type=%s provider=%s model=%s",
-            subagent_type,
-            provider,
-            model,
-        )
-
-        from src.agents.basicagents.managers import agent_manager
-
-        agent = await agent_manager.create_agent(
-            provider=provider,
-            model=model,
-            agent_type=agent_type,
-            **params,
-        )
-        self.active_subagents[subagent_type] = agent
-        return agent
+        logger.debug("SubAgentManager initialized with SubAgentsProviderRegistry")
 
     def get_available_subagents(self) -> Dict[str, Dict[str, Any]]:
-        """Return supported subagent definitions."""
-        # models_config is already the subagents dict from subagents.json
-        # Structure: {"research": {...}, "coding": {...}, "analysis": {...}}
-        return self.models_config if self.models_config else {}
+        """
+        Return supported subagent definitions.
+
+        Returns:
+            Dictionary mapping subagent types to their descriptions:
+            {"research": {"name": "research", "description": "..."}, ...}
+        """
+        subagent_types = self.subagents_registry.get_available_subagents()
+        result = {}
+
+        for subagent_type in subagent_types:
+            try:
+                config = self.subagents_registry.get_subagent_config(subagent_type)
+                result[subagent_type] = {
+                    "name": config["name"],
+                    "description": config["description"],
+                }
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load config for subagent '{subagent_type}': {e}"
+                )
+
+        return result
 
     def get_subagent_config(self, subagent_type: str) -> Dict[str, Any]:
-        """Return resolved provider/model configuration for a subagent."""
-        return self._resolve_subagent_config(subagent_type)
+        """
+        Return complete subagent configuration.
 
-    def _resolve_subagent_config(self, subagent_type: str) -> Dict[str, Any]:
-        """Fetch configuration for a subagent type."""
-        # models_config is already the subagents dict
-        config = self.models_config.get(subagent_type)
-        if not config:
-            msg = f"Unknown subagent type: {subagent_type}"
-            logger.error(msg)
-            raise ValueError(msg)
+        Args:
+            subagent_type: Type of subagent (research, coding, analysis)
 
-        # Flatten provider/model selection: choose first provider/model pair
-        providers = config.get("providers", {})
-        if not providers:
-            msg = f"No providers configured for subagent type: {subagent_type}"
-            logger.error(msg)
-            raise ValueError(msg)
+        Returns:
+            Complete subagent configuration with categorized parameters
 
-        provider_name, provider_cfg = next(iter(providers.items()))
-        models = provider_cfg.get("models", {})
-        if not models:
-            msg = f"No models configured for subagent type: {subagent_type}"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        model_name, model_cfg = next(iter(models.items()))
-        resolved = {
-            "provider": provider_name,
-            "model": model_name,
-        }
-        resolved.update(model_cfg)
-        return resolved
+        Raises:
+            ValueError: If subagent type is not found
+        """
+        return self.subagents_registry.get_subagent_config(subagent_type)

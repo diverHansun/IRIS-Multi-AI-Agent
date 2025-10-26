@@ -174,81 +174,97 @@ class BaseDeepAgentFactory(ABC):
         subagent_manager: SubAgentManager,
         middleware_config: Dict[str, Any],
     ) -> Tuple[List[SubAgent], List[Dict[str, Any]]]:
+        """
+        Build SubAgent specifications for SubAgentMiddleware.
+
+        This method creates subagent specs using the new SubAgentsProviderRegistry
+        which provides clean, categorized parameters.
+
+        Args:
+            adapter: Deep agent adapter for provider info
+            subagent_manager: Manager with SubAgentsProviderRegistry
+            middleware_config: Middleware configuration
+
+        Returns:
+            Tuple of (subagent_specs, subagent_metadata)
+        """
         specs: List[SubAgent] = []
         metadata: List[Dict[str, Any]] = []
         configured_subagents = middleware_config.get("subagents", {}).get("subagents", {})
 
         for subagent_type in subagent_manager.get_available_subagents().keys():
             try:
+                # Get complete categorized configuration from new registry
                 config = subagent_manager.get_subagent_config(subagent_type)
-                model_identifier = adapter.get_model_identifier_for(config["provider"], config["model"])
 
-                # Create actual LLM instance with correct base_url and api_key
+                llm_config = config["llm_config"]
+                provider = llm_config["provider"]
+                model = llm_config["model"]
+
+                # Get model identifier for init_chat_model
+                model_identifier = adapter.get_model_identifier_for(provider, model)
+
+                # Create LLM instance using ONLY clean LLM parameters
                 from langchain.chat_models import init_chat_model
-                import os
 
-                model_settings = {
-                    key: value
-                    for key, value in config.items()
-                    if key in {"temperature", "max_tokens", "top_p", "timeout"}
-                }
+                # Use the clean parameter extraction method from registry
+                llm_params = subagent_manager.subagents_registry.get_llm_params_only(
+                    subagent_type
+                )
 
-                # Add base_url if configured
-                if "base_url" in config:
-                    model_settings["base_url"] = config["base_url"]
-
-                # Add api_key from environment
-                if "api_key_env" in config:
-                    api_key = os.getenv(config["api_key_env"])
-                    if api_key:
-                        model_settings["api_key"] = api_key
-                    else:
-                        logger.warning(
-                            "API key environment variable %s not set for subagent %s",
-                            config["api_key_env"],
-                            subagent_type,
-                        )
+                logger.debug(
+                    f"Creating subagent '{subagent_type}' LLM with params: {list(llm_params.keys())}"
+                )
 
                 # Create LLM instance
-                subagent_llm = init_chat_model(model_identifier, **model_settings)
+                subagent_llm = init_chat_model(model_identifier, **llm_params)
 
             except Exception as exc:  # pylint: disable=broad-except
-                logger.warning("Failed to resolve subagent configuration for %s: %s", subagent_type, exc)
+                logger.warning(
+                    "Failed to resolve subagent configuration for %s: %s",
+                    subagent_type,
+                    exc,
+                    exc_info=True,
+                )
                 continue
 
-            prompt = adapter.get_subagent_prompt(subagent_type)
-            # Don't use tools from config - let SubAgentMiddleware use default_tools instead
-            # tools = configured_subagents.get(subagent_type, {}).get("tools", [])
+            # Get system prompt from config (already loaded from prompt registry)
+            system_prompt = config["system_prompt"]
+
+            # Get description (use from middleware config if available, else from subagent config)
             description = configured_subagents.get(subagent_type, {}).get(
-                "description",
-                f"{subagent_type} specialist",
+                "description", config["description"]
             )
+
+            # Build SubAgent spec
             subagent_spec = SubAgent(
-                name=subagent_type,
+                name=config["name"],
                 description=description,
-                system_prompt=prompt,
+                system_prompt=system_prompt,
                 tools=[],  # Empty list - SubAgentMiddleware will use default_tools
-                model=subagent_llm,  # Pass LLM instance instead of string identifier
-                metadata={
-                    "provider": config["provider"],
-                    "model_config": config,
-                },
+                model=subagent_llm,  # Pass LLM instance
             )
             specs.append(subagent_spec)
+
+            # Build metadata for tracking and display
+            runtime_limits = config["runtime_limits"]
+            display_config = config["display_config"]
+
             metadata.append(
                 {
-                    "name": subagent_type,
+                    "name": config["name"],
                     "model": model_identifier,
                     "tools": [],  # Tools will be inherited from default_tools
-                    "description": subagent_spec.description,
+                    "description": description,
                     "safety": {
-                        "max_execution_time": config.get("max_execution_time"),
-                        "max_recursion_limit": config.get("max_recursion_limit"),
-                        "streaming_enabled": config.get("streaming_enabled"),
-                        "hitl_enabled": config.get("hitl_enabled"),
+                        "max_execution_time": runtime_limits.get("max_execution_time"),
+                        "max_recursion_limit": runtime_limits.get("recursion_limit"),
+                        "streaming_enabled": display_config.get("streaming_enabled"),
                     },
                 }
             )
+
+        logger.info(f"Built {len(specs)} subagent specifications")
         return specs, metadata
 
     @staticmethod
