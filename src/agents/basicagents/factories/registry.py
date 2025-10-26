@@ -11,7 +11,6 @@ from typing import Dict, Optional, Any, List
 from .base import BaseAgentFactory
 from .zhipu_factory import ZhipuAgentFactory
 from .openai_factory import OpenAIAgentFactory
-from .ollama_factory import OllamaAgentFactory
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +42,7 @@ class FactoryRegistry:
         """Register default factories"""
         self.register_factory("zhipu", ZhipuAgentFactory())
         self.register_factory("openai", OpenAIAgentFactory())
-        self.register_factory("ollama", OllamaAgentFactory())
-        logger.debug("Registered default Agent factories: zhipu, openai, ollama")
+        logger.debug("Registered default Agent factories: zhipu, openai")
 
     def register_factory(self, provider: str, factory: BaseAgentFactory) -> None:
         """

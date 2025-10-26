@@ -4,8 +4,8 @@
 提供各种Agent提供商的实现。
 
 架构说明：
-- instances/: Agent具体实现（BaseAgent, ZhipuAgent, OpenAIAgent, OllamaAgent）
-- factories/: 抽象工厂模式（FactoryRegistry, ZhipuFactory, OpenAIFactory, OllamaFactory）
+- instances/: Agent具体实现（BaseAgent, ZhipuAgent, OpenAIAgent）
+- factories/: 抽象工厂模式（FactoryRegistry, ZhipuFactory, OpenAIFactory）
 - builders/: 建造者模式（AgentBuilder, AgentPresets）
 - agent_factory.py: 统一工厂入口（内部使用Registry，保持向后兼容）
 """
@@ -16,7 +16,6 @@ from .instances import (
     ZhipuAgent,
     ZhipuFCallAgent,
     OpenAIAgent,
-    OllamaAgent,
 )
 
 # Factory Pattern - 现在从 factories 模块导入
@@ -25,7 +24,6 @@ from .factories import (
     BaseAgentFactory,
     ZhipuAgentFactory,
     OpenAIAgentFactory,
-    OllamaAgentFactory,
     FactoryRegistry,
     get_global_registry,
     agent_factory,
@@ -53,7 +51,6 @@ __all__ = [
     "ZhipuAgent",
     "ZhipuFCallAgent",
     "OpenAIAgent",
-    "OllamaAgent",
 
     # Factory Pattern
     "AgentFactory",
@@ -61,7 +58,6 @@ __all__ = [
     "BaseAgentFactory",
     "ZhipuAgentFactory",
     "OpenAIAgentFactory",
-    "OllamaAgentFactory",
     "FactoryRegistry",
     "get_global_registry",
 ] 

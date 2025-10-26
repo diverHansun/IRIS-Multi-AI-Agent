@@ -9,7 +9,6 @@ from typing import Dict, Any
 from .base import BaseAgentFactory
 from .zhipu_factory import ZhipuAgentFactory
 from .openai_factory import OpenAIAgentFactory
-from .ollama_factory import OllamaAgentFactory
 from .registry import (
     FactoryRegistry,
     get_global_registry,
@@ -27,7 +26,6 @@ __all__ = [
     # Concrete Factories
     "ZhipuAgentFactory",
     "OpenAIAgentFactory",
-    "OllamaAgentFactory",
 
     # Registry
     "FactoryRegistry",

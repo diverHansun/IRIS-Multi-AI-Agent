@@ -224,24 +224,15 @@ def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
     for provider in catalog.get("providers", []):
         lines.append(f"- {provider['name']} ({provider['provider']})")
         lines.append(f"  Default Model: {provider.get('default_model') or 'None'}")
-        if provider.get("provider") == "ollama":
-            local_models: Sequence[str] = provider.get("local_models", [])
-            if local_models:
-                lines.append(f"  Available Models: {', '.join(local_models)}")
-            elif provider.get("message"):
-                lines.append(f"  Note: {provider['message']}")
-            if provider.get("error"):
-                lines.append(f"  Error: {provider['error']}")
-        else:
-            raw_models = provider.get("models_detail") or []
-            models_detail = raw_models.values() if isinstance(raw_models, dict) else raw_models
-            models_detail = list(models_detail)
-            if models_detail:
-                lines.append("  Supported Models:")
-                for entry in models_detail:
-                    tag = " [Recommended]" if entry.get("recommended") else ""
-                    description = entry.get("description", "")
-                    lines.append(f"    * {entry.get('model')}{tag}: {description}")
+        raw_models = provider.get("models_detail") or []
+        models_detail = raw_models.values() if isinstance(raw_models, dict) else raw_models
+        models_detail = list(models_detail)
+        if models_detail:
+            lines.append("  Supported Models:")
+            for entry in models_detail:
+                tag = " [Recommended]" if entry.get("recommended") else ""
+                description = entry.get("description", "")
+                lines.append(f"    * {entry.get('model')}{tag}: {description}")
         lines.append("")
 
     recommended = catalog.get("recommended", [])

@@ -139,13 +139,11 @@ class AgentManager:
         from src.agents.basicagents.adapters import (
             ZhipuAgentAdapter,
             OpenAIAgentAdapter,
-            OllamaAgentAdapter,
         )
 
         adapter_map = {
             "zhipu": ZhipuAgentAdapter,
             "openai": OpenAIAgentAdapter,
-            "ollama": OllamaAgentAdapter,
         }
 
         adapter_class = adapter_map.get(provider)
@@ -172,75 +170,19 @@ class AgentManager:
             provider = provider_key.lower()
             models = provider_config.get("models", {})
 
-            # For Ollama, dynamically detect available local models
-            if provider == "ollama":
-                try:
-                    import asyncio
-                    from src.core.providers.utils import list_ollama_models
+            # Use predefined model list from configuration
+            for model_name, model_config in models.items():
+                # Determine agent type from config
+                agent_type = model_config.get("agent_type", "react")
 
-                    # Check if already in event loop
-                    try:
-                        loop = asyncio.get_running_loop()
-                        # If in event loop, create new thread to run async function
-                        import concurrent.futures
-
-                        def run_async():
-                            return asyncio.run(list_ollama_models())
-
-                        # Run async function in new thread
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            future = executor.submit(run_async)
-                            local_models = future.result(timeout=10)
-                    except RuntimeError:
-                        # No running event loop, run directly
-                        local_models = asyncio.run(list_ollama_models())
-
-                    # Create agent entry for each local model
-                    for model_name in local_models:
-                        agents.append({
-                            "provider": provider,
-                            "model": model_name,
-                            "agent_type": "react",
-                            "supports_tools": True,
-                            "recommended": True,
-                            "description": f"Ollama local model: {model_name}",
-                        })
-
-                    # If no local models, add placeholder entry
-                    if not local_models:
-                        agents.append({
-                            "provider": provider,
-                            "model": "default",
-                            "agent_type": "react",
-                            "supports_tools": True,
-                            "recommended": False,
-                            "description": "Ollama local model (no models available)",
-                        })
-                except Exception as e:
-                    logger.warning(f"Failed to get Ollama model list: {e}")
-                    # Add basic Ollama entry even if can't get specific models
-                    agents.append({
-                        "provider": provider,
-                        "model": "unknown",
-                        "agent_type": "react",
-                        "supports_tools": True,
-                        "recommended": False,
-                        "description": "Ollama local model service",
-                    })
-            else:
-                # For other providers, use predefined model list
-                for model_name, model_config in models.items():
-                    # Determine agent type from config
-                    agent_type = model_config.get("agent_type", "react")
-
-                    agents.append({
-                        "provider": provider,
-                        "model": model_name,
-                        "agent_type": agent_type,
-                        "supports_tools": model_config.get("supports_tools", False),
-                        "recommended": model_config.get("recommended", False),
-                        "description": model_config.get("description", ""),
-                    })
+                agents.append({
+                    "provider": provider,
+                    "model": model_name,
+                    "agent_type": agent_type,
+                    "supports_tools": model_config.get("supports_tools", False),
+                    "recommended": model_config.get("recommended", False),
+                    "description": model_config.get("description", ""),
+                })
 
         return agents
 

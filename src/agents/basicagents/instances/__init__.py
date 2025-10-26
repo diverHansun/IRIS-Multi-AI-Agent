@@ -8,12 +8,10 @@ from .base_agent import BaseAgent
 from .zhipu_agent import ZhipuAgent
 from .zhipu_fcall_agent import ZhipuFCallAgent
 from .openai_agent import OpenAIAgent
-from .ollama_agent import OllamaAgent
 
 __all__ = [
     "BaseAgent",
     "ZhipuAgent",
     "ZhipuFCallAgent",
     "OpenAIAgent",
-    "OllamaAgent",
 ]

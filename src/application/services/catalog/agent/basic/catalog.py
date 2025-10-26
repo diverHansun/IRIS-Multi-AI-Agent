@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from src.agents.basicagents.managers import agent_manager
-from src.core.providers.utils import list_ollama_models
 
 from src.application.services.catalog import BaseCatalogService
 
@@ -55,17 +54,6 @@ class BasicAgentCatalogService(BaseCatalogService):
             }
 
             for provider_info in provider_map.values():
-                if provider_info["provider"] == "ollama":
-                    try:
-                        local_models = await list_ollama_models()
-                        provider_info["local_models"] = local_models
-                        provider_info["default_model"] = local_models[0] if local_models else None
-                        if not local_models:
-                            provider_info["message"] = (
-                                "No local models available. Use 'ollama pull <model>' to install models."
-                            )
-                    except Exception as exc:
-                        provider_info["error"] = str(exc)
                 catalog["providers"].append(provider_info)
 
             if catalog["providers"]:
