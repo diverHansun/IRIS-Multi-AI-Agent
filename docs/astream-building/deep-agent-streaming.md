@@ -1,14 +1,12 @@
 # Deep Agent Streaming Implementation
 
-## Overview
+Implementation plan for replacing `ainvoke` with `astream` in Deep Agent mode to enable real-time visibility and Human-in-the-Loop interaction.
 
-This document describes the migration of Deep agent mode from blocking `ainvoke()` to streaming `astream()` execution, including real-time progress feedback and human-in-the-loop integration.
+## 1. Current State Analysis
 
-## Current Issues
+### Current Implementation
 
-### 1. Black Box Execution
-
-**Current Implementation:**
+**Deep Agent uses `ainvoke`** (black box execution):
 ```python
 # src/application/services/agent/deep/conversation.py
 with ctx.console.status("[dim]Deep agent reasoning...[/]"):
@@ -16,447 +14,397 @@ with ctx.console.status("[dim]Deep agent reasoning...[/]"):
 ```
 
 **Problems:**
-- Agent reasoning is completely invisible to user
-- Only shows spinner: "Deep agent reasoning..."
-- No indication of tool calls, reasoning steps, or subagent delegations
-- User has no insight into what the agent is doing
-- Cannot interrupt or provide feedback during execution
+- No visibility into reasoning steps
+- No real-time tool call display
+- No human intervention for dangerous operations
+- User sees only spinner until completion
 
-**Impact:**
-- Poor user experience
-- No visibility into long-running operations
-- Difficult to debug agent behavior
-- Users lose trust when agent takes long time
+### Target Implementation
 
-### 2. No Human-in-the-Loop Support
-
-**Current State:**
-- No mechanism for user approval of dangerous operations
-- Tools like `write_file`, `delete_file` execute without confirmation
-- No ability for user to edit tool parameters before execution
-- No option to reject proposed actions
-
-**Impact:**
-- Safety concerns for file system operations
-- Risk of unintended modifications
-- Cannot enforce approval workflows
-- Limited user control over agent actions
-
-### 3. Lack of Real-time Feedback
-
-**Current State:**
-- Tool calls only reported after full completion
-- Subagent delegations invisible during execution
-- No progress indication for multi-step reasoning
-- Cannot estimate time to completion
-
-**Impact:**
-- User uncertainty during long operations
-- Cannot assess if agent is stuck
-- Difficult to understand agent's approach
-- No opportunity for early intervention
-
-## Proposed Solution: Streaming with HITL
-
-### Why Basic Agent Stays with ainvoke
-
-**Design Decision:**
-- Basic agent targets simpler, faster queries
-- Typically completes in <10 seconds
-- Less complex reasoning with fewer tool calls
-- Streaming overhead not justified for quick operations
-- Maintains simpler code path for basic use case
-
-**Trade-offs:**
-- Basic mode: Faster execution, less visibility
-- Deep mode: Slower but transparent, controllable
-
-### Architecture Changes
-
-#### 1. Replace ainvoke with astream
-
-**Target File:** `src/application/services/agent/deep/conversation.py`
-
-**Current Flow:**
-```
-User Query -> ainvoke() -> Wait -> Final Result -> Display
-```
-
-**New Flow:**
-```
-User Query -> astream() -> Stream Events -> Real-time Display -> Final Result
-```
-
-**Stream Modes Used:**
-- `updates`: Node-level updates (agent decisions, tool calls)
-- `messages`: Token-level streaming (optional, for typing effect)
-
-#### 2. Event Processing
-
-**Event Types to Handle:**
-
-1. **Agent Node Events**
-   - Agent makes decision
-   - Tool calls proposed
-   - Reasoning step completed
-
-2. **Tool Node Events**
-   - Tool execution started
-   - Tool result received
-   - Tool execution time
-
-3. **Subagent Events**
-   - Task delegation to subagent
-   - Subagent completion
-   - Subagent result summary
-
-#### 3. Real-time Display
-
-**Display Strategy:**
-
-1. **Progress Indicators**
-   - Step counter: "Step 15/50"
-   - Time elapsed: "45s elapsed"
-   - Current action: "Reading file..."
-
-2. **Tool Call Notifications**
-   - Tool name and abbreviated arguments
-   - Execution status (pending/complete/error)
-   - Result preview (first 100 chars)
-
-3. **Subagent Delegations**
-   - Subagent type (research/coding/analysis)
-   - Task description
-   - Delegation status
-
-**Output Format:**
-```
-Deep agent reasoning...
-  Step 1: Analyzing query...
-  Step 2: Calling tool: read_file(path="config.json")
-    -> Result: {"api_key": "...", ...}
-  Step 3: Delegating to subagent: research
-    -> Task: Analyze configuration structure
-  Step 4: Synthesizing results...
-
-DeepAgent > [Final response]
-```
-
-### Human-in-the-Loop Integration
-
-#### 1. Configuration
-
-**Tools Requiring Approval:**
-
-Define in configuration which tools need human approval:
-```json
-{
-  "hitl_tools": [
-    "write_file",
-    "delete_file",
-    "execute_shell",
-    "edit_file"
-  ]
-}
-```
-
-**Approval Modes:**
-- `approve`: Allow execution as proposed
-- `edit`: Modify parameters before execution
-- `reject`: Cancel execution with reason
-
-#### 2. Implementation Approach
-
-**Middleware Integration:**
-
-Use LangChain's built-in `HumanInTheLoopMiddleware`:
-- Already implemented in LangChain
-- Integrates with `interrupt()` mechanism
-- Supports approve/edit/reject decisions
-
-**Configuration in Runtime:**
+**Deep Agent will use `astream`** (transparent execution):
 ```python
-# src/components/deepagents/runtime.py
-interrupt_on = {
-    "write_file": InterruptOnConfig(
-        allowed_decisions=["approve", "edit", "reject"],
-        description="File write operation requires approval"
-    ),
-    "delete_file": InterruptOnConfig(
-        allowed_decisions=["approve", "reject"],
-        description="File deletion requires confirmation"
-    )
-}
-```
-
-#### 3. Interrupt Handling
-
-**Detection:**
-- Stream will emit interrupt event
-- Event contains tool call details
-- Includes allowed decision types
-
-**User Prompt:**
-```
-Tool execution requires approval:
-  Tool: write_file
-  Arguments:
-    path: "config.json"
-    content: "..."
-  
-Choose action:
-  [A]pprove / [E]dit / [R]eject (default: Approve):
-```
-
-**Response Handling:**
-- Parse user decision
-- Modify tool call if edited
-- Resume execution with decision
-- Handle rejection gracefully
-
-#### 4. Resumption
-
-After user decision:
-- Agent continues from interrupt point
-- No state loss or restart needed
-- Uses LangGraph's checkpoint mechanism
-- Seamless continuation of reasoning
-
-### Implementation Details
-
-#### Stream Event Processing
-
-**Event Structure:**
-```python
+# Process streaming events
 async for event in agent.runtime.astream(input, config, stream_mode="updates"):
-    # event format: {node_name: update_data}
-    for node_name, update_data in event.items():
-        if node_name == "agent":
-            # Handle agent reasoning update
-            process_agent_update(update_data)
-        elif node_name == "tools":
-            # Handle tool execution update
-            process_tool_update(update_data)
-        elif node_name == "__interrupt__":
-            # Handle human-in-the-loop request
-            decision = await prompt_user(update_data)
-            await resume_execution(decision)
+    # Display reasoning steps in real-time
+    # Show tool calls as they happen
+    # Interrupt for user approval when needed
 ```
 
-#### Progress Tracking
+**Benefits:**
+- Real-time progress display
+- Tool call visibility
+- Human-in-the-Loop for dangerous operations
+- User can interrupt execution (Ctrl+C)
 
-**Metrics to Track:**
-- Reasoning step count
-- Tool calls made
-- Subagent delegations
-- Elapsed time
-- Estimated progress (if possible)
+## 2. Human-in-the-Loop Design
 
-**Display Updates:**
-- Update on each agent reasoning step
-- Show tool calls immediately when proposed
-- Display tool results when received
-- Indicate subagent delegation and completion
+### Two-Layer Security Model
 
-#### Error Handling
+**Layer 1: FilesystemMiddleware (Automatic)**
+- Enforces path restrictions (allowed_paths, excluded_paths)
+- Blocks oversized files and forbidden extensions
+- No user interaction required
+- Already implemented
 
-**Timeout Integration:**
-- Streaming respects timeout limits
-- Gracefully cancel stream on timeout
-- Display partial results if available
-- Indicate timeout cause to user
+**Layer 2: HITL (Manual Approval)**
+- Requires user approval for dangerous tools
+- Allows context-based decisions
+- Session-scoped preferences
+- New implementation
 
-**Stream Interruption:**
-- Handle Ctrl+C gracefully
-- Save partial progress
-- Allow resumption if desired
+### Four-Option Interaction Model
 
-### Configuration Schema
+When a dangerous tool is called, user sees:
 
-#### Deep Agent Configuration
+```
+======================================================================
+TOOL EXECUTION REQUIRES APPROVAL
+======================================================================
 
+  Tool: delete_file
+  Arguments:
+    - path: /home/user/old_config.json
+
+  Description: Remove old configuration file
+
+Please choose:
+  [1] Yes - Approve this operation
+  [2] Yes and don't ask again - Auto-approve in this session
+  [3] No - Reject this operation
+  [4] Tell AI how to do - Give instructions to AI
+
+Your choice [1-4] (default: 1):
+```
+
+**Option Details:**
+
+| Option | Behavior | LangChain Decision | Use Case |
+|--------|----------|-------------------|----------|
+| **1. Yes** | Approve once | `approve` | Trust this specific operation |
+| **2. Don't ask again** | Auto-approve in session | `approve` + save preference | Trust this tool for session |
+| **3. No** | Reject | `reject` | Don't execute |
+| **4. Tell AI** | Reject with instructions | `reject` + message | Guide AI to better approach |
+
+### Session-Scoped Preferences
+
+**Key Principles:**
+- Preferences stored in memory (not persisted to disk)
+- Cleared when session ends or switches
+- Dangerous tools never allow auto-approval
+- User can view/clear preferences with commands
+
+**Implementation:**
+```python
+class SessionHITLManager:
+    def __init__(self, dangerous_tools: Set[str]):
+        self.auto_approved_tools: Set[str] = set()
+        self.dangerous_tools = dangerous_tools
+    
+    def can_auto_approve(self, tool_name: str) -> bool:
+        return tool_name not in self.dangerous_tools
+```
+
+### Dangerous Tools Configuration
+
+**Default dangerous tools:**
+- `delete_file` - Cannot be undone
+- `execute_shell` - Arbitrary command execution
+- `rm`, `sudo`, `chmod`, `chown` - System-level operations
+
+**Configuration in `providers.json`:**
 ```json
 {
-  "research": {
-    "providers": {
-      "ANTHROPIC": {
-        "models": {
-          "claude-4.5-sonnet": {
-            "streaming_enabled": true,
-            "show_reasoning_steps": true,
-            "show_tool_calls": true,
-            "show_subagent_delegations": true,
-            "hitl_enabled": true,
-            "hitl_tools": [
-              "write_file",
-              "delete_file",
-              "execute_shell"
-            ]
-          }
-        }
+  "hitl_config": {
+    "dangerous_tools": ["delete_file", "execute_shell", "rm", "sudo"],
+    "tools": {
+      "delete_file": {
+        "allow_auto_approve": false,
+        "warning_message": "This operation cannot be undone!"
       }
     }
   }
 }
 ```
 
-### Code Changes Summary
+## 3. Streaming Event Processing
 
-#### Modified Files
+### Event Flow
 
-1. **src/application/services/agent/deep/conversation.py**
-   - Replace `ainvoke()` with `astream()`
-   - Add event processing loop
-   - Implement real-time display logic
-   - Add HITL prompt and response handling
+```
+Agent Node Event
+    ↓
+Display: "Step N | Xs | Processing..."
+    ↓
+Check for tool calls
+    ↓
+If tool call → Display tool name and args
+    ↓
+If subagent → Display delegation
+    ↓
+Tools Node Event
+    ↓
+Display: "Result: ..."
+    ↓
+__interrupt__ Event (HITL)
+    ↓
+Prompt user for decision
+    ↓
+Send decision back to agent
+    ↓
+Resume execution
+```
 
-2. **src/components/deepagents/runtime.py**
-   - Add `interrupt_on` configuration
-   - Configure `HumanInTheLoopMiddleware`
-   - Pass HITL config to agent creation
+### Progress Display Format
 
-3. **src/agents/deepagents/instances/base_deep_agent.py**
-   - Add streaming support parameters
-   - Maintain backward compatibility
-   - Add timeout wrapper
+```
+Deep agent reasoning...
+  Step 1 | 0.5s | Analyzing query...
+  Step 2 | 1.2s | Call tool: read_file
+    -> Args: path="config.json"
+  Step 3 | 2.1s | Result: File content loaded (1024 bytes)
+  Step 4 | 2.8s | Delegate to SubAgent: research
+    -> Task: Analyze configuration structure
+  Step 5 | 45.3s | SubAgent completed
+  Step 6 | 46.1s | Generating response...
 
-#### New Files
+DeepAgent > [Final response displayed once]
 
-1. **src/application/services/agent/deep/hitl_handler.py** (optional)
-   - User prompt logic
-   - Decision parsing
-   - Response formatting
-   - Interrupt resumption
+Summary:
+  - Reasoning steps: 6
+  - Tool calls: 3 (read_file, write_file, search)
+  - SubAgent delegations: 1 (research)
+  - Total time: 46.1s
+```
 
-### Testing Strategy
+## 4. Implementation Architecture
 
-#### Streaming Tests
+### File Modifications
 
-1. **Basic Streaming**
-   - Verify events received in real-time
-   - Confirm correct event ordering
-   - Validate event data completeness
+**Core Logic:**
+```
+src/agents/deepagents/instances/base_deep_agent.py
+  └─ invoke() method: replace ainvoke with astream
 
-2. **Tool Call Display**
-   - Test with various tools
-   - Verify parameter display
-   - Confirm result preview
+src/application/services/agent/deep/conversation.py
+  └─ handle_deep_agent_query(): process streaming events
+```
 
-3. **Subagent Display**
-   - Test delegation visibility
-   - Verify task description shown
-   - Confirm completion notification
+**New Files:**
+```
+src/application/services/agent/deep/event_handler.py
+  └─ DeepAgentEventHandler class
 
-#### HITL Tests
+src/application/services/agent/deep/hitl_handler.py
+  └─ handle_hitl_interrupt() function
 
-1. **Interrupt Detection**
-   - Verify interrupt triggered for configured tools
-   - Confirm correct tool details displayed
-   - Test with multiple simultaneous tool calls
+src/application/services/agent/deep/session_hitl_manager.py
+  └─ SessionHITLManager class
+```
 
-2. **Decision Handling**
-   - Test approve flow
-   - Test edit flow with parameter modification
-   - Test reject flow with reason
+**Configuration:**
+```
+config/agents/deep/models/providers.json
+  └─ Add streaming_enabled, hitl_config
 
-3. **Resumption**
-   - Verify execution continues after approval
-   - Confirm state preservation
-   - Test error handling on rejection
+config/agents/deep/models/subagents.json
+  └─ Add streaming_enabled: false for subagents
+```
 
-### User Experience
+### Return Format Compatibility
 
-#### Expected Improvements
+**Critical:** `astream` implementation must return same format as `ainvoke`:
 
-1. **Transparency**
-   - Users see what agent is doing
-   - Understand reasoning process
-   - Track progress of long operations
+```python
+{
+    "success": True,
+    "output": "Final response text",
+    "messages": [...],
+    "tool_calls": 10,
+    "tool_names": ["read_file", "write_file"],
+    "subagent_calls": [...],
+    "session_id": "default"
+}
+```
 
-2. **Control**
-   - Approve dangerous operations
-   - Modify parameters before execution
-   - Cancel unwanted actions
+### Terminal Integration
 
-3. **Confidence**
-   - Trust agent with visibility
-   - Learn agent capabilities
-   - Identify when to intervene
+**Use `ctx.console` with async wrapper:**
+```python
+# For output (synchronous, no change needed)
+ctx.console.print("[green]Approved[/]")
 
-4. **Efficiency**
-   - Catch errors early
-   - Redirect agent when off-track
-   - Avoid costly mistakes
+# For input (wrap with asyncio.to_thread)
+choice = await asyncio.to_thread(ctx.console.input, "Your choice: ")
+```
 
-### Performance Considerations
+**Benefits:**
+- Consistent with Basic Agent mode
+- Preserves Rich formatting
+- No additional dependencies (aioconsole not needed)
+- No conflicts between modes
 
-#### Streaming Overhead
+## 5. User Interrupt Handling
 
-- Network: Minimal (events are small)
-- Processing: Low (simple event parsing)
-- Display: Negligible (async console output)
+### Ctrl+C Interrupt
 
-#### HITL Impact
+**Implementation:**
+```python
+import signal
 
-- Only active for configured tools
-- No overhead when not triggered
-- User wait time is acceptable for safety
+interrupted = False
 
-### Migration Path
+def handle_interrupt(signum, frame):
+    nonlocal interrupted
+    interrupted = True
+    ctx.console.print("\n[yellow]Interrupt received, stopping agent...[/]")
 
-#### Phase 1: Basic Streaming
-- Implement event processing
-- Add tool call display
-- Show reasoning steps
+signal.signal(signal.SIGINT, handle_interrupt)
 
-#### Phase 2: Enhanced Display
-- Add progress indicators
-- Implement time tracking
-- Show subagent delegations
+async for event in agent.runtime.astream(...):
+    if interrupted:
+        ctx.console.print("[yellow]Execution interrupted by user[/]")
+        return ""
+    # Process event...
+```
 
-#### Phase 3: HITL Integration
-- Configure interrupt middleware
-- Implement user prompts
-- Add decision handling
+**Behavior:**
+- User presses Ctrl+C during execution
+- Agent stops gracefully at next event
+- Partial results can be saved (optional)
+- Interrupt message displayed
 
-#### Phase 4: Polish
-- Improve display formatting
-- Add color coding
-- Optimize performance
+## 6. Memory Management
 
-### Backward Compatibility
+### Global Memory Integration
 
-- Configuration flags control streaming behavior
-- Can disable streaming if needed
-- Falls back to ainvoke if stream fails
-- Maintains same return format
+**Current Issue:**
+- `checkpointer=None` passed to `create_deep_agent_runtime`
+- `session_id` received but not used in config
 
-### Future Enhancements
+**Fix:**
+```python
+# src/agents/deepagents/factories/base.py
+checkpointer = user_params.get("checkpointer")
+if checkpointer is None and global_memory_manager is not None:
+    checkpointer_wrapper = create_default_checkpointer()
+    checkpointer = checkpointer_wrapper.checkpointer
+```
 
-1. **Token-level Streaming**
-   - Enable typing effect for responses
-   - Use `stream_mode="messages"`
-   - Optional feature for enhanced UX
+**Save Strategy:**
+- LangGraph checkpointer: auto-saves after each node (already working)
+- Global memory: save once after query completes
 
-2. **Visual Progress Bar**
-   - Rich progress bar for long operations
-   - Estimated time remaining
-   - Visual step indicator
+```python
+# After streaming completes
+if ctx.global_memory:
+    ctx.global_memory.add_conversation(
+        session_id=ctx.session_id,
+        user_message=query,
+        ai_response=final_output
+    )
+```
 
-3. **Interrupt Presets**
-   - Pre-defined approval workflows
-   - User preferences for tool approval
-   - Smart auto-approval for trusted tools
+## 7. Session Commands
 
-4. **Streaming Logs**
-   - Save streaming output to file
-   - Replay execution for debugging
-   - Export execution trace
+### HITL Management Commands
 
-## References
+**View preferences:**
+```bash
+/session info
+```
 
-- LangGraph streaming API: `CompiledStateGraph.astream()`
-- LangGraph stream modes: `"values"`, `"updates"`, `"messages"`
-- LangChain HITL: `HumanInTheLoopMiddleware`
-- LangGraph interrupts: `interrupt()` function
+**Clear preferences:**
+```bash
+/session reset-hitl
+```
 
+**Output example:**
+```
+Current Session Information:
+  Session ID: default
+
+HITL Preferences (this session only):
+  Auto-approved tools:
+    - write_file
+    - read_file
+
+  Dangerous tools (never auto-approve):
+    - delete_file
+    - execute_shell
+```
+
+## 8. Complete Interaction Example
+
+```
+> Create a backup of my config and delete the old one
+
+Deep agent reasoning...
+  Step 1 | 0.8s | Planning backup operation...
+  Step 2 | 1.5s | Call tool: write_file
+
+======================================================================
+TOOL EXECUTION REQUIRES APPROVAL
+======================================================================
+
+  Tool: write_file
+  Arguments:
+    - path: /home/user/config.backup.json
+    - content: {...}
+
+Please choose:
+  [1] Yes - Approve this operation
+  [2] Yes and don't ask again - Auto-approve in this session
+  [3] No - Reject this operation
+  [4] Tell AI how to do - Give instructions to AI
+
+Your choice [1-4] (default: 1): 2
+
+Approved and will auto-approve 'write_file' in this session
+
+  Step 3 | 2.2s | Backup created successfully
+  Step 4 | 2.8s | Call tool: delete_file
+
+======================================================================
+TOOL EXECUTION REQUIRES APPROVAL
+======================================================================
+WARNING: This is a potentially dangerous operation!
+This operation cannot be undone!
+======================================================================
+
+  Tool: delete_file
+  Arguments:
+    - path: /home/user/old_config.json
+
+Please choose:
+  [1] Yes - Approve this operation
+  [2] (Not available for dangerous operations)
+  [3] No - Reject this operation
+  [4] Tell AI how to do - Give instructions to AI
+
+Your choice [1,3,4]: 4
+
+Your instructions: Don't delete it, just move it to archive folder
+
+Instructions sent to AI
+
+  Step 5 | 15.3s | Reconsidering approach...
+  Step 6 | 16.0s | Call tool: move_file
+
+Auto-approved: move_file (session preference)
+
+  Step 7 | 16.5s | File moved to archive
+
+DeepAgent > I've created a backup at config.backup.json and moved the old config to the archive folder instead of deleting it.
+```
+
+## 9. Key Design Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| Session-scoped preferences | Security: prevents permanent auto-approval of dangerous operations |
+| 4-option model | UX: covers all user needs (approve, remember, reject, guide) |
+| Tell AI unlimited retries | Flexibility: AI should keep trying until user is satisfied |
+| Dangerous tools list | Safety: certain operations always require explicit approval |
+| ctx.console for terminal | Consistency: same terminal API across all modes |
+| Save memory after completion | Performance: avoid frequent disk I/O during execution |
+| Process streaming, result once | UX: show progress but keep final answer clean |

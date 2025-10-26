@@ -1,292 +1,382 @@
-# Agent Execution Safety Mechanisms
+# Safety Mechanisms
 
-## Overview
+Safety controls to prevent excessive resource consumption and runaway execution in Deep Agent mode.
 
-This document describes the safety mechanisms designed to prevent runaway agent execution, excessive token consumption, and uncontrolled reasoning loops in both Basic and Deep agent modes.
+## 1. Current State
 
-## Current Issues
+### Existing Controls
 
-### 1. Lack of Timeout Protection
-
-**Current State:**
-- Both Basic and Deep agents use `ainvoke()` without time limits
-- Deep agents can reason indefinitely on complex problems
-- No mechanism to terminate long-running executions
-- Users experience unresponsive CLI with no feedback
-
-**Impact:**
-- Deep agent can run for minutes without user awareness
-- Excessive API costs from prolonged reasoning
-- Poor user experience during extended operations
-
-### 2. Excessive Recursion Limits
-
-**Current Configuration:**
+**LangGraph recursion limit:**
 ```python
 # src/components/deepagents/runtime.py
-return agent_graph.with_config({"recursion_limit": 1000})
+agent_graph.with_config({"recursion_limit": 1000})
+```
+- Limits graph execution steps
+- Current value: 1000 (very high)
+- No time-based limit
+
+**Checkpointer:**
+- Saves state after each node
+- Enables recovery from interrupts
+- Already implemented
+
+### Missing Controls
+
+1. **No execution timeout** - Agent can run indefinitely
+2. **No token consumption monitoring** - No visibility into costs
+3. **No cost limits** - Could exceed budget
+4. **High recursion limit** - 1000 steps is excessive for most tasks
+
+## 2. Timeout Mechanism
+
+### Implementation Strategy
+
+**Use `asyncio.wait_for` wrapper:**
+```python
+# src/application/services/agent/deep/conversation.py
+
+import asyncio
+
+async def handle_deep_agent_query(ctx, query: str) -> str:
+    timeout = config.get("max_execution_time", 120)  # seconds
+    
+    try:
+        result = await asyncio.wait_for(
+            _execute_streaming_query(ctx, query),
+            timeout=timeout
+        )
+        return result
+    except asyncio.TimeoutError:
+        ctx.console.print(f"[red]Execution timeout after {timeout}s[/]")
+        return ""
 ```
 
-**Problems:**
-- Recursion limit of 1000 is unreasonably high
-- Allows agent to loop through 1000 reasoning steps
-- No practical benefit beyond ~50 steps
-- Increases risk of infinite reasoning loops
+### Configuration
 
-### 3. No Token Consumption Monitoring
-
-**Current State:**
-- No tracking of input/output tokens across agent execution
-- No cost estimation or budget limits
-- Users unaware of token usage until API bill arrives
-- No warnings when approaching spending limits
-
-**Impact:**
-- Unexpected API costs
-- Potential bill shock for complex queries
-- No ability to set per-query budgets
-
-## Proposed Solutions
-
-### Solution 1: Execution Timeout
-
-#### Implementation Approach
-
-Add timeout protection at the agent invocation level using `asyncio.wait_for()`.
-
-**Target Files:**
-- `src/agents/deepagents/instances/base_deep_agent.py`
-- `src/agents/basicagents/instances/base_agent.py` (optional)
-
-**Key Changes:**
-1. Add `max_execution_time` parameter to agent initialization
-2. Wrap `ainvoke()`/`astream()` calls with timeout
-3. Return graceful error message on timeout
-4. Log timeout events for monitoring
-
-**Configuration:**
-- Default timeout: 120 seconds (2 minutes)
-- Configurable per provider/model in config files
-- Override-able per query execution
-
-#### Error Handling
-
-On timeout:
-- Return structured error response
-- Include elapsed time and reasoning steps completed
-- Suggest query simplification to user
-- Log timeout event with context
-
-### Solution 2: Reduced Recursion Limits
-
-#### Implementation Approach
-
-Lower recursion limits to practical values based on agent complexity.
-
-**Recommended Limits:**
-- Basic Agent: 25 steps (typical tool-calling loops)
-- Deep Agent: 50 steps (allows for complex reasoning)
-- Subagents: 30 steps (focused task execution)
-
-**Rationale:**
-- 99% of queries complete within these limits
-- Prevents infinite loops
-- Forces agent to be more efficient
-- Maintains quality while adding safety
-
-**Configuration Location:**
-```
-config/agents/deep/models/providers.json
-config/agents/basic/models/providers.json
-```
-
-### Solution 3: Token Consumption Monitoring
-
-#### Implementation Approach
-
-Create middleware to track and limit token usage across agent execution.
-
-**Key Components:**
-
-1. **Token Tracking Middleware**
-   - Intercepts all LLM calls
-   - Records input/output tokens
-   - Accumulates totals per query
-   - Estimates cost based on model pricing
-
-2. **Budget Enforcement**
-   - Set maximum input token limit (default: 100,000)
-   - Set maximum output token limit (default: 50,000)
-   - Set maximum cost limit (default: $1.00 USD)
-   - Raise error when limit exceeded
-
-3. **Usage Reporting**
-   - Display token usage after query completion
-   - Show estimated cost
-   - Warn when approaching limits
-   - Log usage statistics for analysis
-
-**Target Files:**
-- `src/components/deepagents/middlewares/token_limit.py` (new)
-- `src/components/deepagents/runtime.py`
-- `src/agents/deepagents/instances/base_deep_agent.py`
-
-#### Usage Statistics Format
-
-After query completion, display:
-- Total input tokens used
-- Total output tokens used
-- Estimated cost
-- Percentage of budget consumed
-
-### Solution 4: Progress Monitoring
-
-#### Implementation Approach
-
-For Deep agents using streaming, track and display progress metrics.
-
-**Tracked Metrics:**
-- Number of reasoning steps taken
-- Number of tool calls made
-- Elapsed time
-- Token consumption (if available)
-
-**Display Format:**
-- Real-time step counter: "Step 15/50..."
-- Tool call notifications: "Calling: read_file"
-- Time elapsed: "Elapsed: 45s"
-
-**Early Termination:**
-- Detect apparent infinite loops (repeated identical actions)
-- Allow user to cancel with Ctrl+C
-- Provide option to continue or abort on warnings
-
-## Implementation Priority
-
-### Phase 1: Critical Safety (Week 1)
-1. Add timeout mechanism to Deep agents
-2. Reduce recursion limits to safe values
-3. Test timeout behavior with various queries
-
-### Phase 2: Monitoring (Week 2)
-4. Implement basic token counting middleware
-5. Add usage reporting to query results
-6. Test with different model providers
-
-### Phase 3: Advanced Features (Week 3)
-7. Implement budget enforcement
-8. Add progress monitoring for streaming
-9. Implement early termination detection
-
-## Configuration Schema
-
-### Provider Configuration
-
+**In `providers.json`:**
 ```json
 {
-  "research": {
-    "providers": {
-      "ANTHROPIC": {
-        "models": {
-          "claude-4.5-sonnet": {
-            "max_execution_time": 120,
-            "max_recursion_limit": 50,
-            "max_input_tokens": 100000,
-            "max_output_tokens": 50000,
-            "max_cost_usd": 1.0
-          }
-        }
+  "models": {
+    "claude-4.5-sonnet": {
+      "max_execution_time": 120,
+      "max_recursion_limit": 50
+    }
+  }
+}
+```
+
+**Default values:**
+- Main agent: 120 seconds
+- Subagents: 90 seconds (shorter than main)
+
+### Timeout Behavior
+
+**When timeout occurs:**
+1. Stop streaming immediately
+2. Display timeout message with elapsed time
+3. Return partial results (optional)
+4. Save conversation state
+5. Allow user to retry or adjust query
+
+## 3. Recursion Limit
+
+### Current Problem
+
+**1000 steps is too high:**
+- Most tasks complete in < 20 steps
+- Allows infinite loops to run too long
+- Consumes excessive tokens
+
+### Recommended Limits
+
+| Agent Type | Recursion Limit | Rationale |
+|------------|----------------|-----------|
+| Main Deep Agent | 50 | Sufficient for complex tasks |
+| Subagents | 30 | Focused, specific tasks |
+| Basic Agent | 15 | Simple tool-calling workflows |
+
+### Implementation
+
+**In `runtime.py`:**
+```python
+# Read from config instead of hardcoded
+recursion_limit = model_settings.get("max_recursion_limit", 50)
+agent_graph = agent_graph.with_config({"recursion_limit": recursion_limit})
+```
+
+**Behavior when limit reached:**
+- LangGraph raises exception
+- Display: "Recursion limit reached after N steps"
+- Suggest: "Try breaking down the task or increasing limit"
+
+## 4. Token Consumption Monitoring
+
+### Tracking Strategy
+
+**Monitor at three levels:**
+1. **Per-step tracking** - Tokens used in each reasoning step
+2. **Session tracking** - Total tokens in current session
+3. **Cost estimation** - Approximate USD cost
+
+### Implementation
+
+**Token counter middleware:**
+```python
+# src/components/deepagents/middlewares/token_monitor.py
+
+class TokenMonitorMiddleware(AgentMiddleware):
+    def __init__(self, max_input_tokens=100000, max_output_tokens=50000):
+        self.max_input_tokens = max_input_tokens
+        self.max_output_tokens = max_output_tokens
+        self.input_tokens = 0
+        self.output_tokens = 0
+    
+    def after_model(self, state, runtime):
+        # Extract token usage from last message
+        usage = self._extract_usage(state["messages"][-1])
+        self.input_tokens += usage.get("input_tokens", 0)
+        self.output_tokens += usage.get("output_tokens", 0)
+        
+        # Check limits
+        if self.input_tokens > self.max_input_tokens:
+            raise TokenLimitExceeded("Input token limit exceeded")
+        if self.output_tokens > self.max_output_tokens:
+            raise TokenLimitExceeded("Output token limit exceeded")
+```
+
+### Display During Execution
+
+**Show token usage in progress:**
+```
+  Step 5 | 12.3s | Generating response...
+    -> Tokens: 1,234 input / 567 output (~$0.02)
+```
+
+**Show summary at end:**
+```
+Summary:
+  - Total tokens: 15,234 input / 8,901 output
+  - Estimated cost: $0.18
+  - Average per step: 2,539 tokens
+```
+
+### Configuration
+
+**In `providers.json`:**
+```json
+{
+  "models": {
+    "claude-4.5-sonnet": {
+      "max_input_tokens": 100000,
+      "max_output_tokens": 50000,
+      "max_cost_usd": 1.0,
+      "token_pricing": {
+        "input_per_million": 3.0,
+        "output_per_million": 15.0
       }
     }
   }
 }
 ```
 
-### Runtime Override
+## 5. Error Handling
 
-Allow per-query overrides:
+### Error Types
+
+**Timeout errors:**
 ```python
-result = await agent.ainvoke(
-    query,
-    session_id=session_id,
-    timeout=180,  # Override default
-    max_tokens=150000  # Override default
-)
+except asyncio.TimeoutError:
+    return {
+        "success": False,
+        "error": "timeout",
+        "output": f"Execution timeout after {timeout}s",
+        "elapsed_time": timeout
+    }
 ```
 
-## Testing Strategy
-
-### Timeout Testing
-- Test with intentionally slow operations
-- Verify graceful error handling
-- Confirm timeout accuracy within 5%
-
-### Recursion Limit Testing
-- Create queries that require many steps
-- Verify execution stops at limit
-- Confirm appropriate error message
-
-### Token Monitoring Testing
-- Execute queries with known token counts
-- Verify accuracy of tracking
-- Test budget enforcement triggers
-
-## Monitoring and Logging
-
-### Logged Events
-
-1. **Timeout Events**
-   - Query that timed out
-   - Elapsed time
-   - Steps completed
-   - Session ID
-
-2. **Recursion Limit Events**
-   - Query that hit limit
-   - Final step count
-   - Last action taken
-   - Session ID
-
-3. **Token Budget Events**
-   - Query that exceeded budget
-   - Total tokens consumed
-   - Estimated cost
-   - Session ID
-
-### Log Format
-
-```
-[TIMEOUT] session=abc123 elapsed=120.5s steps=45 query="..."
-[RECURSION_LIMIT] session=abc123 steps=50 last_action="tool_call:read_file"
-[TOKEN_LIMIT] session=abc123 tokens=105000 cost=$1.23
+**Token limit errors:**
+```python
+except TokenLimitExceeded as e:
+    return {
+        "success": False,
+        "error": "token_limit",
+        "output": str(e),
+        "tokens_used": monitor.get_usage()
+    }
 ```
 
-## Performance Impact
+**Recursion limit errors:**
+```python
+except RecursionError:
+    return {
+        "success": False,
+        "error": "recursion_limit",
+        "output": f"Recursion limit ({limit}) reached",
+        "steps_completed": step_count
+    }
+```
 
-### Expected Overhead
+**User interrupt:**
+```python
+except KeyboardInterrupt:
+    return {
+        "success": False,
+        "error": "user_cancelled",
+        "output": "Execution interrupted by user",
+        "partial_result": current_output
+    }
+```
 
-- Timeout mechanism: Negligible (<1ms)
-- Token counting: Minimal (~2-5ms per LLM call)
-- Progress monitoring: Negligible (async operations)
+### Partial Results
 
-### Benefits
+**When execution stops early:**
+- Save partial conversation to memory (optional)
+- Display what was accomplished
+- Show why execution stopped
+- Suggest next steps
 
-- Prevents runaway costs
-- Improves user experience
-- Enables better resource planning
-- Provides operational insights
+**Example:**
+```
+[yellow]Execution interrupted after 3 steps[/]
 
-## Backward Compatibility
+Partial progress:
+  - Read configuration file
+  - Analyzed structure
+  - Started generating report (incomplete)
 
-All safety mechanisms are:
-- Opt-in via configuration
-- Backward compatible with existing code
-- Non-breaking for current functionality
-- Gracefully degrading if disabled
+Reason: User interrupt (Ctrl+C)
 
-## References
+You can:
+  - Resume with a more specific query
+  - Adjust timeout in config
+  - Break task into smaller steps
+```
 
-- LangGraph timeout configuration: `RunnableConfig["timeout"]`
-- AsyncIO wait_for: `asyncio.wait_for(coro, timeout)`
-- LangChain middleware: `AgentMiddleware.wrap_model_call()`
+## 6. Configuration Priority
 
+### Priority Hierarchy
+
+```
+1. Runtime parameters (highest)
+   await agent.ainvoke(query, timeout=180)
+
+2. Model config
+   config/agents/deep/models/providers.json
+
+3. Default values (lowest)
+   Hardcoded in code
+```
+
+### Override Examples
+
+**Temporary override for specific query:**
+```python
+# In conversation handler
+timeout = 300  # 5 minutes for complex task
+result = await asyncio.wait_for(execute_query(...), timeout=timeout)
+```
+
+**Per-model defaults:**
+```json
+{
+  "claude-4.5-sonnet": {
+    "max_execution_time": 120
+  },
+  "qwen3-coder": {
+    "max_execution_time": 180  // Longer for coding tasks
+  }
+}
+```
+
+## 7. Safety Summary
+
+### Protection Layers
+
+| Layer | Type | Trigger | Action |
+|-------|------|---------|--------|
+| **Timeout** | Time-based | After N seconds | Stop execution |
+| **Recursion Limit** | Step-based | After N steps | Raise error |
+| **Token Limit** | Resource-based | After N tokens | Stop execution |
+| **User Interrupt** | Manual | Ctrl+C | Graceful stop |
+| **HITL** | Manual | Dangerous tool | Wait for approval |
+
+### Recommended Defaults
+
+```json
+{
+  "max_execution_time": 120,
+  "max_recursion_limit": 50,
+  "max_input_tokens": 100000,
+  "max_output_tokens": 50000,
+  "max_cost_usd": 1.0
+}
+```
+
+### Monitoring Commands
+
+**View current limits:**
+```bash
+/config show safety
+```
+
+**Adjust limits:**
+```bash
+/config set max_execution_time 180
+/config set max_recursion_limit 100
+```
+
+**View token usage:**
+```bash
+/session stats
+```
+
+## 8. Implementation Priority
+
+| Priority | Feature | Complexity | Impact |
+|----------|---------|------------|--------|
+| P0 | Timeout mechanism | Low | High |
+| P0 | Reduce recursion limit | Low | Medium |
+| P1 | Token monitoring | Medium | Medium |
+| P1 | Cost estimation | Low | Low |
+| P2 | Partial result saving | Medium | Low |
+| P2 | Configuration commands | Low | Low |
+
+## 9. Testing Strategy
+
+### Test Scenarios
+
+**Timeout test:**
+```python
+# Query that takes > 120s
+"Analyze all files in this large repository"
+# Expected: Timeout after 120s with message
+```
+
+**Recursion test:**
+```python
+# Query that causes many steps
+"Keep refining this code until perfect"
+# Expected: Stop after 50 steps with message
+```
+
+**Token test:**
+```python
+# Query with large context
+"Summarize these 100 documents"
+# Expected: Monitor shows token usage, stops if limit exceeded
+```
+
+**Interrupt test:**
+```python
+# Start long-running query, press Ctrl+C
+# Expected: Graceful stop with partial results
+```
+
+### Success Criteria
+
+- Timeout triggers within 1 second of limit
+- Recursion limit stops execution cleanly
+- Token monitoring shows accurate counts
+- User interrupt stops within 2 seconds
+- All errors return proper error format
+- Partial results are saved when appropriate
