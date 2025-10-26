@@ -33,13 +33,12 @@ class BaseDeepAgentFactory(ABC):
         model: str,
         adapter: BaseDeepAgentAdapter,
         subagent_manager: SubAgentManager,
-        provider_config: Dict[str, Any],
         middleware_config: Dict[str, Any],
         global_memory_manager: Optional[Any] = None,
         **user_params: Any,
     ) -> BaseDeepAgent:
         """Create the deep agent."""
-        resolved_middleware = self._resolve_middleware_config(provider_config, middleware_config)
+        resolved_middleware = self._resolve_middleware_config(adapter, middleware_config)
 
         available_subagents = subagent_manager.get_available_subagents()
         system_prompt = adapter.get_system_prompt(
@@ -63,22 +62,8 @@ class BaseDeepAgentFactory(ABC):
             tools = tool_manager.get_all_tools()
         tool_names = [getattr(tool, "name", repr(tool)) for tool in tools] if tools else []
 
-        model_settings = adapter.get_model_parameters()
-        if adapter.base_url:
-            model_settings["base_url"] = adapter.base_url
-
-        # Extract API key from environment using api_key_env
-        if adapter.api_key_env:
-            import os
-            api_key = os.getenv(adapter.api_key_env)
-            if api_key:
-                model_settings["api_key"] = api_key
-            else:
-                logger.warning(
-                    "API key environment variable %s is not set for provider %s",
-                    adapter.api_key_env,
-                    adapter.provider,
-                )
+        # Get LLM parameters from adapter
+        model_settings = adapter.get_llm_params()
 
         # Initialize checkpointer for memory persistence if not provided
         checkpointer = user_params.get("checkpointer")
@@ -87,11 +72,15 @@ class BaseDeepAgentFactory(ABC):
             checkpointer = checkpointer_wrapper.checkpointer
             logger.info("Created default checkpointer for deep agent with global memory")
 
-        hitl_config = provider_config.get("hitl_config", {}) or {}
+        # Get runtime and safety config from adapter
+        runtime_config = adapter.get_runtime_config()
+        safety_config = adapter.get_safety_config()
+
+        hitl_config = safety_config.get("hitl_config", {}) or {}
         interrupt_on = user_params.get("interrupt_on") or self._build_interrupt_config(hitl_config)
-        recursion_limit = provider_config.get("max_recursion_limit", 1000)
-        step_timeout = provider_config.get("max_execution_time")
-        stream_mode = provider_config.get("stream_mode", "updates")
+        recursion_limit = runtime_config.get("recursion_limit", 1000)
+        step_timeout = safety_config.get("max_execution_time")
+        stream_mode = runtime_config.get("stream_mode", "updates")
 
         runtime = create_deep_agent_runtime(
             model=adapter.get_model_identifier(),
@@ -112,33 +101,38 @@ class BaseDeepAgentFactory(ABC):
             stream_mode=stream_mode,
         )
 
+        # Get display config from adapter
+        display_config = adapter.get_display_config()
+        metadata_config = adapter.get_metadata()
+
         streaming_preferences = {
             "stream_mode": stream_mode,
-            "streaming_enabled": provider_config.get("streaming_enabled", True),
-            "show_reasoning_steps": provider_config.get("show_reasoning_steps", True),
-            "show_tool_calls": provider_config.get("show_tool_calls", True),
-            "show_tool_results": provider_config.get("show_tool_results", True),
-            "show_subagent_delegations": provider_config.get("show_subagent_delegations", True),
-            "show_elapsed_time": provider_config.get("show_elapsed_time", True),
+            "streaming_enabled": display_config.get("streaming_enabled", True),
+            "show_reasoning_steps": display_config.get("show_reasoning_steps", True),
+            "show_tool_calls": display_config.get("show_tool_calls", True),
+            "show_tool_results": display_config.get("show_tool_results", True),
+            "show_subagent_delegations": display_config.get("show_subagent_delegations", True),
+            "show_elapsed_time": display_config.get("show_elapsed_time", True),
         }
         safety_limits = {
-            "max_execution_time": provider_config.get("max_execution_time"),
-            "max_recursion_limit": provider_config.get("max_recursion_limit"),
-            "max_input_tokens": provider_config.get("max_input_tokens"),
-            "max_output_tokens": provider_config.get("max_output_tokens"),
+            "max_execution_time": safety_config.get("max_execution_time"),
+            "max_recursion_limit": recursion_limit,
+            "max_input_tokens": metadata_config.get("max_input_tokens"),
+            "max_output_tokens": metadata_config.get("max_output_tokens"),
         }
 
         metadata = {
             "system_prompt": system_prompt,
             "middleware": resolved_middleware,
             "subagents": subagent_metadata,
-            "provider_config": provider_config,
             "model_identifier": adapter.get_model_identifier(),
             "tools": tool_names,
             "tool_count": len(tool_names),
             "streaming": streaming_preferences,
             "safety": safety_limits,
             "hitl_config": hitl_config,
+            "runtime_config": runtime_config,
+            "display_config": display_config,
         }
         metadata.update(adapter.build_metadata())
 
@@ -152,10 +146,20 @@ class BaseDeepAgentFactory(ABC):
 
     def _resolve_middleware_config(
         self,
-        provider_config: Dict[str, Any],
+        adapter: BaseDeepAgentAdapter,
         global_config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        provider_middleware = provider_config.get("middleware", {})
+        """
+        Resolve middleware configuration.
+
+        Args:
+            adapter: Adapter providing middleware config
+            global_config: Global middleware configuration
+
+        Returns:
+            Resolved middleware configuration
+        """
+        provider_middleware = adapter.get_middleware_config()
         resolved = {}
         for key in ("filesystem", "subagents", "patch_tool_calls"):
             value = provider_middleware.get(key)

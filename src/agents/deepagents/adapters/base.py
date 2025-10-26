@@ -9,49 +9,88 @@ from src.components.deepagents.prompts import DeepAgentPromptRegistry
 
 
 class BaseDeepAgentAdapter(ABC):
-    """Provide provider and model specific configuration for DeepAgents."""
+    """
+    Provide provider and model specific configuration for DeepAgents.
+
+    This adapter now works with the new categorized configuration structure
+    from DeepAgentsProviderRegistry.
+    """
 
     function_type: str
     PROMPT_REGISTRY = DeepAgentPromptRegistry()
     PROVIDER_ALIASES: Dict[str, str] = {
-        "anthropic": "openai",  # 统一使用 OpenAI 兼容接口
+        "anthropic": "openai",
         "tongyi": "openai",
         "zhipu": "openai",
         "openai": "openai",
     }
 
-    def __init__(self, *, provider: str, model: str, provider_config: Dict[str, Any]) -> None:
+    def __init__(
+        self,
+        *,
+        provider: str,
+        model: str,
+        provider_registry: Optional[Any] = None,
+    ) -> None:
+        """
+        Initialize adapter with provider and model.
+
+        Args:
+            provider: Provider name
+            model: Model name
+            provider_registry: Optional registry instance. If None, uses global registry.
+        """
         self.provider = provider
         self.model = model
-        self.provider_config = provider_config
+
+        # Get registry if not provided
+        if provider_registry is None:
+            from src.core.providers import deepagents_provider_registry
+
+            provider_registry = deepagents_provider_registry
+
+        self.provider_registry = provider_registry
+
+        # Load categorized configuration
+        self._complete_config = provider_registry.get_complete_config(provider, model)
 
     @property
     def base_url(self) -> Optional[str]:
         """Return provider base URL if configured."""
-        return self.provider_config.get("base_url")
+        return self._complete_config["api_config"].get("base_url")
 
     @property
     def api_key_env(self) -> Optional[str]:
         """Return environment variable name for API key."""
-        return self.provider_config.get("api_key_env")
+        return self._complete_config["api_config"].get("api_key_env")
 
-    def get_model_parameters(self) -> Dict[str, Any]:
-        """Return model specific configuration."""
-        params = {
-            key: value
-            for key, value in self.provider_config.items()
-            if key not in {"base_url", "api_key_env", "middleware", "description"}
-        }
-        allowed_keys = {"temperature", "max_tokens", "top_p", "timeout"}
-        return {
-            key: value
-            for key, value in params.items()
-            if key in allowed_keys
-        }
+    def get_llm_params(self) -> Dict[str, Any]:
+        """
+        Get clean LLM parameters for init_chat_model.
+
+        Returns only parameters that are valid for the LLM API.
+        """
+        return self.provider_registry.get_llm_params(self.provider, self.model)
+
+    def get_runtime_config(self) -> Dict[str, Any]:
+        """Get runtime configuration for agent graph."""
+        return self._complete_config["runtime_config"]
 
     def get_middleware_config(self) -> Dict[str, Any]:
         """Return middleware configuration for the agent."""
-        return self.provider_config.get("middleware", {})
+        return self._complete_config["middleware_config"]
+
+    def get_display_config(self) -> Dict[str, Any]:
+        """Get display configuration for streaming and logging."""
+        return self._complete_config["display_config"]
+
+    def get_safety_config(self) -> Dict[str, Any]:
+        """Get safety configuration including HITL settings."""
+        return self._complete_config["safety_config"]
+
+    def get_metadata(self) -> Dict[str, Any]:
+        """Get metadata (informational only)."""
+        return self._complete_config["metadata"]
 
     def build_metadata(self) -> Dict[str, Any]:
         """Metadata describing the adapter."""
@@ -59,7 +98,7 @@ class BaseDeepAgentAdapter(ABC):
             "provider": self.provider,
             "model": self.model,
             "function_type": self.function_type,
-            "description": self.provider_config.get("description"),
+            "description": self._complete_config.get("description"),
         }
 
     def get_main_agent_prompt(
@@ -109,7 +148,8 @@ class BaseDeepAgentAdapter(ABC):
 
     def get_capabilities(self) -> Dict[str, Any]:
         """Return capability information exposed by the adapter."""
+        metadata = self.get_metadata()
         return {
-            "supports_tools": self.provider_config.get("supports_tools", True),
+            "supports_tools": metadata.get("supports_tools", True),
             "supports_subagents": True,
         }

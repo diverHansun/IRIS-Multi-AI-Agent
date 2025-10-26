@@ -43,14 +43,14 @@ class DeepAgentManager:
 
         logger.info("Creating deep agent for provider=%s model=%s function=%s", provider_key, model, function_type)
 
-        provider_config, resolved_model = self._get_provider_config(provider_key, model)
+        resolved_model = self._get_provider_config(provider_key, model)
         logger.info(
             "Creating deep agent for provider=%s model=%s function=%s",
             provider_key,
             resolved_model,
             function_type,
         )
-        adapter = self._create_agent_adapter(function_type, provider_key, resolved_model, provider_config)
+        adapter = self._create_agent_adapter(function_type, provider_key, resolved_model)
         middleware_config = self.provider_registry.get_middleware_config()
 
         factory = self.factory_registry.get_factory(function_type)
@@ -65,7 +65,6 @@ class DeepAgentManager:
             model=resolved_model,
             adapter=adapter,
             subagent_manager=self.subagent_manager,
-            provider_config=provider_config,
             middleware_config=middleware_config,
             global_memory_manager=global_memory_manager,
             **user_params,
@@ -78,8 +77,8 @@ class DeepAgentManager:
         """Return metadata about registered deep agent functions."""
         return self.factory_registry.describe_factories()
 
-    def _get_provider_config(self, provider: str, model: Optional[str]) -> tuple[Dict[str, Any], str]:
-        """Safely resolve provider configuration."""
+    def _get_provider_config(self, provider: str, model: Optional[str]) -> str:
+        """Safely resolve provider model."""
         providers = self.provider_registry.list_providers()
         provider_entry = providers.get(provider)
         if provider_entry is None:
@@ -89,19 +88,17 @@ class DeepAgentManager:
         if not models:
             raise ValueError(f"No models configured for provider {provider}.")
 
-        resolved_model = model or next(iter(models.keys()))
+        resolved_model = model or provider_entry.get("default_model") or next(iter(models.keys()))
         if resolved_model not in models:
             raise ValueError(f"Model {resolved_model} not found for provider {provider}.")
 
-        config = self.provider_registry.get_deep_agent_config(provider, resolved_model)
-        return config, resolved_model
+        return resolved_model
 
     def _create_agent_adapter(
         self,
         function_type: str,
         provider: str,
         model: str,
-        provider_config: Dict[str, Any],
     ) -> BaseDeepAgentAdapter:
         """Instantiate the adapter for the requested function."""
         adapter_cls = self.factory_registry.get_adapter_class(function_type)
@@ -113,7 +110,7 @@ class DeepAgentManager:
         adapter = adapter_cls(
             provider=provider,
             model=model,
-            provider_config=provider_config,
+            provider_registry=self.provider_registry,
         )
         logger.debug(
             "Adapter instantiated for provider=%s model=%s function=%s",
