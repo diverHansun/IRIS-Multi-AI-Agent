@@ -41,6 +41,9 @@ def create_deep_agent_runtime(
     cache: BaseCache | None = None,
     name: str | None = None,
     debug: bool = False,
+    recursion_limit: int | None = None,
+    step_timeout: float | None = None,
+    stream_mode: str | None = None,
 ) -> CompiledStateGraph:
     """Create a configured deep agent runtime graph."""
 
@@ -131,4 +134,10 @@ def create_deep_agent_runtime(
         name=name,
     )
 
-    return agent_graph.with_config({"recursion_limit": 1000})
+    if step_timeout:
+        agent_graph.step_timeout = step_timeout
+    if stream_mode:
+        agent_graph.stream_mode = stream_mode
+
+    limit = recursion_limit or 1000
+    return agent_graph.with_config({"recursion_limit": limit})

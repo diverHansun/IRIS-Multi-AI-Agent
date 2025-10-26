@@ -55,7 +55,7 @@ class DeepAgentService(BaseEngineService):
                 "mode": {
                     "mode": "agent",
                     "agent_type": "deep",
-                    "streaming": False,
+                    "streaming": True,
                     "middleware": info.get("middleware"),
                     "function_type": config.get("function_type"),
                     "session_id": ctx.session_id,
@@ -104,7 +104,7 @@ class DeepAgentService(BaseEngineService):
                 "mode": {
                     "mode": "agent",
                     "agent_type": "deep",
-                    "streaming": False,
+                    "streaming": True,
                     "middleware": info.get("middleware"),
                     "function_type": config.get("function_type"),
                     "session_id": ctx.session_id,
@@ -136,7 +136,7 @@ class DeepAgentService(BaseEngineService):
             "mode": {
                 "mode": "agent",
                 "agent_type": "deep",
-                "streaming": False,
+                "streaming": True,
                 "middleware": agent_info.get("middleware"),
                 "function_type": config.get("function_type"),
                 "session_id": ctx.session_id,

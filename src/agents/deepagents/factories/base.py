@@ -87,6 +87,12 @@ class BaseDeepAgentFactory(ABC):
             checkpointer = checkpointer_wrapper.checkpointer
             logger.info("Created default checkpointer for deep agent with global memory")
 
+        hitl_config = provider_config.get("hitl_config", {}) or {}
+        interrupt_on = user_params.get("interrupt_on") or self._build_interrupt_config(hitl_config)
+        recursion_limit = provider_config.get("max_recursion_limit", 1000)
+        step_timeout = provider_config.get("max_execution_time")
+        stream_mode = provider_config.get("stream_mode", "updates")
+
         runtime = create_deep_agent_runtime(
             model=adapter.get_model_identifier(),
             system_prompt=system_prompt,
@@ -95,13 +101,32 @@ class BaseDeepAgentFactory(ABC):
             middleware_config=resolved_middleware,
             subagents=subagent_specs,
             use_long_term_memory=resolved_middleware.get("filesystem", {}).get("long_term_memory", False),
-            interrupt_on=user_params.get("interrupt_on"),
+            interrupt_on=interrupt_on,
             checkpointer=checkpointer,
             store=user_params.get("store"),
             cache=user_params.get("cache"),
             name=user_params.get("name"),
             debug=user_params.get("debug", False),
+            recursion_limit=recursion_limit,
+            step_timeout=step_timeout,
+            stream_mode=stream_mode,
         )
+
+        streaming_preferences = {
+            "stream_mode": stream_mode,
+            "streaming_enabled": provider_config.get("streaming_enabled", True),
+            "show_reasoning_steps": provider_config.get("show_reasoning_steps", True),
+            "show_tool_calls": provider_config.get("show_tool_calls", True),
+            "show_tool_results": provider_config.get("show_tool_results", True),
+            "show_subagent_delegations": provider_config.get("show_subagent_delegations", True),
+            "show_elapsed_time": provider_config.get("show_elapsed_time", True),
+        }
+        safety_limits = {
+            "max_execution_time": provider_config.get("max_execution_time"),
+            "max_recursion_limit": provider_config.get("max_recursion_limit"),
+            "max_input_tokens": provider_config.get("max_input_tokens"),
+            "max_output_tokens": provider_config.get("max_output_tokens"),
+        }
 
         metadata = {
             "system_prompt": system_prompt,
@@ -111,6 +136,9 @@ class BaseDeepAgentFactory(ABC):
             "model_identifier": adapter.get_model_identifier(),
             "tools": tool_names,
             "tool_count": len(tool_names),
+            "streaming": streaming_preferences,
+            "safety": safety_limits,
+            "hitl_config": hitl_config,
         }
         metadata.update(adapter.build_metadata())
 
@@ -162,7 +190,7 @@ class BaseDeepAgentFactory(ABC):
                 model_settings = {
                     key: value
                     for key, value in config.items()
-                    if key in {"temperature", "max_tokens", "top_p", "timeout", "max_output_tokens"}
+                    if key in {"temperature", "max_tokens", "top_p", "timeout"}
                 }
 
                 # Add base_url if configured
@@ -213,9 +241,35 @@ class BaseDeepAgentFactory(ABC):
                     "model": model_identifier,
                     "tools": [],  # Tools will be inherited from default_tools
                     "description": subagent_spec.description,
+                    "safety": {
+                        "max_execution_time": config.get("max_execution_time"),
+                        "max_recursion_limit": config.get("max_recursion_limit"),
+                        "streaming_enabled": config.get("streaming_enabled"),
+                        "hitl_enabled": config.get("hitl_enabled"),
+                    },
                 }
             )
         return specs, metadata
+
+    @staticmethod
+    def _build_interrupt_config(hitl_config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not hitl_config:
+            return None
+        interrupt_on: Dict[str, Any] = {}
+        dangerous_tools = hitl_config.get("dangerous_tools", [])
+        for tool in dangerous_tools:
+            interrupt_on[tool] = {"allowed_decisions": ["approve", "reject"]}
+
+        for tool, settings in (hitl_config.get("tools") or {}).items():
+            allow_auto = settings.get("allow_auto_approve", True)
+            if allow_auto is False or tool in interrupt_on:
+                interrupt_on.setdefault(tool, {"allowed_decisions": ["approve", "reject"]})
+            description = settings.get("warning_message")
+            if description:
+                interrupt_on.setdefault(tool, {"allowed_decisions": ["approve", "reject"]})
+                interrupt_on[tool]["description"] = description
+
+        return interrupt_on or None
 
     def describe(self) -> Dict[str, Any]:
         """Return metadata describing the factory."""

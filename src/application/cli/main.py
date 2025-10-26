@@ -14,9 +14,12 @@ from src.application.commands import dispatch
 from src.application.commands.parser import extract_command_name, is_command, parse_command
 from src.application.engine_adapters import get_adapter
 from src.application.services import get_current_service
+from src.application.services.agent.deep.session_hitl_manager import SessionHITLManager
 from src.application.cli.gui import formatter as gui_formatter
 from src.application.cli.gui import render as gui_render
 from src.application.cli.gui import logo as gui_logo
+from rich.markup import escape
+
 from src.application.cli.state import AppState
 
 logger = logging.getLogger(__name__)
@@ -66,6 +69,7 @@ def _initialize_memory(ctx: AppState) -> None:
     ctx.session_manager = SessionManager(ctx.global_memory)
     ctx.session_id = ctx.session_manager.prompt_for_session_choice()
     ctx.console.print(f"[dim]Current Session ID: {ctx.session_id}[/]")
+    ctx.hitl_manager = SessionHITLManager()
 
 
 async def _cli_loop(ctx: AppState) -> None:
@@ -92,7 +96,7 @@ async def _cli_loop(ctx: AppState) -> None:
             ctx.console.print("Goodbye!")
             break
         except Exception as exc:  # pragma: no cover - runtime safeguard
-            ctx.console.print(f"[bold red]Error: {exc}")
+            ctx.console.print(f"[bold red]Error:[/] {escape(str(exc))}")
 
 
 async def _handle_conversation(ctx: AppState, query: str) -> None:

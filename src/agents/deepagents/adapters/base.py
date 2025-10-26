@@ -42,13 +42,7 @@ class BaseDeepAgentAdapter(ABC):
             for key, value in self.provider_config.items()
             if key not in {"base_url", "api_key_env", "middleware", "description"}
         }
-        allowed_keys = {
-            "temperature",
-            "max_tokens",
-            "top_p",
-            "timeout",
-            "max_output_tokens",
-        }
+        allowed_keys = {"temperature", "max_tokens", "top_p", "timeout"}
         return {
             key: value
             for key, value in params.items()

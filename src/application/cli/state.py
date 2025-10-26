@@ -74,6 +74,7 @@ class AppState:
     session_id: Optional[str] = None
     streaming_manager: Any = None
     mcp_manager: Any = None
+    hitl_manager: Any = None
 
     def get_engine_config(self, engine: str | None = None) -> Dict[str, Any]:
         key = engine or self.current_engine
