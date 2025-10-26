@@ -39,6 +39,11 @@ class SubAgent:
     tools: Sequence[Any] = field(default_factory=list)
     model: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    recursion_limit: Optional[int] = None
+    step_timeout: Optional[float] = None
+    middleware: Sequence[Any] = field(default_factory=list)
+    checkpointer: Optional[Any] = None
+    display_config: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -160,16 +165,51 @@ class SubAgentMiddleware(AgentMiddleware):
             else:
                 # Create agent from SubAgent spec
                 subagent_model = subagent_spec.model if subagent_spec.model else self.default_model
-                subagent_tools = list(subagent_spec.tools) if subagent_spec.tools else list(self.default_tools)
+
+                # Use configured tools (custom tools before defaults)
+                # Always merge to maintain consistency
+                custom_tools = list(subagent_spec.tools) if subagent_spec.tools else []
+                subagent_tools = [*custom_tools, *self.default_tools]
+
+                # Use configured middleware (default middleware before custom)
+                custom_middleware = list(subagent_spec.middleware) if subagent_spec.middleware else []
+                combined_middleware = [*self.default_middleware, *custom_middleware]
+
+                # Use configured checkpointer (respect config setting)
+                checkpointer = subagent_spec.checkpointer if hasattr(subagent_spec, 'checkpointer') else False
+
+                logger.debug(
+                    f"SubAgent '{subagent_spec.name}' configuration: "
+                    f"custom_tools={len(custom_tools)}, "
+                    f"total_tools={len(subagent_tools)}, "
+                    f"custom_middleware={len(custom_middleware)}, "
+                    f"total_middleware={len(combined_middleware)}, "
+                    f"checkpointer={checkpointer}"
+                )
 
                 # Create the subagent
                 subagent_runnable = create_agent(
                     subagent_model,
                     system_prompt=subagent_spec.system_prompt,
                     tools=subagent_tools,
-                    middleware=self.default_middleware,
-                    checkpointer=False,
+                    middleware=combined_middleware,
+                    checkpointer=checkpointer,
                 )
+                
+                # Apply runtime limits if specified
+                if subagent_spec.recursion_limit:
+                    subagent_runnable = subagent_runnable.with_config(
+                        {"recursion_limit": subagent_spec.recursion_limit}
+                    )
+                    logger.debug(
+                        f"SubAgent '{subagent_spec.name}' configured with recursion_limit={subagent_spec.recursion_limit}"
+                    )
+                if subagent_spec.step_timeout:
+                    subagent_runnable.step_timeout = subagent_spec.step_timeout
+                    logger.debug(
+                        f"SubAgent '{subagent_spec.name}' configured with step_timeout={subagent_spec.step_timeout}"
+                    )
+                    
                 self._subagent_runnables[subagent_spec.name] = subagent_runnable
 
     def get_task_tool(self) -> Any | None:

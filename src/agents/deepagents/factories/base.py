@@ -240,31 +240,70 @@ class BaseDeepAgentFactory(ABC):
                 "description", config["description"]
             )
 
-            # Build SubAgent spec
+            # Get runtime limits from config
+            runtime_limits = config["runtime_limits"]
+            recursion_limit = runtime_limits.get("recursion_limit")
+            max_execution_time = runtime_limits.get("max_execution_time")
+
+            # Get agent_config, display_config, and metadata from config
+            agent_config = config["agent_config"]
+            display_config = config["display_config"]
+            metadata_cfg = config["metadata"]
+
+            # Validate and extract parameters with type checking
+            tools = agent_config.get("tools", [])
+            if tools and not isinstance(tools, list):
+                logger.warning(
+                    f"SubAgent '{subagent_type}' tools config invalid, using empty list"
+                )
+                tools = []
+
+            middleware_cfg = agent_config.get("middleware", [])
+            if middleware_cfg and not isinstance(middleware_cfg, list):
+                logger.warning(
+                    f"SubAgent '{subagent_type}' middleware config invalid, using empty list"
+                )
+                middleware_cfg = []
+
+            checkpointer = agent_config.get("checkpointer", False)
+
+            logger.debug(
+                f"Creating SubAgent '{subagent_type}' with recursion_limit={recursion_limit}, "
+                f"step_timeout={max_execution_time}, tools={tools}, "
+                f"middleware={middleware_cfg}, "
+                f"checkpointer={checkpointer}"
+            )
+
+            # Build SubAgent spec with all configuration parameters
             subagent_spec = SubAgent(
                 name=config["name"],
                 description=description,
                 system_prompt=system_prompt,
-                tools=[],  # Empty list - SubAgentMiddleware will use default_tools
+                tools=tools,  # Use validated configured tools
                 model=subagent_llm,  # Pass LLM instance
+                recursion_limit=recursion_limit,
+                step_timeout=max_execution_time,
+                middleware=middleware_cfg,  # Pass validated middleware config
+                checkpointer=checkpointer,  # Pass checkpointer config
+                display_config=display_config,  # Pass display_config
+                metadata=metadata_cfg,  # Pass metadata from config
             )
             specs.append(subagent_spec)
 
             # Build metadata for tracking and display
-            runtime_limits = config["runtime_limits"]
-            display_config = config["display_config"]
-
             metadata.append(
                 {
                     "name": config["name"],
                     "model": model_identifier,
-                    "tools": [],  # Tools will be inherited from default_tools
+                    "tools": tools,  # Record validated configured tools
                     "description": description,
                     "safety": {
                         "max_execution_time": runtime_limits.get("max_execution_time"),
                         "max_recursion_limit": runtime_limits.get("recursion_limit"),
                         "streaming_enabled": display_config.get("streaming_enabled"),
                     },
+                    "middleware": middleware_cfg,  # Record validated configured middleware
+                    "checkpointer": checkpointer,  # Record checkpointer config
                 }
             )
 
