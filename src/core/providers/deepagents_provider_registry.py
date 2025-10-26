@@ -286,8 +286,8 @@ class DeepAgentsProviderRegistry:
         self, *, use_cache: bool = True
     ) -> Dict[str, Any]:
         """Load main providers configuration with fallback support."""
-        primary_path = self.base_path / "models" / "providers.json"
-        fallback_path = self.base_path / "models" / "main_agent.json"
+        primary_path = self.base_path / "models" / "mainagents.json"
+        fallback_path = self.base_path / "models" / "mainagents.example.json"
         if primary_path.exists():
             return self._load_json(primary_path, use_cache=use_cache)
         return self._load_json(fallback_path, use_cache=use_cache)

@@ -79,7 +79,7 @@ class BaseDeepAgentFactory(ABC):
         hitl_config = safety_config.get("hitl_config", {}) or {}
         interrupt_on = user_params.get("interrupt_on") or self._build_interrupt_config(hitl_config)
         recursion_limit = runtime_config.get("recursion_limit", 1000)
-        step_timeout = safety_config.get("max_execution_time")
+        step_timeout = runtime_config.get("step_timeout")
         stream_mode = runtime_config.get("stream_mode", "updates")
 
         runtime = create_deep_agent_runtime(

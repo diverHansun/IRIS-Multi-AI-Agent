@@ -124,8 +124,8 @@ class TestDeepAgentsProviderRegistry(unittest.TestCase):
         self.models_dir = Path(self.temp_dir) / "models"
         self.models_dir.mkdir()
 
-        # Write providers config
-        self.providers_file = self.models_dir / "providers.json"
+        # Write mainagents config
+        self.providers_file = self.models_dir / "mainagents.json"
         with open(self.providers_file, "w") as f:
             json.dump(self.test_config, f)
 
