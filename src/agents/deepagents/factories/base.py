@@ -60,7 +60,7 @@ class BaseDeepAgentFactory(ABC):
             tool_manager = UnifiedToolManager(auto_register_defaults=True)
             await tool_manager.initialize_all()
             tools = tool_manager.get_all_tools()
-        tool_names = [getattr(tool, "name", repr(tool)) for tool in tools] if tools else []
+        tool_names = [tool.name if hasattr(tool, 'name') else tool.__name__ for tool in tools] if tools else []
 
         # Get LLM parameters from adapter
         model_settings = adapter.get_llm_params()

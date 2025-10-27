@@ -169,10 +169,19 @@ class SubAgentMiddleware(AgentMiddleware):
                 # Create agent from SubAgent spec
                 subagent_model = subagent_spec.model if subagent_spec.model else self.default_model
 
-                # Use configured tools (custom tools before defaults)
-                # Always merge to maintain consistency
-                custom_tools = list(subagent_spec.tools) if subagent_spec.tools else []
-                subagent_tools = [*custom_tools, *self.default_tools]
+                # Use configured tools, filtering from defaults if specified
+                custom_tool_names = subagent_spec.tools if subagent_spec.tools else []
+                if custom_tool_names:
+                    # Filter default_tools to only include tools specified in custom_tool_names
+                    subagent_tools = [
+                        tool
+                        for tool in self.default_tools
+                        if (hasattr(tool, 'name') and tool.name in custom_tool_names) or 
+                           (hasattr(tool, '__name__') and tool.__name__ in custom_tool_names)
+                    ]
+                else:
+                    # Use all default tools if no custom tools are specified
+                    subagent_tools = self.default_tools
 
                 # Use configured middleware (default middleware before custom)
                 custom_middleware = list(subagent_spec.middleware) if subagent_spec.middleware else []
@@ -191,7 +200,7 @@ class SubAgentMiddleware(AgentMiddleware):
 
                 logger.debug(
                     f"SubAgent '{subagent_spec.name}' configuration: "
-                    f"custom_tools={len(custom_tools)}, "
+                    f"custom_tools={len(custom_tool_names)}, "
                     f"total_tools={len(subagent_tools)}, "
                     f"custom_middleware={len(custom_middleware)}, "
                     f"total_middleware={len(combined_middleware)}, "
