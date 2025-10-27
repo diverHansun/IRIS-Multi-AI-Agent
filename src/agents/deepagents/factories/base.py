@@ -196,7 +196,6 @@ class BaseDeepAgentFactory(ABC):
         """
         specs: List[SubAgent] = []
         metadata: List[Dict[str, Any]] = []
-        configured_subagents = middleware_config.get("subagents", {}).get("subagents", {})
 
         for subagent_type in subagent_manager.get_available_subagents().keys():
             try:
@@ -234,13 +233,9 @@ class BaseDeepAgentFactory(ABC):
                 )
                 continue
 
-            # Get system prompt from config (already loaded from prompt registry)
+            # Get system prompt and description from config
             system_prompt = config["system_prompt"]
-
-            # Get description (use from middleware config if available, else from subagent config)
-            description = configured_subagents.get(subagent_type, {}).get(
-                "description", config["description"]
-            )
+            description = config["description"]
 
             # Get runtime limits from config
             runtime_limits = config["runtime_limits"]

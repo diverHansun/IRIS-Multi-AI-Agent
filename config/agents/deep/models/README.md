@@ -6,10 +6,14 @@
 
 ## 配置文件
 
+### Models 配置 (models/)
 - `mainagents.json` - 主 Agent 配置
 - `mainagents.example.json` - 主 Agent 配置示例
-- `subagents.json` - 子 Agent 配置
+- `subagents.json` - 子 Agent 配置 (包含所有 SubAgent 定义)
 - `subagents.example.json` - 子 Agent 配置示例
+
+### Middleware 配置 (middleware/)
+- `filesystem.json` - 文件系统中间件配置 (安全路径、文件限制等)
 
 ---
 
@@ -448,9 +452,28 @@ max_execution_time: 所有步骤加起来最多执行多长时间
 
 ---
 
+## 配置架构说明
+
+### 配置文件职责划分
+
+**models/ 目录**: Agent 的基础定义
+- 定义 Agent 的 LLM 配置、工具、参数等核心配置
+- `mainagents.json`: 主 Agent 的完整定义
+- `subagents.json`: 所有 SubAgent 的完整定义
+
+**middleware/ 目录**: 运行时中间件配置
+- 配置 Agent 运行时使用的中间件行为
+- `filesystem.json`: 文件系统访问控制、安全限制等
+
+**注意**: 旧版本中存在 `middleware/subagents.json` 文件,该文件已废弃。所有 SubAgent 的配置统一在 `models/subagents.json` 中管理。
+
+---
+
 ## 版本历史
 
 - **2025-10-27**:
   - 添加 `max_execution_time` 参数(MainAgent 和 SubAgent)
+  - 添加 `step_timeout` 参数(SubAgent)
   - 区分 `step_timeout` 和 `max_execution_time`
   - 实现 ExecutionTimeoutMiddleware
+  - 废弃 `middleware/subagents.json`,统一使用 `models/subagents.json`

@@ -301,16 +301,12 @@ class DeepAgentsProviderRegistry:
         )
 
     def _load_middleware_config(self, *, use_cache: bool = True) -> Dict[str, Any]:
-        """Load middleware configuration including filesystem and subagents settings."""
+        """Load middleware configuration for filesystem settings."""
         filesystem_cfg = self._load_json(
             self.base_path / "middleware" / "filesystem.json", use_cache=use_cache
         )
-        subagents_cfg = self._load_json(
-            self.base_path / "middleware" / "subagents.json", use_cache=use_cache
-        )
         return {
             "filesystem": filesystem_cfg,
-            "subagents": subagents_cfg,
         }
 
     def _load_json(self, path: Path, *, use_cache: bool) -> Dict[str, Any]:
