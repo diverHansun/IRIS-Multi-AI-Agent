@@ -81,6 +81,7 @@ class BaseDeepAgentFactory(ABC):
         recursion_limit = runtime_config.get("recursion_limit", 1000)
         step_timeout = runtime_config.get("step_timeout")
         stream_mode = runtime_config.get("stream_mode", "updates")
+        max_execution_time = safety_config.get("max_execution_time")
 
         runtime = create_deep_agent_runtime(
             model=adapter.get_model_identifier(),
@@ -99,6 +100,7 @@ class BaseDeepAgentFactory(ABC):
             recursion_limit=recursion_limit,
             step_timeout=step_timeout,
             stream_mode=stream_mode,
+            max_execution_time=max_execution_time,
         )
 
         # Get display config from adapter
@@ -243,6 +245,7 @@ class BaseDeepAgentFactory(ABC):
             # Get runtime limits from config
             runtime_limits = config["runtime_limits"]
             recursion_limit = runtime_limits.get("recursion_limit")
+            step_timeout = runtime_limits.get("step_timeout")
             max_execution_time = runtime_limits.get("max_execution_time")
 
             # Get agent_config, display_config, and metadata from config
@@ -269,9 +272,8 @@ class BaseDeepAgentFactory(ABC):
 
             logger.debug(
                 f"Creating SubAgent '{subagent_type}' with recursion_limit={recursion_limit}, "
-                f"step_timeout={max_execution_time}, tools={tools}, "
-                f"middleware={middleware_cfg}, "
-                f"checkpointer={checkpointer}"
+                f"step_timeout={step_timeout}, max_execution_time={max_execution_time}, "
+                f"tools={tools}, middleware={middleware_cfg}, checkpointer={checkpointer}"
             )
 
             # Build SubAgent spec with all configuration parameters
@@ -282,7 +284,8 @@ class BaseDeepAgentFactory(ABC):
                 tools=tools,  # Use validated configured tools
                 model=subagent_llm,  # Pass LLM instance
                 recursion_limit=recursion_limit,
-                step_timeout=max_execution_time,
+                step_timeout=step_timeout,  # Pass step_timeout (single step timeout)
+                max_execution_time=max_execution_time,  # Pass max_execution_time (total execution timeout)
                 middleware=middleware_cfg,  # Pass validated middleware config
                 checkpointer=checkpointer,  # Pass checkpointer config
                 display_config=display_config,  # Pass display_config

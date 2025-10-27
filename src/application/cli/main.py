@@ -21,6 +21,7 @@ from src.application.cli.gui import logo as gui_logo
 from rich.markup import escape
 
 from src.application.cli.state import AppState
+from src.components.deepagents.runtime_middlewares.timeout import ExecutionTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,18 @@ async def _cli_loop(ctx: AppState) -> None:
             ctx.console.print("\n[yellow]Interrupted. Cleaning up...[/]")
             ctx.console.print("Goodbye!")
             break
+        except ExecutionTimeoutError as exc:
+            # Catch timeout errors that might propagate to the main loop
+            ctx.console.print(
+                f"[bold yellow]Execution Timeout:[/bold yellow]\n"
+                f"[yellow]Operation exceeded maximum allowed time ({exc.max_execution_time:.2f}s).[/]\n"
+                f"[dim]Please try again with a simpler task or contact support if the issue persists.[/]"
+            )
+            logger.error(
+                "Unhandled execution timeout in main loop: %.2fs / %.2fs",
+                exc.elapsed_time,
+                exc.max_execution_time,
+            )
         except Exception as exc:  # pragma: no cover - runtime safeguard
             ctx.console.print(f"[bold red]Error:[/] {escape(str(exc))}")
 
@@ -103,6 +116,19 @@ async def _handle_conversation(ctx: AppState, query: str) -> None:
     adapter = get_adapter(ctx.current_engine)
     try:
         await adapter.handle_query(ctx, query)
+    except ExecutionTimeoutError as exc:
+        # Handle execution timeout specifically with detailed message
+        ctx.console.print(
+            f"[bold yellow]Execution Timeout:[/bold yellow]\n"
+            f"[yellow]The agent execution exceeded the maximum allowed time.[/]\n"
+            f"[dim]Elapsed: {exc.elapsed_time:.2f}s / Max: {exc.max_execution_time:.2f}s[/]\n"
+            f"[dim]Consider breaking down your task into smaller parts or adjusting the timeout limit.[/]"
+        )
+        logger.warning(
+            "Agent execution timed out: %.2fs / %.2fs",
+            exc.elapsed_time,
+            exc.max_execution_time,
+        )
     except Exception as exc:
         ctx.console.print(f"[bold red]Conversation error: {exc}")
 

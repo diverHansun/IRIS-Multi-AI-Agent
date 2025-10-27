@@ -4,7 +4,7 @@
     "description": "Research specialist for deep information gathering and analysis",
     "llm_config": {
       "provider": "zhipu",
-      "model": "glm-4.6",
+      "model": "glm-4.5-flash",
       "api_config": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
         "api_key_env": "ZHIPU_API_KEY"
@@ -22,6 +22,7 @@
     },
     "runtime_limits": {
       "max_execution_time": 90,
+      "step_timeout": 30,
       "recursion_limit": 60
     },
     "display_config": {
@@ -57,6 +58,7 @@
     },
     "runtime_limits": {
       "max_execution_time": 90,
+      "step_timeout": 30,
       "recursion_limit": 60
     },
     "display_config": {
@@ -92,6 +94,7 @@
     },
     "runtime_limits": {
       "max_execution_time": 90,
+      "step_timeout": 30,
       "recursion_limit": 60
     },
     "display_config": {

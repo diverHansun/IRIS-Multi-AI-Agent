@@ -22,6 +22,7 @@ from .runtime_middlewares import (
     SubAgent,
     CompiledSubAgent,
     SubAgentMiddleware,
+    ExecutionTimeoutMiddleware,
 )
 
 
@@ -44,6 +45,7 @@ def create_deep_agent_runtime(
     recursion_limit: int | None = None,
     step_timeout: float | None = None,
     stream_mode: str | None = None,
+    max_execution_time: float | None = None,
 ) -> CompiledStateGraph:
     """Create a configured deep agent runtime graph."""
 
@@ -115,6 +117,10 @@ def create_deep_agent_runtime(
         ),
         PatchToolCallsMiddleware(),
     ]
+
+    # Add execution timeout middleware if max_execution_time is specified
+    if max_execution_time is not None and max_execution_time > 0:
+        deepagent_middleware.insert(0, ExecutionTimeoutMiddleware(max_execution_time=max_execution_time))
 
     if interrupt_on is not None:
         deepagent_middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))

@@ -17,6 +17,7 @@ from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.runtime import Runtime
 
 from .filesystem import FilesystemMiddleware
+from .timeout import ExecutionTimeoutMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ __all__ = [
     "SubAgentMiddleware",
     "SubAgent",
     "CompiledSubAgent",
+    "ExecutionTimeoutMiddleware",
 ]
 
 
@@ -41,6 +43,7 @@ class SubAgent:
     metadata: Dict[str, Any] = field(default_factory=dict)
     recursion_limit: Optional[int] = None
     step_timeout: Optional[float] = None
+    max_execution_time: Optional[float] = None
     middleware: Sequence[Any] = field(default_factory=list)
     checkpointer: Optional[Any] = None
     display_config: Dict[str, Any] = field(default_factory=dict)
@@ -175,6 +178,14 @@ class SubAgentMiddleware(AgentMiddleware):
                 custom_middleware = list(subagent_spec.middleware) if subagent_spec.middleware else []
                 combined_middleware = [*self.default_middleware, *custom_middleware]
 
+                # Add ExecutionTimeoutMiddleware if max_execution_time is specified
+                if hasattr(subagent_spec, 'max_execution_time') and subagent_spec.max_execution_time:
+                    timeout_middleware = ExecutionTimeoutMiddleware(
+                        max_execution_time=subagent_spec.max_execution_time
+                    )
+                    # Insert at the beginning to ensure timeout is checked first
+                    combined_middleware.insert(0, timeout_middleware)
+
                 # Use configured checkpointer (respect config setting)
                 checkpointer = subagent_spec.checkpointer if hasattr(subagent_spec, 'checkpointer') else False
 
@@ -184,6 +195,7 @@ class SubAgentMiddleware(AgentMiddleware):
                     f"total_tools={len(subagent_tools)}, "
                     f"custom_middleware={len(custom_middleware)}, "
                     f"total_middleware={len(combined_middleware)}, "
+                    f"max_execution_time={subagent_spec.max_execution_time if hasattr(subagent_spec, 'max_execution_time') else None}, "
                     f"checkpointer={checkpointer}"
                 )
 
