@@ -18,6 +18,7 @@ from langgraph.types import Checkpointer
 
 from .runtime_middlewares import (
     FilesystemMiddleware,
+    JsonArgsParserMiddleware,
     PatchToolCallsMiddleware,
     SubAgent,
     CompiledSubAgent,
@@ -72,6 +73,7 @@ def create_deep_agent_runtime(
         tools.extend(filesystem_tools)
 
     default_subagent_middleware: List[AgentMiddleware] = [
+        JsonArgsParserMiddleware(),
         TodoListMiddleware(),
         FilesystemMiddleware(
             long_term_memory=use_long_term_memory or filesystem_cfg.get("long_term_memory", False),
@@ -107,6 +109,7 @@ def create_deep_agent_runtime(
         tools.append(task_tool)
 
     deepagent_middleware: List[AgentMiddleware] = [
+        JsonArgsParserMiddleware(),
         TodoListMiddleware(),
         filesystem_middleware,
         subagent_middleware,

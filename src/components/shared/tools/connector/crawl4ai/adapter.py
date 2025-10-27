@@ -11,10 +11,14 @@ from .config import Crawl4AIConfig
 
 
 class Crawl4AICrawlInput(BaseModel):
-    """Input for Crawl4AI crawl tool."""
-    
+    """Input for Crawl4AI crawl tool.
+
+    Note: JSON string arguments are automatically parsed to dicts by the
+    JsonArgsParserMiddleware before reaching this validation layer.
+    """
+
     urls: List[str] = Field(..., description="List of URLs to crawl")
-    
+
     # Configuration based on Crawl4AI SDK classes
     browser_config: Optional[Dict] = Field(default_factory=dict, description="Browser configuration parameters based on BrowserConfig class")
     crawler_config: Optional[Dict] = Field(default_factory=dict, description="Crawler configuration parameters based on CrawlerRunConfig class")
