@@ -70,6 +70,8 @@ class PatchToolCallsMiddleware(AgentMiddleware):
             return None
 
         patched_messages = []
+        patch_count = 0
+
         for idx, msg in enumerate(messages):
             patched_messages.append(msg)
             if msg.type == "ai" and msg.tool_calls:
@@ -83,6 +85,10 @@ class PatchToolCallsMiddleware(AgentMiddleware):
                         None,
                     )
                     if corresponding is None:
+                        patch_count += 1
+                        logger.debug(
+                            f"Patching dangling tool call: {tool_call['name']} (id: {tool_call['id']})"
+                        )
                         patched_messages.append(
                             ToolMessage(
                                 content=(
@@ -93,6 +99,11 @@ class PatchToolCallsMiddleware(AgentMiddleware):
                                 tool_call_id=tool_call["id"],
                             )
                         )
+
+        # Only return patched messages if any patches were made
+        if patch_count == 0:
+            logger.debug("No dangling tool calls found, skipping message rebuild")
+            return None
 
         return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *patched_messages]}
 
