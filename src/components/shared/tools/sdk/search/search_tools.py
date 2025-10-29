@@ -229,124 +229,94 @@ search_provider = WebSearchProvider()
 
 
 @tool
-def web_search_tool(query: Annotated[str, "搜索查询关键词"]) -> str:
+def web_search_basic(query: Annotated[str, "Search query keywords"]) -> str:
     """
-    网络搜索工具，用于搜索实时信息
+    Basic web search tool for real-time information retrieval using HTML scraping.
+
+    Searches DuckDuckGo HTML endpoint first, falls back to Bing if needed.
+    Returns up to 5 search results in JSON format.
 
     Args:
-        query: 搜索关键词
+        query: Search query keywords
 
     Returns:
-        搜索结果摘要
+        JSON string containing search results with title, url, description, etc.
     """
     try:
-        logger.info(f"执行搜索: {query}")
+        logger.info(f"Executing search: {query}")
 
-        # 首先尝试DuckDuckGo搜索
+        # Try DuckDuckGo first
         results = search_provider.search_duckduckgo(query, num_results=5)
 
-        # 如果DuckDuckGo失败，尝试Bing
+        # Fallback to Bing if DuckDuckGo fails
         if not results:
-            logger.info("DuckDuckGo搜索无结果，尝试Bing搜索")
+            logger.info("DuckDuckGo returned no results, trying Bing")
             results = search_provider.search_bing(query, num_results=5)
 
         if not results:
-            return f"抱歉，没有找到关于 '{query}' 的搜索结果。"
+            return json.dumps({
+                "query": query,
+                "status": "no_results",
+                "message": "No search results found",
+                "results": []
+            }, ensure_ascii=False, indent=2)
 
-        # 格式化搜索结果
-        formatted_results = [f"🔍 搜索查询: {query}\n📊 找到 {len(results)} 个结果\n"]
-
-        for result in results:
-            formatted_result = f"""
-📌 排名 {result['rank']}: {result['title']}
-🔗 链接: {result['url']}
-🏷️ 来源: {result['domain']} ({result['source']})
-📝 描述: {result['description'][:200]}{'...' if len(result['description']) > 200 else ''}
-"""
-            formatted_results.append(formatted_result.strip())
-
-        return "\n\n".join(formatted_results)
+        # Return structured JSON
+        return json.dumps({
+            "query": query,
+            "status": "success",
+            "total_results": len(results),
+            "results": results
+        }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        logger.error(f"搜索工具执行失败: {e}")
-        return f"搜索时发生错误: {str(e)}"
+        logger.error(f"Search tool execution failed: {e}")
+        return json.dumps({
+            "query": query,
+            "status": "error",
+            "error": str(e),
+            "results": []
+        }, ensure_ascii=False, indent=2)
+
+
+# web_search_detailed removed due to 0% success rate in testing
+# Users should use web_search_basic + get_webpage_content separately for better reliability
 
 
 @tool
-def web_search_detailed(query: Annotated[str, "搜索查询关键词"]) -> str:
+def get_webpage_content(url: Annotated[str, "Webpage URL address"]) -> str:
     """
-    详细网络搜索工具，返回更多搜索结果
+    Fetch and extract text content from a webpage.
+
+    Retrieves webpage HTML, removes scripts/styles, and extracts main text content.
+    Returns up to 4000 characters of cleaned text.
 
     Args:
-        query: 搜索关键词
+        url: Webpage URL address
 
     Returns:
-        详细搜索结果
+        JSON string containing webpage content and metadata
     """
     try:
-        logger.info(f"执行详细搜索: {query}")
-
-        # 设置详细搜索参数
-        num_results = 8  # 详细搜索返回更多结果
-        include_content = True  # 详细搜索包含网页内容
-
-        # 执行搜索
-        results = search_provider.search_duckduckgo(query, num_results=num_results)
-
-        if not results:
-            results = search_provider.search_bing(query, num_results=num_results)
-
-        if not results:
-            return f"抱歉，没有找到关于 '{query}' 的搜索结果。"
-
-        # 格式化结果
-        formatted_results = [f"详细搜索: {query}\n共找到 {len(results)} 个结果\n"]
-
-        for result in results:
-            formatted_result = f"""
-{'=' * 50}
-第 {result['rank']} 个结果
-标题: {result['title']}
-链接: {result['url']}
-域名: {result['domain']}
-描述: {result['description']}
-"""
-
-            # 获取网页内容
-            if include_content and result['url']:
-                content = search_provider.get_page_content(result['url'], max_length=1000)
-                formatted_result += f"\n网页内容预览:\n{content[:500]}{'...' if len(content) > 500 else ''}\n"
-
-            formatted_results.append(formatted_result.strip())
-
-        return "\n".join(formatted_results)
-
-    except Exception as e:
-        logger.error(f"详细搜索工具执行失败: {e}")
-        return f"详细搜索时发生错误: {str(e)}"
-
-
-@tool
-def get_webpage_content(url: Annotated[str, "网页URL地址"]) -> str:
-    """
-    获取指定网页的文本内容
-
-    Args:
-        url: 网页URL地址
-
-    Returns:
-        网页文本内容
-    """
-    try:
-        logger.info(f"获取网页内容: {url}")
+        logger.info(f"Fetching webpage content: {url}")
 
         content = search_provider.get_page_content(url, max_length=4000)
 
-        return f"📄 网页内容 ({url}):\n\n{content}"
+        return json.dumps({
+            "url": url,
+            "status": "success",
+            "content_length": len(content),
+            "content": content
+        }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        logger.error(f"获取网页内容失败: {e}")
-        return f"获取网页内容时发生错误: {str(e)}"
+        logger.error(f"Failed to fetch webpage content: {e}")
+        return json.dumps({
+            "url": url,
+            "status": "error",
+            "error": str(e),
+            "content": None
+        }, ensure_ascii=False, indent=2)
 
 
 # 计算器工具已移动到 math_tools.py，避免重复
@@ -354,12 +324,12 @@ def get_webpage_content(url: Annotated[str, "网页URL地址"]) -> str:
 
 def get_available_search_tools():
     """
-    获取可用的搜索工具列表
-    
+    Get available legacy search tools list
+
     Returns:
-        搜索工具列表
+        List of legacy search tools (web_search_basic, get_webpage_content)
     """
-    return [web_search_tool, web_search_detailed, get_webpage_content]
+    return [web_search_basic, get_webpage_content]
 
 
 def test_search_tools():
@@ -369,7 +339,7 @@ def test_search_tools():
     # 测试基础搜索
     print("\n1. 测试基础搜索:")
     try:
-        result = web_search_tool.func("Python教程")
+        result = web_search_basic.func("Python教程")
         print(f"基础搜索成功: {result[:200]}...")
     except Exception as e:
         print(f"基础搜索失败: {e}")

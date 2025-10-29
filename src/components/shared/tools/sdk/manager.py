@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Callable
 from langchain_core.tools import BaseTool
 
 from .calculate.math_tools import get_available_math_tools
-from .search.search_tools import get_available_search_tools
+from .search import get_all_search_tools 
 from .tavily_search import get_available_tavily_tools
 from .time.adapter import get_available_time_tools
 from .amap.adapter import get_available_amap_tools
@@ -41,8 +41,8 @@ class SDKToolManager:
         if tavily_tools:
             tools.extend(tavily_tools)
 
-        # Search tools - General
-        search_tools = get_available_search_tools()
+        # Search tools - All (DuckDuckGo Instant Answer + Legacy HTML scraping)
+        search_tools = get_all_search_tools()
         if search_tools:
             tools.extend(search_tools)
 
@@ -80,9 +80,9 @@ class SDKToolManager:
             Dict[str, List[BaseTool]]: Dictionary of tools grouped by category
         """
         tavily_tools = get_available_tavily_tools()
-        search_tools = get_available_search_tools()
+        search_tools = get_all_search_tools()
 
-        # Combine all search tools (Tavily + general search)
+        # Combine all search tools (Tavily + DuckDuckGo + Legacy)
         all_search_tools = []
         if tavily_tools:
             all_search_tools.extend(tavily_tools)

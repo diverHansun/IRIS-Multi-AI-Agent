@@ -1,0 +1,27 @@
+{
+  "api": {
+    "endpoint": "https://api.duckduckgo.com/",
+    "timeout": 30,
+    "max_retries": 3,
+    "retry_delay": 1.0,
+    "retry_backoff_factor": 2.0
+  },
+  "search": {
+    "format": "json",
+    "no_redirect": 1,
+    "no_html": 1,
+    "skip_disambig": 1
+  },
+  "rate_limit": {
+    "enable_rate_limiting": false,
+    "requests_per_second": 10
+  },
+  "cache": {
+    "enable_cache": true,
+    "cache_expire_seconds": 3600
+  },
+  "logging": {
+    "enable_request_logging": true,
+    "log_level": "INFO"
+  }
+}
