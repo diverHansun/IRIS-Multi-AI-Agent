@@ -230,3 +230,7 @@ iris.bat
 # Agent configuration files with sensitive API keys
 config/agents/deep/models/mainagents.json
 config/agents/deep/models/subagents.json
+
+# official documents
+deepagents/
+claude-agent-sdk-python/

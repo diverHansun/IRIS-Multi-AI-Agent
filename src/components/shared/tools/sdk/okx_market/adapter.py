@@ -450,11 +450,11 @@ def get_available_okx_tools() -> List:
             search_crypto_symbols
         ]
         
-        logger.info(f"✅ OKX工具加载成功，共 {len(okx_tools)} 个工具")
+        logger.info(f"OKX工具加载成功，共 {len(okx_tools)} 个工具")
         return okx_tools
         
     except Exception as e:
-        logger.error(f"❌ OKX工具加载失败: {e}")
+        logger.error(f"OKX工具加载失败: {e}")
         return []
 
 
