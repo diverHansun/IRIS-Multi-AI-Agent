@@ -16,14 +16,12 @@ from langchain_core.messages import RemoveMessage, ToolMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.runtime import Runtime
 
-from .filesystem import FilesystemMiddleware
 from .json_args_parser import JsonArgsParserMiddleware
 from .timeout import ExecutionTimeoutMiddleware
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "FilesystemMiddleware",
     "JsonArgsParserMiddleware",
     "PatchToolCallsMiddleware",
     "SubAgentMiddleware",
