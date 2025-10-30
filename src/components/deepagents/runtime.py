@@ -17,7 +17,6 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer
 
 from .runtime_middlewares import (
-    FilesystemMiddleware,
     JsonArgsParserMiddleware,
     PatchToolCallsMiddleware,
     SubAgent,
@@ -25,6 +24,7 @@ from .runtime_middlewares import (
     SubAgentMiddleware,
     ExecutionTimeoutMiddleware,
 )
+from .runtime_middlewares.virtual_filesystem import VirtualFilesystemMiddleware
 
 
 def create_deep_agent_runtime(
@@ -57,14 +57,9 @@ def create_deep_agent_runtime(
     filesystem_cfg = middleware_config.get("filesystem", {})
     subagents_cfg = middleware_config.get("subagents", {})
 
-    filesystem_middleware = FilesystemMiddleware(
+    filesystem_middleware = VirtualFilesystemMiddleware(
         long_term_memory=use_long_term_memory or filesystem_cfg.get("long_term_memory", False),
         tool_token_limit_before_evict=filesystem_cfg.get("tool_token_limit_before_evict"),
-        allowed_paths=filesystem_cfg.get("security", {}).get("allowed_paths"),
-        excluded_paths=filesystem_cfg.get("security", {}).get("excluded_paths"),
-        excluded_extensions=filesystem_cfg.get("security", {}).get("excluded_extensions"),
-        max_file_size=filesystem_cfg.get("security", {}).get("max_file_size"),
-        max_file_lines=filesystem_cfg.get("security", {}).get("max_file_lines"),
     )
 
     filesystem_tools = filesystem_middleware.get_tools()
@@ -75,14 +70,9 @@ def create_deep_agent_runtime(
     default_subagent_middleware: List[AgentMiddleware] = [
         JsonArgsParserMiddleware(),
         TodoListMiddleware(),
-        FilesystemMiddleware(
+        VirtualFilesystemMiddleware(
             long_term_memory=use_long_term_memory or filesystem_cfg.get("long_term_memory", False),
             tool_token_limit_before_evict=filesystem_cfg.get("tool_token_limit_before_evict"),
-            allowed_paths=filesystem_cfg.get("security", {}).get("allowed_paths"),
-            excluded_paths=filesystem_cfg.get("security", {}).get("excluded_paths"),
-            excluded_extensions=filesystem_cfg.get("security", {}).get("excluded_extensions"),
-            max_file_size=filesystem_cfg.get("security", {}).get("max_file_size"),
-            max_file_lines=filesystem_cfg.get("security", {}).get("max_file_lines"),
         ),
         SummarizationMiddleware(
             model=model,

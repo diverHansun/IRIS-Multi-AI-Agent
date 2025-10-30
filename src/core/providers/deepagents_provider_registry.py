@@ -302,9 +302,15 @@ class DeepAgentsProviderRegistry:
 
     def _load_middleware_config(self, *, use_cache: bool = True) -> Dict[str, Any]:
         """Load middleware configuration for filesystem settings."""
-        filesystem_cfg = self._load_json(
-            self.base_path / "middleware" / "filesystem.json", use_cache=use_cache
-        )
+        # Try new directory structure first (virtual_filesystem.json)
+        virtual_fs_path = self.base_path / "middleware" / "filesystem" / "virtual_filesystem.json"
+        if virtual_fs_path.exists():
+            filesystem_cfg = self._load_json(virtual_fs_path, use_cache=use_cache)
+        else:
+            # Fallback to old filesystem.json for backward compatibility
+            filesystem_cfg = self._load_json(
+                self.base_path / "middleware" / "filesystem.json", use_cache=use_cache
+            )
         return {
             "filesystem": filesystem_cfg,
         }

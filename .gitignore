@@ -235,6 +235,9 @@ iris.bat
 config/agents/deep/models/mainagents.json
 config/agents/deep/models/subagents.json
 
+# filesystem configuration files
+config/agents/deep/middleware/filesystem/virtual_filesystem.json
+config/agents/deep/middleware/filesystem/real_filesystem.json
+
 # official documents
-deepagents/
 claude-agent-sdk-python/

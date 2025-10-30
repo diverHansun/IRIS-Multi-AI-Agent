@@ -1,0 +1,6 @@
+{
+    "enabled": true,
+    "long_term_memory": false,
+    "tool_token_limit_before_evict": 20000
+  }
+  

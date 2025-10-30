@@ -8,7 +8,7 @@ from typing import Any, Dict
 from src.agents.deepagents.managers import subagent_manager
 from src.application.commands.base import BaseCommand, CommandResult
 from src.application.services.agent.deep.middleware import (
-    FilesystemMiddlewareService,
+    VirtualFilesystemMiddlewareService,
     PatchToolCallsService,
     SubagentsMiddlewareService,
 )
@@ -30,7 +30,6 @@ class DeepCommand(BaseCommand):
 
         handlers = {
             "status": self._handle_status,
-            "filesystem": self._handle_filesystem,
             "config": self._handle_config,
         }
 
@@ -44,7 +43,6 @@ class DeepCommand(BaseCommand):
         return (
             "Usage:\n"
             "  /deep status\n"
-            "  /deep filesystem <read-only|ask-before-edit|auto-edit>\n"
             "  /deep config reload"
         )
 
@@ -67,7 +65,7 @@ class DeepCommand(BaseCommand):
 
         # Get middleware status
         middleware_cfg = config.get("middleware", {})
-        filesystem_service = FilesystemMiddlewareService(middleware_cfg.get("filesystem", {}))
+        filesystem_service = VirtualFilesystemMiddlewareService(middleware_cfg.get("filesystem", {}))
         subagents_service = SubagentsMiddlewareService(middleware_cfg.get("subagents", {}))
         patch_service = PatchToolCallsService(middleware_cfg.get("patch_tool_calls", {}))
 
@@ -86,8 +84,8 @@ class DeepCommand(BaseCommand):
         }
 
         function_value = payload.get("function_type") or "research"
-        fs_mode = middleware_status["filesystem"].get("mode", "unknown")
         fs_enabled = "enabled" if middleware_status["filesystem"].get("enabled") else "disabled"
+        fs_long_term_memory = "enabled" if middleware_status["filesystem"].get("long_term_memory") else "disabled"
 
         message = (
             "Deep Agent Status:\n"
@@ -95,41 +93,11 @@ class DeepCommand(BaseCommand):
             f"- Model: {payload.get('model')}\n"
             f"- Function: {function_value}\n"
             f"- Active Subagents: {', '.join(subagent_names) if subagent_names else 'none'}\n"
-            f"- Filesystem: {fs_enabled} (mode: {fs_mode})\n"
+            f"- Virtual Filesystem: {fs_enabled} (long-term memory: {fs_long_term_memory})\n"
             f"- Subagents Middleware: {'enabled' if middleware_status['subagents']['enabled'] else 'disabled'}\n"
             f"- Patch Tool Calls: {'enabled' if middleware_status['patch_tool_calls']['enabled'] else 'disabled'}"
         )
         return CommandResult.success(message, payload=payload)
-
-    def _handle_filesystem(self, ctx, args: list[str]) -> CommandResult:
-        if not args:
-            return CommandResult.error("Usage: /deep filesystem <read-only|ask-before-edit|auto-edit>")
-
-        mode = args[0].replace("_", "-").lower()
-        canonical_map = {
-            "read-only": "read_only",
-            "ask-before-edit": "ask_before_edit",
-            "auto-edit": "auto_edit",
-        }
-        canonical = canonical_map.get(mode)
-        if canonical is None:
-            return CommandResult.error("Invalid filesystem mode. Valid modes: read-only, ask-before-edit, auto-edit")
-
-        config = ctx.get_engine_config("agent")
-        middleware_config = config.setdefault("middleware", {})
-        filesystem_config = middleware_config.setdefault("filesystem", {})
-        filesystem_config.setdefault("default_mode", filesystem_config.get("default_mode", canonical))
-        filesystem_config["mode"] = canonical
-
-        service = FilesystemMiddlewareService(filesystem_config)
-        service.set_mode(canonical)
-        filesystem_config.update(service.describe())
-
-        return CommandResult.success(
-            f"Filesystem permission mode switched to {mode}.",
-            payload=service.describe(),
-        )
-
 
     def _handle_config(self, ctx, args: list[str]) -> CommandResult:
         """Reload deep agent configuration from files."""

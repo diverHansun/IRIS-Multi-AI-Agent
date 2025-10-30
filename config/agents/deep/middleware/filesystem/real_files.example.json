@@ -1,0 +1,60 @@
+{
+    "enabled": true,
+    "project_root": "${AUTO_DETECT}",
+    "security": {
+      "allowed_paths": [
+        "${PROJECT_ROOT}"
+      ],
+      "excluded_paths": [
+        "${PROJECT_ROOT}/.git",
+        "${PROJECT_ROOT}/.env",
+        "${PROJECT_ROOT}/.env.local",
+        "${PROJECT_ROOT}/.venv",
+        "${PROJECT_ROOT}/venv",
+        "${PROJECT_ROOT}/node_modules",
+        "${PROJECT_ROOT}/__pycache__",
+        "${PROJECT_ROOT}/.pytest_cache"
+      ],
+      "allowed_extensions": [
+        ".py",
+        ".js",
+        ".ts",
+        ".jsx",
+        ".tsx",
+        ".java",
+        ".go",
+        ".rs",
+        ".cpp",
+        ".c",
+        ".h",
+        ".md",
+        ".txt",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".html",
+        ".css",
+        ".scss",
+        ".sql",
+        ".sh",
+        ".bash",
+        ".xml",
+        ".csv",
+        ".ini",
+        ".cfg"
+      ],
+      "max_file_size": 10485760
+    },
+    "performance": {
+      "glob_max_results": 1000,
+      "grep_max_results": 100,
+      "grep_max_file_size": 1048576
+    },
+    "advanced": {
+      "follow_symlinks": false,
+      "case_sensitive": true,
+      "ignore_hidden_files": true
+    }
+  }
+  
