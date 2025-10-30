@@ -1,0 +1,20 @@
+{
+  "api": {
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/web_search",
+    "timeout": 30,
+    "max_retries": 3,
+    "retry_delay": 1.0
+  },
+  "search": {
+    "search_engine": "search_pro",
+    "search_intent": false,
+    "count": 10,
+    "search_recency_filter": "noLimit",
+    "content_size": "medium",
+    "search_domain_filter": ""
+  },
+  "cache": {
+    "enable_cache": false,
+    "cache_expire_seconds": 300
+  }
+}

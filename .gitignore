@@ -214,6 +214,7 @@ config/mcp/mcp.json
 
 # Search tools configuration (may contain custom settings)
 config/tools/sdk/search/duckduckgo.json
+config/tools/sdk/zhipu/zhipu_search.json
 
 # 记忆存储文件夹
 .memory/ 
