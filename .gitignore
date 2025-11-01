@@ -209,8 +209,8 @@ data/cache/
 # MCP 相关
 mcp_*.log
 mcp_debug/
-config/mcp/mcp.toml
-config/mcp/mcp.json
+config/tools/mcp/mcp.toml
+
 
 # Search tools configuration (may contain custom settings)
 config/tools/sdk/search/duckduckgo.json
