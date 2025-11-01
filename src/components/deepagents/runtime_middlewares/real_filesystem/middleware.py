@@ -20,7 +20,9 @@ Key rules:
 
 Available tools:
 - list_real_files(directory_path=None, recursive=False, include_hidden=False)
-- read_real_file(file_path, offset=0, limit=2000, encoding="utf-8")"""
+- read_real_file(file_path, offset=0, limit=2000, encoding="utf-8")
+- glob_real_files(pattern, base_path=None, recursive=True, include_hidden=False)
+- grep_real_files(pattern, file_pattern=None, base_path=None, case_sensitive=True, context_lines=0, max_results=100, include_hidden=False)"""
 
 
 class RealFilesystemMiddleware(AgentMiddleware):
@@ -35,9 +37,14 @@ class RealFilesystemMiddleware(AgentMiddleware):
         super().__init__()
         self.options: RealFilesystemOptions = build_real_filesystem_options(config or {})
         factory = RealFilesystemToolFactory(self.options)
+        builders = [
+            factory.build_list_tool,
+            factory.build_read_tool,
+            factory.build_glob_tool,
+            factory.build_grep_tool,
+        ]
         if tool_descriptions:
             descriptions = list(tool_descriptions)
-            builders = [factory.build_list_tool, factory.build_read_tool]
             tools: List[Any] = []
             for builder, override in zip(builders, descriptions, strict=False):
                 tools.append(builder(override))
@@ -45,7 +52,7 @@ class RealFilesystemMiddleware(AgentMiddleware):
                 tools.append(builder())
             self.tools = tools
         else:
-            self.tools = factory.build_all()
+            self.tools = [builder() for builder in builders]
         self.system_prompt = REAL_FILESYSTEM_PROMPT
 
     # ------------------------------------------------------------------ AgentMiddleware overrides

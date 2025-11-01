@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Sequence
 # Defaults align with architecture documentation
 DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 DEFAULT_LIST_MAX_RESULTS = 1000
+DEFAULT_GLOB_MAX_RESULTS = 1000
 DEFAULT_GREP_MAX_RESULTS = 100
 DEFAULT_GREP_MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
 
@@ -160,6 +161,9 @@ class RealFilesystemOptions:
             "allowed_extensions": list(self.security.allowed_extensions),
             "max_file_size": self.security.max_file_size,
             "list_max_results": self.performance.list_max_results,
+            "glob_max_results": self.performance.glob_max_results,
+            "grep_max_results": self.performance.grep_max_results,
+            "grep_max_file_size": self.performance.grep_max_file_size,
             "follow_symlinks": self.advanced.follow_symlinks,
             "case_sensitive": self.advanced.case_sensitive,
             "ignore_hidden_files": self.advanced.ignore_hidden_files,
@@ -193,9 +197,20 @@ def build_real_filesystem_options(config: Dict[str, Any] | None) -> RealFilesyst
         max_file_size=max_file_size,
     )
 
+    list_limit = int(
+        performance_cfg.get(
+            "list_max_results",
+            performance_cfg.get("glob_max_results", DEFAULT_LIST_MAX_RESULTS),
+        )
+    )
+    glob_limit = int(performance_cfg.get("glob_max_results", DEFAULT_GLOB_MAX_RESULTS))
+    if glob_limit <= 0:
+        glob_limit = DEFAULT_GLOB_MAX_RESULTS
+    if list_limit <= 0:
+        list_limit = DEFAULT_LIST_MAX_RESULTS
     performance = RealFilesystemPerformanceOptions(
-        list_max_results=int(performance_cfg.get("glob_max_results", DEFAULT_LIST_MAX_RESULTS)),
-        glob_max_results=int(performance_cfg.get("glob_max_results", DEFAULT_LIST_MAX_RESULTS)),
+        list_max_results=list_limit,
+        glob_max_results=glob_limit,
         grep_max_results=int(performance_cfg.get("grep_max_results", DEFAULT_GREP_MAX_RESULTS)),
         grep_max_file_size=int(performance_cfg.get("grep_max_file_size", DEFAULT_GREP_MAX_FILE_SIZE)),
     )

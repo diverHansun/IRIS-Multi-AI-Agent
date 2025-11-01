@@ -31,6 +31,10 @@ class RealFilesystemMiddlewareService:
             "excluded_paths": excluded_paths,
             "allowed_extensions": allowed_extensions,
             "max_file_size": security.get("max_file_size"),
+            "list_max_results": (self.performance or {}).get("list_max_results"),
+            "glob_max_results": (self.performance or {}).get("glob_max_results"),
+            "grep_max_results": (self.performance or {}).get("grep_max_results"),
+            "grep_max_file_size": (self.performance or {}).get("grep_max_file_size"),
             "ignore_hidden_files": self.advanced.get("ignore_hidden_files", True),
         }
         return summary

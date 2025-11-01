@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -41,13 +40,18 @@ class TestRealFilesystemMiddleware(unittest.TestCase):
                 "ignore_hidden_files": True,
             },
             "performance": {
+                "list_max_results": 10,
                 "glob_max_results": 10,
+                "grep_max_results": 5,
+                "grep_max_file_size": 1024,
             },
         }
         self.middleware = RealFilesystemMiddleware(config=self.config)
         tools = {tool.name: tool for tool in self.middleware.get_tools()}
         self.list_tool = tools["list_real_files"]
         self.read_tool = tools["read_real_file"]
+        self.glob_tool = tools["glob_real_files"]
+        self.grep_tool = tools["grep_real_files"]
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -117,6 +121,47 @@ class TestRealFilesystemMiddleware(unittest.TestCase):
             }
         )
         self.assertNotIn("src/binary.bin", result)
+
+    def test_glob_real_files_matches_pattern(self) -> None:
+        """Glob tool should match files according to pattern."""
+        results = self.glob_tool.invoke(
+            {
+                "pattern": "*.py",
+                "base_path": str(self.project_root / "src"),
+                "recursive": False,
+                "include_hidden": False,
+            }
+        )
+        self.assertIn("src/main.py", results)
+        self.assertNotIn("docs/.secret.txt", results)
+
+    def test_grep_real_files_finds_pattern(self) -> None:
+        """Grep should return matches with context."""
+        output = self.grep_tool.invoke(
+            {
+                "pattern": r"line2",
+                "file_pattern": "**/*.txt",
+                "base_path": str(self.project_root),
+                "case_sensitive": True,
+                "context_lines": 1,
+                "max_results": 3,
+                "include_hidden": False,
+            }
+        )
+        self.assertIn("# src/notes.txt:2", output)
+        self.assertIn("     1\tline1", output)
+        self.assertIn("     2\tline2", output)
+
+    def test_grep_real_files_handles_no_matches(self) -> None:
+        """Grep should return friendly message when nothing matches."""
+        output = self.grep_tool.invoke(
+            {
+                "pattern": "does-not-exist",
+                "file_pattern": "**/*.py",
+                "base_path": str(self.project_root),
+            }
+        )
+        self.assertEqual(output, "No matches found.")
 
 
 if __name__ == "__main__":
