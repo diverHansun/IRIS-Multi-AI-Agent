@@ -4,13 +4,13 @@
 
 ### 1.1 虚拟文件系统工具
 
-#### ls / list_files
+#### list_virtual_files
 
 **功能：** 列出虚拟文件系统中的所有文件
 
 **签名：**
 ```python
-def ls(
+def list_virtual_files(
     runtime: ToolRuntime[None, FilesystemState],
     path: str | None = None
 ) -> list[str]
@@ -24,21 +24,21 @@ def ls(
 **示例：**
 ```python
 # 列出所有文件
-ls()  # ["/workspace/file1.txt", "/memories/notes.md", ...]
+list_virtual_files()  # ["/workspace/file1.txt", "/memories/notes.md", ...]
 
 # 列出指定目录
-ls(path="/workspace")  # ["/workspace/file1.txt", "/workspace/file2.py"]
+list_virtual_files(path="/workspace")  # ["/workspace/file1.txt", "/workspace/file2.py"]
 ```
 
 ---
 
-#### read_file
+#### read_virtual_file
 
 **功能：** 读取虚拟文件内容
 
 **签名：**
 ```python
-def read_file(
+def read_virtual_file(
     file_path: str,
     runtime: ToolRuntime[None, FilesystemState],
     offset: int = 0,
@@ -56,22 +56,22 @@ def read_file(
 **示例：**
 ```python
 # 读取整个文件
-read_file("/workspace/code.py")
+read_virtual_file("/workspace/code.py")
 
 # 分页读取
-read_file("/workspace/large.txt", offset=0, limit=100)    # 前100行
-read_file("/workspace/large.txt", offset=100, limit=100)  # 第101-200行
+read_virtual_file("/workspace/large.txt", offset=0, limit=100)    # 前100行
+read_virtual_file("/workspace/large.txt", offset=100, limit=100)  # 第101-200行
 ```
 
 ---
 
-#### write_file
+#### write_virtual_file
 
 **功能：** 创建新的虚拟文件
 
 **签名：**
 ```python
-def write_file(
+def write_virtual_file(
     file_path: str,
     content: str,
     runtime: ToolRuntime[None, FilesystemState]
@@ -87,21 +87,21 @@ def write_file(
 **示例：**
 ```python
 # 创建普通文件
-write_file("/workspace/notes.txt", "Hello World")
+write_virtual_file("/workspace/notes.txt", "Hello World")
 
 # 创建长期记忆文件
-write_file("/memories/preferences.json", '{"theme": "dark"}')
+write_virtual_file("/memories/preferences.json", '{"theme": "dark"}')
 ```
 
 ---
 
-#### edit_file
+#### edit_virtual_file
 
 **功能：** 编辑已有虚拟文件
 
 **签名：**
 ```python
-def edit_file(
+def edit_virtual_file(
     file_path: str,
     old_string: str,
     new_string: str,
@@ -121,10 +121,10 @@ def edit_file(
 **示例：**
 ```python
 # 单次替换
-edit_file("/workspace/code.py", "old_name", "new_name")
+edit_virtual_file("/workspace/code.py", "old_name", "new_name")
 
 # 全部替换
-edit_file("/workspace/config.yaml", "localhost", "production.com", replace_all=True)
+edit_virtual_file("/workspace/config.yaml", "localhost", "production.com", replace_all=True)
 ```
 
 ---

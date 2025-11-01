@@ -159,7 +159,7 @@ Resume execution
 ```
 Deep agent reasoning...
   Step 1 | 0.5s | Analyzing query...
-  Step 2 | 1.2s | Call tool: read_file
+  Step 2 | 1.2s | Call tool: read_virtual_file
     -> Args: path="config.json"
   Step 3 | 2.1s | Result: File content loaded (1024 bytes)
   Step 4 | 2.8s | Delegate to SubAgent: research
@@ -171,7 +171,7 @@ DeepAgent > [Final response displayed once]
 
 Summary:
   - Reasoning steps: 6
-  - Tool calls: 3 (read_file, write_file, search)
+  - Tool calls: 3 (read_virtual_file, write_virtual_file, search)
   - SubAgent delegations: 1 (research)
   - Total time: 46.1s
 ```
@@ -220,7 +220,7 @@ config/agents/deep/models/subagents.json
     "output": "Final response text",
     "messages": [...],
     "tool_calls": 10,
-    "tool_names": ["read_file", "write_file"],
+    "tool_names": ["read_virtual_file", "write_virtual_file"],
     "subagent_calls": [...],
     "session_id": "default"
 }
@@ -325,8 +325,8 @@ Current Session Information:
 
 HITL Preferences (this session only):
   Auto-approved tools:
-    - write_file
-    - read_file
+    - write_virtual_file
+    - read_virtual_file
 
   Dangerous tools (never auto-approve):
     - delete_file
@@ -340,13 +340,13 @@ HITL Preferences (this session only):
 
 Deep agent reasoning...
   Step 1 | 0.8s | Planning backup operation...
-  Step 2 | 1.5s | Call tool: write_file
+  Step 2 | 1.5s | Call tool: write_virtual_file
 
 ======================================================================
 TOOL EXECUTION REQUIRES APPROVAL
 ======================================================================
 
-  Tool: write_file
+  Tool: write_virtual_file
   Arguments:
     - path: /home/user/config.backup.json
     - content: {...}
@@ -359,7 +359,7 @@ Please choose:
 
 Your choice [1-4] (default: 1): 2
 
-Approved and will auto-approve 'write_file' in this session
+Approved and will auto-approve 'write_virtual_file' in this session
 
   Step 3 | 2.2s | Backup created successfully
   Step 4 | 2.8s | Call tool: delete_file

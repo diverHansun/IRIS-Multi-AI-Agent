@@ -117,7 +117,7 @@ class JsonArgsParserMiddleware(AgentMiddleware):
 
         # Log conversions if enabled
         if self.enable_logging and conversions:
-            logger.debug(
+            logger.info(
                 f"JsonArgsParserMiddleware: Tool '{tool_name}' "
                 f"- Parsed {len(conversions)} argument(s): {', '.join(conversions)}"
             )

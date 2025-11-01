@@ -186,7 +186,7 @@ Complete reference for Deep Agent streaming and safety configuration options.
     "hitl_config": {
       "dangerous_tools": [
         "delete_file", "execute_shell", "rm", "sudo",
-        "write_file", "edit_file", "chmod", "chown"
+        "write_virtual_file", "edit_virtual_file", "chmod", "chown"
       ]
     }
   }

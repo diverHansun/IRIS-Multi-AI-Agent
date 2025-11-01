@@ -16,7 +16,7 @@
 **文件：**
 - ✅ `types.py` - 简化的类型定义（只保留2个核心参数）
 - ✅ `utils.py` - 工具函数（移除所有安全检查）
-- ✅ `tools.py` - 4个文件系统工具（ls, read_file, write_file, edit_file）
+- ✅ `tools.py` - 4个文件系统工具（list_virtual_files, read_virtual_file, write_virtual_file, edit_virtual_file）
 - ✅ `middleware.py` - VirtualFilesystemMiddleware主类
 - ✅ `__init__.py` - 导出接口
 
@@ -162,7 +162,7 @@ __all__ = [
 | **Service类** | `FilesystemMiddlewareService` | `VirtualFilesystemMiddlewareService` | ✅ |
 | **配置位置** | `middleware/filesystem.json` | `middleware/filesystem/virtual_filesystem.json` | ✅ |
 | **配置参数** | 10+ (含security, mode) | 3 (enabled, long_term_memory, tool_token_limit) | ✅ |
-| **工具名称** | `list_files` | `ls` | ✅ |
+| **工具名称** | `list_files` | `list_virtual_files` | ✅ |
 | **Mode管理** | 3种模式 (read_only, ask_before_edit, auto_edit) | 无 (完全虚拟化) | ✅ |
 | **Security检查** | 路径检查、文件大小限制、扩展名过滤 | 无 (虚拟环境隔离) | ✅ |
 | **Runtime集成** | `FilesystemMiddleware` | `VirtualFilesystemMiddleware` | ✅ |
@@ -250,7 +250,7 @@ config/agents/deep/middleware/filesystem.json
 - get_middleware_options()返回正确参数
 
 ✅ **工具创建**
-- 4个工具正确创建：ls, read_file, write_file, edit_file
+- 4个工具正确创建：list_virtual_files, read_virtual_file, write_virtual_file, edit_virtual_file
 - 工具参数正确配置
 
 ✅ **Middleware**

@@ -60,6 +60,9 @@ class BaseDeepAgentFactory(ABC):
             tool_manager = UnifiedToolManager(auto_register_defaults=True)
             await tool_manager.initialize_all()
             tools = tool_manager.get_all_tools()
+
+        # Inject virtual filesystem tools if enabled (SOLID: SRP - Factory manages tool composition)
+        tools, filesystem_middleware = self._inject_filesystem_tools(tools, resolved_middleware)
         tool_names = [tool.name if hasattr(tool, 'name') else tool.__name__ for tool in tools] if tools else []
 
         # Get LLM parameters from adapter
@@ -101,6 +104,7 @@ class BaseDeepAgentFactory(ABC):
             step_timeout=step_timeout,
             stream_mode=stream_mode,
             max_execution_time=max_execution_time,
+            filesystem_middleware=filesystem_middleware,  # DRY: reuse instance from tool injection
         )
 
         # Get display config from adapter
@@ -327,6 +331,53 @@ class BaseDeepAgentFactory(ABC):
                 interrupt_on[tool]["description"] = description
 
         return interrupt_on or None
+
+
+    def _inject_filesystem_tools(self, tools, middleware_config):
+        """Inject virtual filesystem tools into tools list.
+        
+        Follows SOLID principles:
+        - SRP: Factory is responsible for tool composition
+        - OCP: Extensible for future filesystem types
+        - DRY: Single middleware instance creation
+        
+        Args:
+            tools: Existing tools list
+            middleware_config: Middleware configuration dict
+            
+        Returns:
+            Tuple of (updated_tools_list, filesystem_middleware_or_None)
+        """
+        fs_config = middleware_config.get("filesystem", {})
+        
+        # Check if filesystem is enabled (default: True for YAGNI - most users need it)
+        if not fs_config.get("enabled", True):
+            logger.debug("Virtual filesystem disabled in config")
+            return tools, None
+        
+        try:
+            # Import here to avoid circular dependencies (KISS)
+            from src.components.deepagents.runtime_middlewares.virtual_filesystem import VirtualFilesystemMiddleware
+            
+            # Create middleware instance (DRY: single instance for both tools and state management)
+            filesystem_middleware = VirtualFilesystemMiddleware(
+                long_term_memory=fs_config.get("long_term_memory", False),
+                tool_token_limit_before_evict=fs_config.get("tool_token_limit_before_evict"),
+            )
+            
+            # Get filesystem tools
+            fs_tools = filesystem_middleware.get_tools()
+            
+            if fs_tools:
+                tools = list(tools) if tools else []
+                tools.extend(fs_tools)
+                logger.info(f"Injected {len(fs_tools)} virtual filesystem tools")
+            
+            return tools, filesystem_middleware
+            
+        except Exception as e:
+            logger.warning(f"Failed to inject filesystem tools: {e}")
+            return tools, None
 
     def describe(self) -> Dict[str, Any]:
         """Return metadata describing the factory."""

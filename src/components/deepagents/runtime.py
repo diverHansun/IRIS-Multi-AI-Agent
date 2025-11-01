@@ -47,6 +47,7 @@ def create_deep_agent_runtime(
     step_timeout: float | None = None,
     stream_mode: str | None = None,
     max_execution_time: float | None = None,
+    filesystem_middleware: Any | None = None,
 ) -> CompiledStateGraph:
     """Create a configured deep agent runtime graph."""
 
@@ -57,30 +58,35 @@ def create_deep_agent_runtime(
     filesystem_cfg = middleware_config.get("filesystem", {})
     subagents_cfg = middleware_config.get("subagents", {})
 
-    filesystem_middleware = VirtualFilesystemMiddleware(
-        long_term_memory=use_long_term_memory or filesystem_cfg.get("long_term_memory", False),
-        tool_token_limit_before_evict=filesystem_cfg.get("tool_token_limit_before_evict"),
-    )
-
-    filesystem_tools = filesystem_middleware.get_tools()
-    if filesystem_tools:
-        tools = list(tools) if tools else []
-        tools.extend(filesystem_tools)
-
-    default_subagent_middleware: List[AgentMiddleware] = [
-        JsonArgsParserMiddleware(),
-        TodoListMiddleware(),
-        VirtualFilesystemMiddleware(
+    # Create filesystem middleware if not provided and enabled (SOLID: SRP - only if needed)
+    if filesystem_middleware is None and filesystem_cfg.get("enabled", True):
+        from .runtime_middlewares.virtual_filesystem import VirtualFilesystemMiddleware
+        filesystem_middleware = VirtualFilesystemMiddleware(
             long_term_memory=use_long_term_memory or filesystem_cfg.get("long_term_memory", False),
             tool_token_limit_before_evict=filesystem_cfg.get("tool_token_limit_before_evict"),
-        ),
+        )
+    
+    # Note: Tools are now injected in Factory, not here (SOLID: SRP)
+    # filesystem_middleware is only used for state management and system prompt
+
+    # Build subagent middleware list (SOLID: SRP - conditional middleware inclusion)
+    default_subagent_middleware: List[AgentMiddleware] = [
+        JsonArgsParserMiddleware(enable_logging=True),
+        TodoListMiddleware(),
+    ]
+    
+    # Add filesystem middleware for subagents if enabled
+    if filesystem_middleware is not None:
+        default_subagent_middleware.append(filesystem_middleware)
+    
+    default_subagent_middleware.extend([
         SummarizationMiddleware(
             model=model,
             max_tokens_before_summary=170000,
             messages_to_keep=6,
         ),
         PatchToolCallsMiddleware(),
-    ]
+    ])
 
     subagent_middleware = SubAgentMiddleware(
         default_model=model,
@@ -98,18 +104,26 @@ def create_deep_agent_runtime(
         tools = list(tools) if tools else []
         tools.append(task_tool)
 
+    # Build main agent middleware list (SOLID: SRP - conditional middleware inclusion)
     deepagent_middleware: List[AgentMiddleware] = [
-        JsonArgsParserMiddleware(),
+        JsonArgsParserMiddleware(enable_logging=True),
         TodoListMiddleware(),
-        filesystem_middleware,
-        subagent_middleware,
+    ]
+    
+    # Add filesystem middleware if enabled
+    if filesystem_middleware is not None:
+        deepagent_middleware.append(filesystem_middleware)
+    
+    # Add subagent middleware
+    deepagent_middleware.append(subagent_middleware)
+    deepagent_middleware.extend([
         SummarizationMiddleware(
             model=model,
             max_tokens_before_summary=170000,
             messages_to_keep=6,
         ),
         PatchToolCallsMiddleware(),
-    ]
+    ])
 
     # Add execution timeout middleware if max_execution_time is specified
     if max_execution_time is not None and max_execution_time > 0:

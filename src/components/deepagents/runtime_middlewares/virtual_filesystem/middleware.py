@@ -5,8 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Dict, List, Optional, Sequence
 
-from langchain.agents.middleware import AgentMiddleware
-from langchain.agents.middleware.types import AgentState, ModelRequest, ModelResponse
+from langchain.agents.middleware.types import AgentMiddleware, AgentState, ModelRequest, ModelResponse
 from langchain.tools.tool_node import ToolCallRequest
 from langchain_core.messages import BaseMessage, ToolMessage
 from langgraph.runtime import Runtime

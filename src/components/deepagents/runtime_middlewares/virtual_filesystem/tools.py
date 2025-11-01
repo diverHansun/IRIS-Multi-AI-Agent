@@ -33,10 +33,10 @@ from .utils import (
     update_file_data,
 )
 
-LIST_TOOL_NAME = "ls"
-READ_TOOL_NAME = "read_file"
-WRITE_TOOL_NAME = "write_file"
-EDIT_TOOL_NAME = "edit_file"
+LIST_TOOL_NAME = "list_virtual_files"
+READ_TOOL_NAME = "read_virtual_file"
+WRITE_TOOL_NAME = "write_virtual_file"
+EDIT_TOOL_NAME = "edit_virtual_file"
 VIRTUAL_FILESYSTEM_TOOL_NAMES = (LIST_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, EDIT_TOOL_NAME)
 
 
