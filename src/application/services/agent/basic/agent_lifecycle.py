@@ -15,7 +15,15 @@ def _agent_config(ctx) -> Dict[str, Any]:
     return ctx.get_engine_config("agent")
 
 
-async def _instantiate_agent(ctx, provider: str, model: str | None) -> Any:
+async def _instantiate_agent(ctx, provider: str | None, model: str | None) -> Any:
+    # If no provider specified, use first available provider
+    if not provider:
+        available_agents = agent_manager.get_available_agents()
+        if available_agents:
+            provider = available_agents[0]["provider"]
+        else:
+            raise RuntimeError("No basic agent providers available")
+
     agent = await agent_manager.create_agent(
         provider=provider,
         model=model,

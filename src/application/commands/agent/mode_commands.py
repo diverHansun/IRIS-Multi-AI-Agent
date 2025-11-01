@@ -77,7 +77,35 @@ class ModeCommand(BaseCommand):
                     "Switched to deep agent mode. Agent will be initialized on first use."
                 )
 
-        return CommandResult.success("Switched to basic agent mode.")
+        # Clean up deep mode specific configurations
+        config.pop("function_type", None)
+        config.pop("middleware", None)
+
+        # Clear deep mode provider/model to avoid compatibility issues
+        # Basic and deep agents may have different model configurations
+        config.pop("provider", None)
+        config.pop("model", None)
+
+        # Initialize default basic agent immediately for better UX
+        from src.application.services.agent.basic.agent_lifecycle import create_default_agent
+
+        try:
+            agent, info = await create_default_agent(ctx, target="basic")
+            config["agent_instance"] = agent
+            provider = info.get("provider", config.get("provider", "unknown"))
+            model = info.get("model", config.get("model", "unknown"))
+            tool_count = info.get("tool_count", 0)
+
+            return CommandResult.success(
+                f"Switched to basic agent mode. Agent initialized: {provider}/{model} (tools: {tool_count})"
+            )
+        except Exception as exc:
+            # If agent creation fails, still allow mode switch but show warning
+            import logging
+            logging.warning("Failed to initialize basic agent on mode switch: %s", exc)
+            return CommandResult.success(
+                "Switched to basic agent mode. Agent will be initialized on first use."
+            )
 
 
 __all__ = ["ModeCommand"]
