@@ -41,7 +41,8 @@ AGENT_ENGINE_COMMANDS = [
 DEEP_AGENT_COMMANDS = [
     ("/use <function>", "Select deep agent function (research|coding|analysis)"),
     ("/deep status", "Show comprehensive agent and middleware status"),
-    ("/deep filesystem <mode>", "Set filesystem permissions (read-only|ask-before-edit|auto-edit)"),
+    ("/deep filesystem status", "Inspect virtual and real filesystem settings"),
+    ("/deep filesystem reload", "Reload filesystem config and reinitialise the agent"),
     ("/deep config reload", "Reload deep agent configuration"),
 ]
 
