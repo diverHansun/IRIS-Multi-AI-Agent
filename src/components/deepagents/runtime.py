@@ -48,6 +48,7 @@ def create_deep_agent_runtime(
     stream_mode: str | None = None,
     max_execution_time: float | None = None,
     filesystem_middleware: Any | None = None,
+    filesystem_middlewares: Sequence[Any] | None = None,
 ) -> CompiledStateGraph:
     """Create a configured deep agent runtime graph."""
 
@@ -55,19 +56,29 @@ def create_deep_agent_runtime(
         model = init_chat_model(model, **model_settings)
 
     middleware_config = middleware_config or {}
-    filesystem_cfg = middleware_config.get("filesystem", {})
+    filesystem_cfg = middleware_config.get("filesystem", {}) or {}
     subagents_cfg = middleware_config.get("subagents", {})
 
-    # Create filesystem middleware if not provided and enabled (SOLID: SRP - only if needed)
-    if filesystem_middleware is None and filesystem_cfg.get("enabled", True):
-        from .runtime_middlewares.virtual_filesystem import VirtualFilesystemMiddleware
-        filesystem_middleware = VirtualFilesystemMiddleware(
-            long_term_memory=use_long_term_memory or filesystem_cfg.get("long_term_memory", False),
-            tool_token_limit_before_evict=filesystem_cfg.get("tool_token_limit_before_evict"),
-        )
-    
-    # Note: Tools are now injected in Factory, not here (SOLID: SRP)
-    # filesystem_middleware is only used for state management and system prompt
+    # Coerce provided filesystem middlewares into a list while supporting legacy parameter.
+    provided_filesystem_middlewares: List[AgentMiddleware] = []
+    if filesystem_middlewares:
+        provided_filesystem_middlewares.extend(filesystem_middlewares)
+    elif filesystem_middleware is not None:
+        provided_filesystem_middlewares.append(filesystem_middleware)
+    else:
+        # Backwards compatibility: create virtual filesystem middleware if enabled.
+        virtual_cfg = filesystem_cfg.get("virtual") if isinstance(filesystem_cfg, dict) else None
+        if virtual_cfg is None and isinstance(filesystem_cfg, dict):
+            virtual_cfg = filesystem_cfg
+        if isinstance(virtual_cfg, dict) and virtual_cfg.get("enabled", True):
+            from .runtime_middlewares.virtual_filesystem import VirtualFilesystemMiddleware
+
+            provided_filesystem_middlewares.append(
+                VirtualFilesystemMiddleware(
+                    long_term_memory=use_long_term_memory or virtual_cfg.get("long_term_memory", False),
+                    tool_token_limit_before_evict=virtual_cfg.get("tool_token_limit_before_evict"),
+                )
+            )
 
     # Build subagent middleware list (SOLID: SRP - conditional middleware inclusion)
     default_subagent_middleware: List[AgentMiddleware] = [
@@ -76,8 +87,7 @@ def create_deep_agent_runtime(
     ]
     
     # Add filesystem middleware for subagents if enabled
-    if filesystem_middleware is not None:
-        default_subagent_middleware.append(filesystem_middleware)
+    default_subagent_middleware.extend(provided_filesystem_middlewares)
     
     default_subagent_middleware.extend([
         SummarizationMiddleware(
@@ -111,8 +121,7 @@ def create_deep_agent_runtime(
     ]
     
     # Add filesystem middleware if enabled
-    if filesystem_middleware is not None:
-        deepagent_middleware.append(filesystem_middleware)
+    deepagent_middleware.extend(provided_filesystem_middlewares)
     
     # Add subagent middleware
     deepagent_middleware.append(subagent_middleware)

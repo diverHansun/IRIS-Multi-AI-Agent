@@ -9,6 +9,7 @@ from src.agents.deepagents.managers import subagent_manager
 from src.application.commands.base import BaseCommand, CommandResult
 from src.application.services.agent.deep.middleware import (
     VirtualFilesystemMiddlewareService,
+    RealFilesystemMiddlewareService,
     PatchToolCallsService,
     SubagentsMiddlewareService,
 )
@@ -65,12 +66,18 @@ class DeepCommand(BaseCommand):
 
         # Get middleware status
         middleware_cfg = config.get("middleware", {})
-        filesystem_service = VirtualFilesystemMiddlewareService(middleware_cfg.get("filesystem", {}))
+        filesystem_cfg = middleware_cfg.get("filesystem", {})
+        virtual_cfg = filesystem_cfg.get("virtual", filesystem_cfg if "virtual" not in filesystem_cfg else {})
+        real_cfg = filesystem_cfg.get("real", {})
+
+        virtual_fs_service = VirtualFilesystemMiddlewareService(virtual_cfg)
+        real_fs_service = RealFilesystemMiddlewareService(real_cfg)
         subagents_service = SubagentsMiddlewareService(middleware_cfg.get("subagents", {}))
         patch_service = PatchToolCallsService(middleware_cfg.get("patch_tool_calls", {}))
 
         middleware_status = {
-            "filesystem": filesystem_service.describe(),
+            "virtual_filesystem": virtual_fs_service.describe(),
+            "real_filesystem": real_fs_service.describe(),
             "subagents": subagents_service.describe(),
             "patch_tool_calls": patch_service.describe(),
         }
@@ -84,8 +91,11 @@ class DeepCommand(BaseCommand):
         }
 
         function_value = payload.get("function_type") or "research"
-        fs_enabled = "enabled" if middleware_status["filesystem"].get("enabled") else "disabled"
-        fs_long_term_memory = "enabled" if middleware_status["filesystem"].get("long_term_memory") else "disabled"
+        fs_enabled = "enabled" if middleware_status["virtual_filesystem"].get("enabled") else "disabled"
+        fs_long_term_memory = (
+            "enabled" if middleware_status["virtual_filesystem"].get("long_term_memory") else "disabled"
+        )
+        real_fs_enabled = "enabled" if middleware_status["real_filesystem"].get("enabled") else "disabled"
 
         message = (
             "Deep Agent Status:\n"
@@ -94,6 +104,7 @@ class DeepCommand(BaseCommand):
             f"- Function: {function_value}\n"
             f"- Active Subagents: {', '.join(subagent_names) if subagent_names else 'none'}\n"
             f"- Virtual Filesystem: {fs_enabled} (long-term memory: {fs_long_term_memory})\n"
+            f"- Real Filesystem: {real_fs_enabled}\n"
             f"- Subagents Middleware: {'enabled' if middleware_status['subagents']['enabled'] else 'disabled'}\n"
             f"- Patch Tool Calls: {'enabled' if middleware_status['patch_tool_calls']['enabled'] else 'disabled'}"
         )

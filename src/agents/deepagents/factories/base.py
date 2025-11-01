@@ -62,7 +62,7 @@ class BaseDeepAgentFactory(ABC):
             tools = tool_manager.get_all_tools()
 
         # Inject virtual filesystem tools if enabled (SOLID: SRP - Factory manages tool composition)
-        tools, filesystem_middleware = self._inject_filesystem_tools(tools, resolved_middleware)
+        tools, filesystem_middlewares = self._inject_filesystem_tools(tools, resolved_middleware)
         tool_names = [tool.name if hasattr(tool, 'name') else tool.__name__ for tool in tools] if tools else []
 
         # Get LLM parameters from adapter
@@ -86,6 +86,12 @@ class BaseDeepAgentFactory(ABC):
         stream_mode = runtime_config.get("stream_mode", "updates")
         max_execution_time = safety_config.get("max_execution_time")
 
+        filesystem_config = resolved_middleware.get("filesystem", {})
+        virtual_config = filesystem_config.get("virtual")
+        if not isinstance(virtual_config, dict):
+            virtual_config = filesystem_config if isinstance(filesystem_config, dict) else {}
+        use_long_term_memory = bool(virtual_config.get("long_term_memory", False))
+
         runtime = create_deep_agent_runtime(
             model=adapter.get_model_identifier(),
             system_prompt=system_prompt,
@@ -93,7 +99,7 @@ class BaseDeepAgentFactory(ABC):
             model_settings=model_settings,
             middleware_config=resolved_middleware,
             subagents=subagent_specs,
-            use_long_term_memory=resolved_middleware.get("filesystem", {}).get("long_term_memory", False),
+            use_long_term_memory=use_long_term_memory,
             interrupt_on=interrupt_on,
             checkpointer=checkpointer,
             store=user_params.get("store"),
@@ -104,7 +110,7 @@ class BaseDeepAgentFactory(ABC):
             step_timeout=step_timeout,
             stream_mode=stream_mode,
             max_execution_time=max_execution_time,
-            filesystem_middleware=filesystem_middleware,  # DRY: reuse instance from tool injection
+            filesystem_middlewares=filesystem_middlewares,  # DRY: reuse instances from tool injection
         )
 
         # Get display config from adapter
@@ -334,50 +340,53 @@ class BaseDeepAgentFactory(ABC):
 
 
     def _inject_filesystem_tools(self, tools, middleware_config):
-        """Inject virtual filesystem tools into tools list.
-        
-        Follows SOLID principles:
-        - SRP: Factory is responsible for tool composition
-        - OCP: Extensible for future filesystem types
-        - DRY: Single middleware instance creation
-        
-        Args:
-            tools: Existing tools list
-            middleware_config: Middleware configuration dict
-            
-        Returns:
-            Tuple of (updated_tools_list, filesystem_middleware_or_None)
-        """
+        """Inject enabled filesystem toolsets and return instantiated middlewares."""
         fs_config = middleware_config.get("filesystem", {})
-        
-        # Check if filesystem is enabled (default: True for YAGNI - most users need it)
-        if not fs_config.get("enabled", True):
-            logger.debug("Virtual filesystem disabled in config")
-            return tools, None
-        
-        try:
-            # Import here to avoid circular dependencies (KISS)
-            from src.components.deepagents.runtime_middlewares.virtual_filesystem import VirtualFilesystemMiddleware
-            
-            # Create middleware instance (DRY: single instance for both tools and state management)
-            filesystem_middleware = VirtualFilesystemMiddleware(
-                long_term_memory=fs_config.get("long_term_memory", False),
-                tool_token_limit_before_evict=fs_config.get("tool_token_limit_before_evict"),
-            )
-            
-            # Get filesystem tools
-            fs_tools = filesystem_middleware.get_tools()
-            
-            if fs_tools:
-                tools = list(tools) if tools else []
-                tools.extend(fs_tools)
-                logger.info(f"Injected {len(fs_tools)} virtual filesystem tools")
-            
-            return tools, filesystem_middleware
-            
-        except Exception as e:
-            logger.warning(f"Failed to inject filesystem tools: {e}")
-            return tools, None
+
+        virtual_config = fs_config.get("virtual")
+        real_config = fs_config.get("real")
+
+        # Backwards compatibility: treat plain dict as virtual configuration
+        if virtual_config is None and real_config is None and isinstance(fs_config, dict):
+            virtual_config = fs_config
+
+        middlewares: List[Any] = []
+        updated_tools = list(tools) if tools else []
+
+        if isinstance(virtual_config, dict) and virtual_config.get("enabled", True):
+            try:
+                from src.components.deepagents.runtime_middlewares.virtual_filesystem import (
+                    VirtualFilesystemMiddleware,
+                )
+
+                virtual_middleware = VirtualFilesystemMiddleware(
+                    long_term_memory=virtual_config.get("long_term_memory", False),
+                    tool_token_limit_before_evict=virtual_config.get("tool_token_limit_before_evict"),
+                )
+                vs_tools = virtual_middleware.get_tools()
+                if vs_tools:
+                    updated_tools.extend(vs_tools)
+                    logger.info("Injected %d virtual filesystem tools", len(vs_tools))
+                middlewares.append(virtual_middleware)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Failed to inject virtual filesystem tools: %s", exc, exc_info=True)
+
+        if isinstance(real_config, dict) and real_config.get("enabled", False):
+            try:
+                from src.components.deepagents.runtime_middlewares.real_filesystem import (
+                    RealFilesystemMiddleware,
+                )
+
+                real_middleware = RealFilesystemMiddleware(config=real_config)
+                rs_tools = real_middleware.get_tools()
+                if rs_tools:
+                    updated_tools.extend(rs_tools)
+                    logger.info("Injected %d real filesystem tools", len(rs_tools))
+                middlewares.append(real_middleware)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Failed to inject real filesystem tools: %s", exc, exc_info=True)
+
+        return updated_tools or tools, middlewares
 
     def describe(self) -> Dict[str, Any]:
         """Return metadata describing the factory."""
