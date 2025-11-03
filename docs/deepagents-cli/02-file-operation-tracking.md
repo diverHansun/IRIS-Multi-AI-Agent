@@ -72,7 +72,7 @@
 
 #### 第一步：创建FileOpTracker类
 
-**文件路径**：`src/application/services/agent/deep/hitl/file_ops.py`
+**文件路径**：[src/application/services/agent/deep/hitl/file_ops.py](../../src/application/services/agent/deep/hitl/file_ops.py)
 
 **核心类设计**：
 - `FileOperationRecord`：记录单次文件操作的完整信息
@@ -182,7 +182,7 @@ HITL Handler需要从运行时状态或Store中读取，但可能无法直接访
 
 #### 第三步：增强HITL Handler
 
-**文件路径**：`src/application/services/agent/deep/hitl/handler.py`
+**文件路径**：[src/application/services/agent/deep/hitl/handler.py](../../src/application/services/agent/deep/hitl/handler.py)
 
 **修改内容**：
 - 在 `_resolve_decision` 中检测虚拟文件系统的写操作工具（`write_virtual_file`、`edit_virtual_file`）

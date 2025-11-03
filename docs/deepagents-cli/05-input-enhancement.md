@@ -56,7 +56,7 @@
 
 #### 第一步：实现文件引用解析
 
-**文件路径**：`src/application/services/agent/deep/input/parser.py`（新建）
+**文件路径**：[src/application/services/agent/deep/input/parser.py](../../src/application/services/agent/deep/input/parser.py)（新建）
 
 **核心函数**：`parse_file_mentions(text: str) -> tuple[str, list[Path]]`
 
@@ -74,7 +74,7 @@ pattern = r"@((?:[^\s@]|(?<=\\)\s)+)"
 
 #### 第二步：实现文件内容读取和格式化
 
-**文件路径**：`src/application/services/agent/deep/input/parser.py`
+**文件路径**：[src/application/services/agent/deep/input/parser.py](../../src/application/services/agent/deep/input/parser.py)
 
 **新增函数**：`format_file_context(file_path: Path) -> str`
 
@@ -95,7 +95,7 @@ Path: `完整路径`
 
 #### 第三步：集成到查询处理流程
 
-**文件路径**：`src/application/services/agent/deep/streaming/conversation.py`
+**文件路径**：[src/application/services/agent/deep/streaming/conversation.py](../../src/application/services/agent/deep/streaming/conversation.py)
 
 **修改 `handle_deep_agent_query` 函数**：
 - 在函数开始处调用 `parse_file_mentions(user_input)`
@@ -122,7 +122,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
 #### 第四步：错误处理和用户提示
 
-**文件路径**：`src/application/services/agent/deep/input/parser.py`
+**文件路径**：[src/application/services/agent/deep/input/parser.py](../../src/application/services/agent/deep/input/parser.py)
 
 **错误处理**：
 - 文件不存在：警告并跳过该文件引用
@@ -136,7 +136,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
 #### 第五步：路径解析增强
 
-**文件路径**：`src/application/services/agent/deep/input/parser.py`
+**文件路径**：[src/application/services/agent/deep/input/parser.py](../../src/application/services/agent/deep/input/parser.py)
 
 **路径解析逻辑**：
 - 支持 `~` 用户目录展开
@@ -146,12 +146,12 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
 ### 文件创建清单
 
-1. **新建文件**：`src/application/services/agent/deep/input/parser.py`
-2. **新建文件**：`src/application/services/agent/deep/input/__init__.py`
+1. **新建文件**：[src/application/services/agent/deep/input/parser.py](../../src/application/services/agent/deep/input/parser.py)
+2. **已创建**：[src/application/services/agent/deep/input/__init__.py](../../src/application/services/agent/deep/input/__init__.py)
 
 ### 文件修改清单
 
-1. **修改文件**：`src/application/services/agent/deep/streaming/conversation.py`
+1. **修改文件**：[src/application/services/agent/deep/streaming/conversation.py](../../src/application/services/agent/deep/streaming/conversation.py)
 
 ### 配置项（可选）
 

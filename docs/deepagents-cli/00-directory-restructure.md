@@ -305,3 +305,56 @@ __all__ = [
 2. 避免在实施过程中频繁修改导入路径
 3. 新功能有明确的归属位置，不会加剧混乱
 4. 一次性完成迁移，减少后续维护成本
+
+## 实施完成状态
+
+目录结构优化已完成，新的组织结构如下：
+
+```
+src/application/services/agent/deep/
+├── __init__.py
+├── service.py
+├── agent_lifecycle.py
+├── streaming/
+│   ├── __init__.py
+│   ├── conversation.py
+│   └── event_handler.py
+├── hitl/
+│   ├── __init__.py
+│   ├── handler.py
+│   └── session_manager.py
+├── input/
+│   └── __init__.py
+└── middleware/
+    ├── __init__.py
+    ├── patch_tool_calls_service.py
+    ├── real_filesystem_service.py
+    ├── subagents_service.py
+    └── virtual_filesystem_service.py
+```
+
+### 已完成的迁移工作
+
+1. 创建了新的目录结构：streaming/, hitl/, input/
+2. 使用git mv迁移文件，保留了文件历史：
+   - conversation.py -> streaming/conversation.py
+   - event_handler.py -> streaming/event_handler.py
+   - hitl_handler.py -> hitl/handler.py
+   - session_hitl_manager.py -> hitl/session_manager.py
+3. 创建了所有模块的__init__.py文件
+4. 更新了所有相关的导入路径：
+   - src/application/services/agent/deep/service.py
+   - src/application/services/agent/deep/streaming/conversation.py
+   - src/application/services/agent/deep/hitl/handler.py
+   - src/application/cli/main.py
+5. 验证了导入正常工作
+
+### 后续阶段文件归属
+
+根据新的目录结构，后续实施阶段的新文件位置：
+
+- 阶段1 Agent记忆系统：`src/components/deepagents/runtime_middlewares/agent_memory/`
+- 阶段2 文件操作追踪：`src/application/services/agent/deep/hitl/file_ops.py`
+- 阶段3 HITL交互增强：修改 `src/application/services/agent/deep/hitl/handler.py`
+- 阶段4 流式处理优化：修改 `src/application/services/agent/deep/streaming/` 模块
+- 阶段5 用户输入增强：`src/application/services/agent/deep/input/parser.py`

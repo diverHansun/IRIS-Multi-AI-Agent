@@ -56,7 +56,7 @@
 
 #### 第一步：修改流式处理配置
 
-**文件路径**：`src/application/services/agent/deep/streaming/conversation.py`
+**文件路径**：[src/application/services/agent/deep/streaming/conversation.py](../../src/application/services/agent/deep/streaming/conversation.py)
 
 **修改 `handle_deep_agent_query` 函数**：
 - 将 `stream_mode="updates"` 改为 `stream_mode=["messages", "updates"]`
@@ -73,7 +73,7 @@ async for event in agent.runtime.astream(
 
 #### 第二步：增强Event Handler处理双模式
 
-**文件路径**：`src/application/services/agent/deep/streaming/event_handler.py`
+**文件路径**：[src/application/services/agent/deep/streaming/event_handler.py](../../src/application/services/agent/deep/streaming/event_handler.py)
 
 **修改 `handle_event` 方法**：
 - 识别chunk的结构：`(namespace, stream_mode, data)`
@@ -93,7 +93,7 @@ if isinstance(chunk, tuple) and len(chunk) == 3:
 
 #### 第三步：实现content_blocks解析
 
-**文件路径**：`src/application/services/agent/deep/streaming/event_handler.py`
+**文件路径**：[src/application/services/agent/deep/streaming/event_handler.py](../../src/application/services/agent/deep/streaming/event_handler.py)
 
 **新增方法**：`_process_message_content_blocks()`
 
@@ -106,7 +106,7 @@ if isinstance(chunk, tuple) and len(chunk) == 3:
 
 #### 第四步：实现工具调用分块缓冲
 
-**文件路径**：`src/application/services/agent/deep/streaming/event_handler.py`
+**文件路径**：[src/application/services/agent/deep/streaming/event_handler.py](../../src/application/services/agent/deep/streaming/event_handler.py)
 
 **新增属性**：
 - `tool_call_buffers`：字典，键为工具调用ID或index
@@ -130,7 +130,7 @@ def _buffer_tool_call_chunk(self, block: dict):
 
 #### 第五步：实现文本缓冲和刷新
 
-**文件路径**：`src/application/services/agent/deep/streaming/event_handler.py`
+**文件路径**：[src/application/services/agent/deep/streaming/event_handler.py](../../src/application/services/agent/deep/streaming/event_handler.py)
 
 **新增属性**：
 - `pending_text`：累积的文本内容
@@ -144,7 +144,7 @@ def _buffer_tool_call_chunk(self, block: dict):
 
 #### 第六步：增强UI渲染时机
 
-**文件路径**：`src/application/services/agent/deep/streaming/event_handler.py`
+**文件路径**：[src/application/services/agent/deep/streaming/event_handler.py](../../src/application/services/agent/deep/streaming/event_handler.py)
 
 **渲染优化**：
 - 在文本块累积到一定长度或消息结束时渲染
@@ -154,8 +154,8 @@ def _buffer_tool_call_chunk(self, block: dict):
 
 ### 文件修改清单
 
-1. **修改文件**：`src/application/services/agent/deep/streaming/conversation.py`
-2. **修改文件**：`src/application/services/agent/deep/streaming/event_handler.py`
+1. **修改文件**：[src/application/services/agent/deep/streaming/conversation.py](../../src/application/services/agent/deep/streaming/conversation.py)
+2. **修改文件**：[src/application/services/agent/deep/streaming/event_handler.py](../../src/application/services/agent/deep/streaming/event_handler.py)
 
 ### 数据结构设计
 

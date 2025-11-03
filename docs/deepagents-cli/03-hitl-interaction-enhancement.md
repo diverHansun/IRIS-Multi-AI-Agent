@@ -61,7 +61,7 @@
 
 #### 第一步：实现工具特定格式化函数
 
-**文件路径**：`src/application/services/agent/deep/hitl/handler.py`
+**文件路径**：[src/application/services/agent/deep/hitl/handler.py](../../src/application/services/agent/deep/hitl/handler.py)
 
 **新增函数**：
 - `format_write_file_description()`：格式化写文件操作
@@ -77,7 +77,7 @@
 
 #### 第二步：增强审批提示生成
 
-**文件路径**：`src/application/services/agent/deep/hitl/handler.py`
+**文件路径**：[src/application/services/agent/deep/hitl/handler.py](../../src/application/services/agent/deep/hitl/handler.py)
 
 **修改 `_resolve_decision` 函数**：
 - 根据工具类型选择对应的格式化函数
@@ -99,7 +99,7 @@ def _format_tool_description(tool_name: str, args: dict) -> str:
 
 #### 第三步：增强SessionHITLManager
 
-**文件路径**：`src/application/services/agent/deep/hitl/session_manager.py`
+**文件路径**：[src/application/services/agent/deep/hitl/session_manager.py](../../src/application/services/agent/deep/hitl/session_manager.py)
 
 **新增功能**：
 - 记录用户的审批偏好模式（批准、拒绝、提供指导）
@@ -127,7 +127,7 @@ def _format_tool_description(tool_name: str, args: dict) -> str:
 
 #### 第五步：增强审批选项展示
 
-**文件路径**：`src/application/services/agent/deep/hitl/handler.py`
+**文件路径**：[src/application/services/agent/deep/hitl/handler.py](../../src/application/services/agent/deep/hitl/handler.py)
 
 **修改 `_build_options` 函数**：
 - 更清晰地说明每个选项的功能
@@ -146,8 +146,8 @@ def _format_tool_description(tool_name: str, args: dict) -> str:
 
 ### 文件修改清单
 
-1. **修改文件**：`src/application/services/agent/deep/hitl/handler.py`
-2. **修改文件**：`src/application/services/agent/deep/hitl/session_manager.py`
+1. **修改文件**：[src/application/services/agent/deep/hitl/handler.py](../../src/application/services/agent/deep/hitl/handler.py)
+2. **修改文件**：[src/application/services/agent/deep/hitl/session_manager.py](../../src/application/services/agent/deep/hitl/session_manager.py)
 
 ### 配置增强
 
