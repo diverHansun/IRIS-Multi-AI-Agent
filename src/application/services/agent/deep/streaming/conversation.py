@@ -83,7 +83,8 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 async for event in agent.runtime.astream(
                     pending_input,
                     config=runtime_config,
-                    stream_mode="updates",
+                    stream_mode=["messages", "updates"],
+                    subgraphs=True,
                 ):
                     result = event_handler.handle_event(event)
                     if result.interrupts:
