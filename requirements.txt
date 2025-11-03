@@ -1,11 +1,13 @@
 # 核心框架
-langchain==1.0.0
-langchain-community==0.4
+langchain==1.0.3
+langchain-community==1.0.0a1
 langchain-core==1.0.0
 langchain-text-splitters==1.0.0
+langgraph==1.0.2
 
 # LLM集成
 zhipuai==2.1.5.20250825
+langchain-anthropic==1.0.0
 langchain-ollama==1.0.0
 langchain-openai==1.0.0
 openai==2.5.0
@@ -29,10 +31,10 @@ httpx-sse==0.4.1
 anyio==4.10.0
 
 # 网页爬取
-Crawl4AI==0.7.4
+crawl4ai==0.7.6
 
 # 命令行界面
-rich==14.1.0
+rich==14.2.0
 colorama==0.4.6
 
 # 数学计算
