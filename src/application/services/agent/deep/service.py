@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from src.application.services.base import BaseEngineService
 from src.application.services.agent.deep.agent_lifecycle import create_default_deep_agent, switch_deep_agent
-from src.application.services.agent.deep.conversation import handle_deep_agent_query
+from src.application.services.agent.deep.streaming.conversation import handle_deep_agent_query
 from src.core.providers import deepagents_provider_registry
 
 

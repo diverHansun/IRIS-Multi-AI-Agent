@@ -11,8 +11,8 @@ from langgraph.errors import GraphRecursionError
 from langgraph.types import Command
 
 from .event_handler import DeepAgentEventHandler
-from .hitl_handler import handle_hitl_interrupt
-from .session_hitl_manager import SessionHITLManager
+from ..hitl.handler import handle_hitl_interrupt
+from ..hitl.session_manager import SessionHITLManager
 
 
 def _get_agent_config(ctx) -> Dict[str, Any]:

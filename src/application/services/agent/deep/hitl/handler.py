@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from rich.markup import escape
 from langgraph.types import Interrupt
 
-from .session_hitl_manager import SessionHITLManager
+from .session_manager import SessionHITLManager
 
 
 Decision = Dict[str, Any]

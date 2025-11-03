@@ -14,7 +14,7 @@ from src.application.commands import dispatch
 from src.application.commands.parser import extract_command_name, is_command, parse_command
 from src.application.engine_adapters import get_adapter
 from src.application.services import get_current_service
-from src.application.services.agent.deep.session_hitl_manager import SessionHITLManager
+from src.application.services.agent.deep.hitl.session_manager import SessionHITLManager
 from src.application.cli.gui import formatter as gui_formatter
 from src.application.cli.gui import render as gui_render
 from src.application.cli.gui import logo as gui_logo
