@@ -25,6 +25,10 @@ class FileTooLargeError(RealFilesystemError):
     """Raised when attempting to read a file exceeding the size limit."""
 
 
+class BinaryFileNotAllowedError(PathValidationError):
+    """Raised when a binary file is encountered where text content is required."""
+
+
 def _normalised(path: Path, *, case_sensitive: bool) -> str:
     text = path.as_posix()
     return text if case_sensitive else text.lower()
@@ -65,6 +69,20 @@ def _is_hidden(path: Path) -> bool:
     return False
 
 
+def _ensure_extension_allowed(path: Path, options: RealFilesystemOptions) -> None:
+    """Raise if the file extension is disallowed under current security settings."""
+    extensions = options.security.allowed_extensions
+    if "*" in extensions:
+        return
+    suffix = path.suffix.lower()
+    if suffix:
+        if suffix not in extensions:
+            raise FileTypeNotAllowedError(f"Extension '{suffix}' is not allowed for '{path}'")
+    else:
+        if "" not in extensions:
+            raise FileTypeNotAllowedError(f"Files without an extension are not permitted: '{path}'")
+
+
 def ensure_directory_access(path: Path, options: RealFilesystemOptions) -> None:
     """Ensure a directory is reachable under the configured security rules."""
     case_sensitive = options.advanced.case_sensitive
@@ -83,15 +101,7 @@ def ensure_directory_access(path: Path, options: RealFilesystemOptions) -> None:
 def ensure_file_access(path: Path, options: RealFilesystemOptions) -> None:
     """Ensure a file path satisfies access, extension, and size rules."""
     ensure_directory_access(path.parent if path.parent != Path(path.anchor) else path, options)
-
-    extensions = options.security.allowed_extensions
-    if "*" not in extensions:
-        suffix = path.suffix.lower()
-        if suffix in ("", None):
-            if "" not in extensions:
-                raise FileTypeNotAllowedError(f"Files without an extension are not permitted: '{path}'")
-        elif suffix not in extensions:
-            raise FileTypeNotAllowedError(f"Extension '{suffix}' is not allowed for '{path}'")
+    _ensure_extension_allowed(path, options)
 
     try:
         size = path.stat().st_size
@@ -126,6 +136,26 @@ def validate_file(raw_path: str, options: RealFilesystemOptions) -> Path:
     if not path.is_file():
         raise PathValidationError(f"Expected file path but got: '{path}'")
     ensure_file_access(path, options)
+    return path
+
+
+def validate_new_file_path(raw_path: str, options: RealFilesystemOptions) -> Path:
+    """Validate a candidate path for creating or overwriting a file."""
+    path = options.resolve_path(raw_path)
+    parent = path.parent
+    if not parent.exists():
+        raise PathValidationError(f"Parent directory does not exist: '{parent}'")
+    if not parent.is_dir():
+        raise PathValidationError(f"Parent path is not a directory: '{parent}'")
+    ensure_directory_access(parent, options)
+    if path.exists():
+        if path.is_dir():
+            raise PathValidationError(f"Cannot write to directory path: '{path}'")
+        if path.is_symlink() and not options.advanced.follow_symlinks:
+            raise PathValidationError(f"Symlink access is disabled: '{path}'")
+        _ensure_extension_allowed(path, options)
+    else:
+        _ensure_extension_allowed(path, options)
     return path
 
 

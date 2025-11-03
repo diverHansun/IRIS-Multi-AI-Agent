@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from rich.markup import escape
 from langgraph.types import Interrupt
 
+from .preview import build_approval_preview
 from .session_manager import SessionHITLManager
 
 
@@ -87,7 +88,7 @@ async def _resolve_decision(
     can_auto = hitl_manager.can_auto_approve(tool_name) and "approve" in allowed_decisions
     is_dangerous = hitl_manager.is_dangerous(tool_name)
     safe_args = escape(_format_args(args))
-    prompt_lines = [
+    header_lines = [
         "======================================================================",
         "TOOL EXECUTION REQUIRES APPROVAL",
         "======================================================================",
@@ -96,26 +97,42 @@ async def _resolve_decision(
     ]
 
     if warning:
-        prompt_lines.append(f"  Warning: {escape(warning)}")
+        header_lines.append(f"  Warning: {escape(warning)}")
 
-    prompt_lines.extend(
+    header_lines.extend(
         [
             "",
             "  Description:",
             f"    {escape(description)}",
-            "",
-            "Please choose:",
         ]
     )
 
-    options = _build_options(allowed_decisions, can_auto, is_dangerous)
-    for option_line in options["labels"]:
-        prompt_lines.append(option_line)
+    preview = build_approval_preview(tool_name, args)
+    if preview:
+        header_lines.append("")
+        header_lines.append(f"  Preview: {escape(preview.title)}")
+        for detail in preview.details:
+            header_lines.append(f"    {escape(detail)}")
+        if preview.warning:
+            header_lines.append(f"    Warning: {escape(preview.warning)}")
+        if preview.error:
+            header_lines.append(f"    Error: {escape(preview.error)}")
 
+    ctx.console.print("\n".join(header_lines))
+    if preview and preview.diff and not preview.error:
+        ctx.console.print()
+        ctx.console.print("[dim]Diff preview:[/]")
+        ctx.console.print(f"[dim]{escape(preview.diff)}[/]")
+
+    ctx.console.print()
+
+    options = _build_options(allowed_decisions, can_auto, is_dangerous)
+    option_lines = ["Please choose:"]
+    option_lines.extend(options["labels"])
     default_choice = "1" if "1" in options["valid"] else next(iter(options["valid"]))
 
     while True:
-        ctx.console.print("\n".join(prompt_lines))
+        ctx.console.print("\n".join(option_lines))
         choice = await asyncio.to_thread(
             ctx.console.input,
             f"Your choice [{', '.join(sorted(options['valid']))}] (default: {default_choice}): ",

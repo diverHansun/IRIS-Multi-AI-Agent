@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shlex
+import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List
 
 from langchain_core.tools import BaseTool, tool
 
 from .config import RealFilesystemOptions
 from .security import (
+    BinaryFileNotAllowedError,
     FileTooLargeError,
     PathValidationError,
     RealFilesystemError,
@@ -18,11 +23,16 @@ from .security import (
     ensure_file_access,
     validate_directory,
     validate_file,
+    validate_new_file_path,
 )
 from .utils import (
     DEFAULT_READ_LIMIT,
     DEFAULT_READ_OFFSET,
     EMPTY_CONTENT_WARNING,
+    MAX_CAPTURED_OUTPUT,
+    compute_text_diff,
+    count_lines,
+    encode_size,
     format_with_line_numbers,
     is_hidden_path,
     relative_display_path,
@@ -30,8 +40,11 @@ from .utils import (
 
 LIST_TOOL_NAME = "list_real_files"
 READ_TOOL_NAME = "read_real_file"
+WRITE_TOOL_NAME = "write_real_file"
+EDIT_TOOL_NAME = "edit_real_file"
 GLOB_TOOL_NAME = "glob_real_files"
 GREP_TOOL_NAME = "grep_real_files"
+EXECUTE_SHELL_TOOL_NAME = "execute_shell"
 
 LIST_PROMPT = """List files from the host machine within the configured allowlist.
 
@@ -47,6 +60,22 @@ Usage guidelines:
 - Only text files with allowed extensions can be accessed.
 - Use offset and limit for pagination to avoid large outputs.
 - Encoding defaults to UTF-8; specify another encoding if required."""
+
+WRITE_PROMPT = """Write text content to a file on the host machine.
+
+Usage guidelines:
+- Paths must stay within the configured allowlist and use permitted extensions.
+- Content must be UTF-8 by default; specify a different encoding if required.
+- Avoid large files; operations over the configured size limit are rejected.
+- Always request approval before overwriting existing files."""
+
+EDIT_PROMPT = """Apply find-and-replace edits to a file on the host machine.
+
+Usage guidelines:
+- Target file must already exist and use an allowed extension.
+- old_string must match the current file contents exactly.
+- replace_all controls whether all occurrences are replaced.
+- Only text files encoded in UTF-8 (configurable) are supported."""
 
 GLOB_PROMPT = """Search for files on the host machine using glob patterns.
 
@@ -65,12 +94,47 @@ Usage guidelines:
 - context_lines adds lines before/after each match for additional context.
 - Large files beyond configured limits are skipped automatically."""
 
+EXECUTE_SHELL_PROMPT = """Execute a shell command within the project workspace.
+
+Usage guidelines:
+- Commands run from the project root with a filtered environment.
+- Potentially destructive commands (rm, sudo, shutdown, etc.) are blocked.
+- Avoid chaining commands or redirections; submit a single safe command.
+- Execution is limited by a configurable timeout (default 60 seconds)."""
+
 
 @dataclass(slots=True)
 class RealFilesystemToolFactory:
     """Factory for constructing real filesystem tools."""
 
     options: RealFilesystemOptions
+    _COMMAND_BLACKLIST = {
+        "rm",
+        "sudo",
+        "poweroff",
+        "shutdown",
+        "reboot",
+        "halt",
+        "mkfs",
+        "dd",
+        "chmod",
+        "chown",
+    }
+    _COMMAND_PATTERN_BLACKLIST = (
+        re.compile(r"rm\s+-rf\s+/"),
+        re.compile(r"rm\s+-rf\s+~"),
+        re.compile(r":\s*\(\)\s*{\s*:\s*\|\s*:\s*;\s*}\s*;"),  # fork bomb
+    )
+    _UNSAFE_TOKENS = (";", "&&", "||", "|", ">", ">>", "<", "<<", "`", "$(")
+    _SENSITIVE_ENV_KEYWORDS = (
+        "API_KEY",
+        "SECRET",
+        "TOKEN",
+        "PASSWORD",
+        "PASS",
+        "AUTH",
+        "PRIVATE_KEY",
+    )
 
     # ------------------------------------------------------------------ helper utilities
     def _is_allowed_file(self, path: Path, *, include_hidden: bool) -> bool:
@@ -91,6 +155,130 @@ class RealFilesystemToolFactory:
         if suffix:
             return suffix in extensions
         return "" in extensions
+
+    @staticmethod
+    def _coerce_encoding(encoding: str | None) -> str:
+        """Normalise encoding names and ensure they are supported."""
+        candidate = (encoding or "utf-8").strip() or "utf-8"
+        try:
+            "".encode(candidate)
+        except LookupError as exc:  # pragma: no cover - defensive guard
+            raise ValueError(f"Unsupported encoding '{candidate}'") from exc
+        return candidate
+
+    def _read_text(self, path: Path, *, encoding: str) -> str:
+        """Read text content from disk enforcing the configured encoding."""
+        try:
+            return path.read_text(encoding=encoding)
+        except UnicodeDecodeError as exc:
+            raise BinaryFileNotAllowedError(
+                f"File '{path}' cannot be decoded using encoding '{encoding}'. Binary files are not supported."
+            ) from exc
+        except OSError as exc:
+            raise RealFilesystemError(f"Failed to read '{path}': {exc}") from exc
+
+    def _write_text(self, path: Path, content: str, *, encoding: str) -> None:
+        """Persist text content to disk using the requested encoding."""
+        try:
+            path.write_text(content, encoding=encoding)
+        except UnicodeEncodeError as exc:
+            raise RealFilesystemError(
+                f"Content cannot be encoded using '{encoding}': {exc}"
+            ) from exc
+        except OSError as exc:
+            raise RealFilesystemError(f"Failed to write '{path}': {exc}") from exc
+
+    def _ensure_content_size(self, content: str, *, encoding: str) -> None:
+        """Ensure content size stays within configured security limits."""
+        byte_length = encode_size(content, encoding)
+        max_size = self.options.security.max_file_size
+        if byte_length > max_size:
+            raise RealFilesystemError(
+                f"Content is {byte_length} bytes which exceeds the limit of {max_size} bytes."
+            )
+
+    @staticmethod
+    def _perform_string_replacement(
+        content: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool,
+    ) -> tuple[str, int] | str:
+        """Replace occurrences of old_string within content."""
+        if not old_string:
+            return "old_string must not be empty."
+        occurrences = content.count(old_string)
+        if occurrences == 0:
+            return "old_string was not found in the file."
+        if replace_all:
+            return content.replace(old_string, new_string), occurrences
+        return content.replace(old_string, new_string, 1), 1
+
+    def _split_command(self, command: str) -> List[str]:
+        """Parse a shell command into arguments with safety validation."""
+        if not command or not command.strip():
+            raise ValueError("Command must not be empty.")
+        lowered = command.lower()
+        for pattern in self._COMMAND_PATTERN_BLACKLIST:
+            if pattern.search(lowered):
+                raise ValueError("Command pattern is not permitted for safety reasons.")
+        for token in self._UNSAFE_TOKENS:
+            if token in command:
+                raise ValueError("Command chaining, redirection, and substitutions are not permitted.")
+        try:
+            return shlex.split(command, posix=os.name != "nt")
+        except ValueError as exc:
+            raise ValueError(f"Failed to parse command: {exc}") from exc
+
+    def _validate_command(self, tokens: List[str]) -> None:
+        """Validate command tokens against blacklist and path rules."""
+        if not tokens:
+            raise ValueError("Parsed command must contain at least one token.")
+        command_name = tokens[0].lower()
+        if command_name in self._COMMAND_BLACKLIST:
+            raise ValueError(f"Command '{command_name}' is not permitted.")
+
+    def _validate_paths_in_tokens(self, tokens: List[str]) -> None:
+        """Ensure all detected path arguments remain within the allowlist."""
+        for token in tokens[1:]:
+            if not token or token.startswith("-"):
+                continue
+            if any(sep in token for sep in ("/", "\\")) or token.startswith("."):
+                candidate = Path(token)
+                if not candidate.is_absolute():
+                    candidate = (self.options.project_root / candidate).resolve()
+                parent = candidate if candidate.is_dir() else candidate.parent
+                try:
+                    ensure_directory_access(parent, self.options)
+                except PathValidationError as exc:
+                    raise PathValidationError(
+                        f"Command argument '{token}' is outside the allowed directories."
+                    ) from exc
+
+    def _build_environment(self, overrides: Dict[str, Any] | None = None) -> Dict[str, str]:
+        """Return a filtered environment for shell execution."""
+        env = dict(os.environ)
+        for key in list(env.keys()):
+            upper_key = key.upper()
+            if any(marker in upper_key for marker in self._SENSITIVE_ENV_KEYWORDS):
+                env.pop(key, None)
+        env["PWD"] = str(self.options.project_root)
+        if overrides:
+            for key, value in overrides.items():
+                if not isinstance(key, str) or not isinstance(value, str):
+                    raise ValueError("Environment overrides must use string keys and values.")
+                env[key] = value
+        return env
+
+    @staticmethod
+    def _truncate_output(text: str) -> tuple[str, bool]:
+        """Trim command output to the configured maximum."""
+        encoded = text.encode("utf-8")
+        if len(encoded) <= MAX_CAPTURED_OUTPUT:
+            return text, False
+        truncated = encoded[:MAX_CAPTURED_OUTPUT]
+        safe_text = truncated.decode("utf-8", errors="replace")
+        return f"{safe_text}\n... (output truncated to {MAX_CAPTURED_OUTPUT} bytes)", True
 
     # ------------------------------------------------------------------ list tool
     def build_list_tool(self, description: str | None = None) -> BaseTool:
@@ -187,6 +375,136 @@ class RealFilesystemToolFactory:
             return header + formatted
 
         return read_real_file
+
+    # ------------------------------------------------------------------ write tool
+    def build_write_tool(self, description: str | None = None) -> BaseTool:
+        prompt = description or WRITE_PROMPT
+
+        @tool(WRITE_TOOL_NAME, description=prompt)
+        def write_real_file(
+            file_path: str,
+            content: str,
+            encoding: str = "utf-8",
+        ) -> Dict[str, Any] | str:
+            try:
+                normalised_encoding = self._coerce_encoding(encoding)
+            except ValueError as exc:
+                return str(exc)
+
+            try:
+                path = validate_new_file_path(file_path, self.options)
+            except (PathValidationError, RealFilesystemError) as exc:
+                return str(exc)
+
+            existed = path.exists()
+            previous_content = ""
+            if existed:
+                try:
+                    ensure_file_access(path, self.options)
+                except (PathValidationError, RealFilesystemError, FileNotFoundError) as exc:
+                    return str(exc)
+                try:
+                    previous_content = self._read_text(path, encoding=normalised_encoding)
+                except (BinaryFileNotAllowedError, RealFilesystemError) as exc:
+                    return str(exc)
+
+            try:
+                self._ensure_content_size(content, encoding=normalised_encoding)
+            except RealFilesystemError as exc:
+                return str(exc)
+
+            display_path = relative_display_path(path, self.options.project_root)
+            diff_info = compute_text_diff(previous_content, content, display_path)
+
+            try:
+                self._write_text(path, content, encoding=normalised_encoding)
+            except RealFilesystemError as exc:
+                return str(exc)
+
+            # TODO: persist operation details for session auditing once storage is available.
+
+            return {
+                "status": "success",
+                "path": display_path,
+                "encoding": normalised_encoding,
+                "overwritten": existed,
+                "bytes_written": encode_size(content, normalised_encoding),
+                "lines_written": count_lines(content),
+                "diff": diff_info.diff,
+                "diff_stats": {"added": diff_info.added_lines, "removed": diff_info.removed_lines},
+                "diff_truncated": diff_info.truncated,
+            }
+
+        return write_real_file
+
+    # ------------------------------------------------------------------ edit tool
+    def build_edit_tool(self, description: str | None = None) -> BaseTool:
+        prompt = description or EDIT_PROMPT
+
+        @tool(EDIT_TOOL_NAME, description=prompt)
+        def edit_real_file(
+            file_path: str,
+            old_string: str,
+            new_string: str,
+            encoding: str = "utf-8",
+            replace_all: bool = False,
+        ) -> Dict[str, Any] | str:
+            try:
+                normalised_encoding = self._coerce_encoding(encoding)
+            except ValueError as exc:
+                return str(exc)
+
+            try:
+                path = validate_file(file_path, self.options)
+            except FileNotFoundError as exc:
+                return str(exc)
+            except (PathValidationError, RealFilesystemError) as exc:
+                return str(exc)
+
+            try:
+                current_content = self._read_text(path, encoding=normalised_encoding)
+            except (BinaryFileNotAllowedError, RealFilesystemError) as exc:
+                return str(exc)
+
+            replacement = self._perform_string_replacement(
+                current_content,
+                old_string,
+                new_string,
+                replace_all,
+            )
+            if isinstance(replacement, str):
+                return replacement
+
+            updated_content, occurrences = replacement
+
+            try:
+                self._ensure_content_size(updated_content, encoding=normalised_encoding)
+            except RealFilesystemError as exc:
+                return str(exc)
+
+            display_path = relative_display_path(path, self.options.project_root)
+            diff_info = compute_text_diff(current_content, updated_content, display_path)
+
+            try:
+                self._write_text(path, updated_content, encoding=normalised_encoding)
+            except RealFilesystemError as exc:
+                return str(exc)
+
+            # TODO: persist operation details for session auditing once storage is available.
+
+            return {
+                "status": "success",
+                "path": display_path,
+                "encoding": normalised_encoding,
+                "occurrences": occurrences,
+                "bytes_written": encode_size(updated_content, normalised_encoding),
+                "lines_written": count_lines(updated_content),
+                "diff": diff_info.diff,
+                "diff_stats": {"added": diff_info.added_lines, "removed": diff_info.removed_lines},
+                "diff_truncated": diff_info.truncated,
+            }
+
+        return edit_real_file
 
     # ------------------------------------------------------------------ glob tool
     def build_glob_tool(self, description: str | None = None) -> BaseTool:
@@ -328,12 +646,105 @@ class RealFilesystemToolFactory:
 
         return grep_real_files
 
+    # ------------------------------------------------------------------ execute shell tool
+    def build_execute_shell_tool(self, description: str | None = None) -> BaseTool:
+        prompt = description or EXECUTE_SHELL_PROMPT
+
+        @tool(EXECUTE_SHELL_TOOL_NAME, description=prompt)
+        def execute_shell(
+            command: str,
+            timeout: float | int | None = None,
+            env: Dict[str, str] | None = None,
+        ) -> Dict[str, Any] | str:
+            raw_command = (command or "").strip()
+            if not raw_command:
+                return "Command must not be empty."
+
+            if timeout is None:
+                timeout_value = 60.0
+            else:
+                try:
+                    timeout_value = float(timeout)
+                except (TypeError, ValueError):
+                    return "timeout must be a numeric value in seconds."
+                if timeout_value <= 0:
+                    return "timeout must be greater than zero."
+
+            if env is not None and not isinstance(env, dict):
+                return "env must be a mapping of string keys to string values."
+
+            try:
+                tokens = self._split_command(raw_command)
+                self._validate_command(tokens)
+                self._validate_paths_in_tokens(tokens)
+                environment = self._build_environment(env)
+            except (ValueError, PathValidationError) as exc:
+                return str(exc)
+
+            cwd = self.options.project_root
+            start = time.perf_counter()
+            try:
+                completed = subprocess.run(
+                    tokens,
+                    cwd=str(cwd),
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=timeout_value,
+                )
+                duration = time.perf_counter() - start
+            except subprocess.TimeoutExpired as exc:
+                duration = time.perf_counter() - start
+                stdout, stdout_truncated = self._truncate_output(exc.stdout or "")
+                stderr, stderr_truncated = self._truncate_output(exc.stderr or "")
+                result: Dict[str, Any] = {
+                    "status": "timeout",
+                    "command": raw_command,
+                    "cwd": str(cwd),
+                    "timeout": timeout_value,
+                    "duration": duration,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                }
+                if stdout_truncated or stderr_truncated:
+                    result["output_truncated"] = True
+                return result
+            except OSError as exc:
+                return f"Failed to execute command: {exc}"
+
+            stdout, stdout_truncated = self._truncate_output(completed.stdout or "")
+            stderr, stderr_truncated = self._truncate_output(completed.stderr or "")
+
+            status = "success" if completed.returncode == 0 else "error"
+            result = {
+                "status": status,
+                "command": raw_command,
+                "cwd": str(cwd),
+                "returncode": completed.returncode,
+                "timeout": timeout_value,
+                "duration": duration,
+                "stdout": stdout,
+                "stderr": stderr,
+            }
+            if stdout_truncated or stderr_truncated:
+                result["output_truncated"] = True
+
+            # TODO: persist operation details for session auditing once storage is available.
+
+            return result
+
+        return execute_shell
+
     # ------------------------------------------------------------------ factory helper
     def build_all(self) -> List[BaseTool]:
         return [
             self.build_list_tool(),
             self.build_read_tool(),
+            self.build_write_tool(),
+            self.build_edit_tool(),
             self.build_glob_tool(),
             self.build_grep_tool(),
+            self.build_execute_shell_tool(),
         ]
-
