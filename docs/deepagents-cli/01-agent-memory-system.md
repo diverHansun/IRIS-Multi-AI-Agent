@@ -1,5 +1,88 @@
 # Agent记忆系统实施文档
 
+## Backend机制 vs Middleware机制对比
+
+### 官方Backend机制
+
+官方使用 **Backend机制** 保存长期记忆：
+
+```python
+# 文件存储在真实文件系统
+~/.deepagents/AGENT_NAME/
+├── agent.md              # 核心记忆文件
+└── memories/             # 长期记忆目录
+
+# 创建Backend
+long_term_backend = FilesystemBackend(
+    root_dir=agent_dir,      # ~/.deepagents/AGENT_NAME/
+    virtual_mode=True
+)
+
+# Composite Backend路由
+backend = CompositeBackend(
+    default=FilesystemBackend(),              # 默认：当前工作目录
+    routes={"/memories/": long_term_backend}   # /memories/ → 长期记忆目录
+)
+
+# AgentMemoryMiddleware使用Backend读取
+AgentMemoryMiddleware(
+    backend=long_term_backend,  # 直接读取 agent.md
+    memory_path="/memories/"
+)
+```
+
+**特点**：
+- 真实文件系统持久化，OS级别保证
+- 直接文件访问，简单直观
+- 独立 `agent.md` 文件，agent可自编辑
+- 需要路径安全检查（防目录遍历）
+
+### 我们的Middleware机制
+
+我们使用 **Middleware机制** + LangGraph Store：
+
+```python
+# 存储分布
+AgentState["files"]        # 临时文件（会话内）
+LangGraph Store            # 长期记忆（/memories/前缀）
+
+# VirtualFilesystemMiddleware
+middleware = VirtualFilesystemMiddleware(long_term_memory=True)
+
+# 通过Store访问
+namespace = (assistant_id, "filesystem")
+if path.startswith("/memories/"):
+    # 长期记忆 → Store
+    store.get(namespace, stripped_path)
+else:
+    # 临时文件 → AgentState
+    state.get("files", {}).get(path)
+```
+
+**特点**：
+- LangGraph Store标准抽象，跨平台一致
+- 虚拟环境隔离，无需安全检查
+- 统一的Middleware架构，集成深度高
+- 持久化依赖Checkpointer配置
+
+### 机制对比
+
+| 维度 | Backend机制 | Middleware机制 |
+|------|------------|---------------|
+| **存储位置** | 真实文件系统 | LangGraph Store |
+| **持久化** | OS级别保证 | 依赖配置 |
+| **隔离性** | 需要安全检查 | 虚拟环境隔离 |
+| **复杂度** | 低（文件即存储） | 中（抽象层多） |
+| **扩展性** | 需实现Backend协议 | 扩展现有Middleware |
+| **跨平台** | 路径处理复杂 | 抽象处理一致 |
+
+### 实施策略
+
+**保留现有架构，添加兼容层**：
+- 不迁移到Backend机制（现有Middleware已完善）
+- 添加 `AgentMemoryMiddleware` 适配Store访问
+- 通过Store读取 `agent.md`，保持架构一致性
+
 ## deepagents-cli官方代码的优点
 
 ### 1. AgentMemoryMiddleware设计
