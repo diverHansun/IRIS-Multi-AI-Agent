@@ -440,22 +440,42 @@ def render_file_operation(record: FileOperationRecord, console) -> None:
             console.print(f"[red]Error: {record.error}[/red]")
         return
 
-    # Display operation summary
+    # Display operation summary with icon
     display_path = format_display_path(record.file_path)
-    console.print(f"\n[green]File operation completed: {display_path}[/green]")
+    operation_icon = "\u2713"  # Checkmark
+    console.print(f"\n[green]{operation_icon} File operation completed: {display_path}[/green]")
 
     # Display metrics for write/edit operations
     if record.tool_name in {"write_real_file", "edit_real_file"}:
         metrics = record.metrics
-        if metrics.lines_added or metrics.lines_removed:
-            console.print(
-                f"[dim]Lines: +{metrics.lines_added} / -{metrics.lines_removed} "
-                f"({metrics.lines_written} total)[/dim]"
-            )
-        else:
-            console.print(f"[dim]Lines written: {metrics.lines_written}[/dim]")
 
-        console.print(f"[dim]Bytes written: {metrics.bytes_written}[/dim]")
+        # Build statistics lines
+        stats_lines = []
+
+        if metrics.lines_added or metrics.lines_removed:
+            # Show detailed line changes
+            change_summary = f"+{metrics.lines_added} / -{metrics.lines_removed}"
+            stats_lines.append(f"  Lines changed: [green]+{metrics.lines_added}[/] / [red]-{metrics.lines_removed}[/]")
+            stats_lines.append(f"  Total lines: {metrics.lines_written}")
+        else:
+            # New file or no changes
+            stats_lines.append(f"  Lines written: {metrics.lines_written}")
+
+        # Format bytes with human-readable units
+        bytes_written = metrics.bytes_written
+        if bytes_written >= 1024 * 1024:
+            size_str = f"{bytes_written / (1024 * 1024):.2f} MB"
+        elif bytes_written >= 1024:
+            size_str = f"{bytes_written / 1024:.2f} KB"
+        else:
+            size_str = f"{bytes_written} bytes"
+        stats_lines.append(f"  Size: {size_str}")
+
+        # Display operation type
+        op_type = "File created" if not record.before_content else "File modified"
+        stats_lines.append(f"  Operation: {op_type}")
+
+        console.print("[dim]" + "\n".join(stats_lines) + "[/dim]")
 
         # Display diff if available
         if record.diff:

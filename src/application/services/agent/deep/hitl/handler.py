@@ -7,6 +7,7 @@ import json
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from rich.markup import escape
+from rich.panel import Panel
 from langgraph.types import Interrupt
 
 from .file_ops import build_approval_preview, render_diff_block
@@ -124,17 +125,26 @@ async def _resolve_decision(
     ctx.console.print()
 
     options = _build_options(allowed_decisions, can_auto, is_dangerous)
-    option_lines = ["Please choose:"]
-    option_lines.extend(options["labels"])
-    default_choice = "1" if "1" in options["valid"] else next(iter(options["valid"]))
 
+    # Display all options in a single panel with visual styling
+    options_panel = Panel(
+        "\n".join(options["labels"]),
+        title="[bold]Please Choose[/]",
+        border_style="cyan",
+        padding=(0, 1),
+    )
+    ctx.console.print(options_panel)
+
+    # Require explicit input (no default value)
     while True:
-        ctx.console.print("\n".join(option_lines))
         choice = await asyncio.to_thread(
             ctx.console.input,
-            f"Your choice [{', '.join(sorted(options['valid']))}] (default: {default_choice}): ",
+            f"\n[bold]Your choice[/] [{', '.join(sorted(options['valid']))}]: ",
         )
-        choice = choice.strip() or default_choice
+        choice = choice.strip()
+        if not choice:
+            ctx.console.print("[yellow]Please enter a choice. No default value is provided.[/]")
+            continue
         if choice not in options["valid"]:
             ctx.console.print("[red]Invalid selection. Please choose a valid option.[/]")
             continue
@@ -195,26 +205,46 @@ def _build_options(
     can_auto: bool,
     is_dangerous: bool,
 ) -> Dict[str, Any]:
+    """
+    Build option labels with visual styling.
+
+    Returns a dictionary with:
+        - labels: List of all option strings
+        - valid: Set of valid choice numbers
+    """
     allowed = set(decision.lower() for decision in allowed_decisions)
 
     labels: List[str] = []
     valid_choices: List[str] = []
 
+    # Build approval options with icons and colors
     if "approve" in allowed:
-        labels.append("  [1] Yes - Approve this operation")
+        labels.append("[green][1] \u2713 Yes[/] - Approve this operation")
         valid_choices.append("1")
+
         if can_auto and not is_dangerous:
-            labels.append("  [2] Yes and don't ask again - Auto-approve in this session")
+            labels.append(
+                "[yellow][2] \u26a1 Yes and don't ask again[/] - Auto-approve in this session"
+            )
             valid_choices.append("2")
         else:
-            labels.append("  [2] (Unavailable for this tool)")
+            # Provide specific reason for unavailability
+            if is_dangerous:
+                reason = "Tool is security-sensitive"
+            else:
+                reason = "Tool settings disabled auto-approval"
+            labels.append(f"[dim][2] (Unavailable - {reason})[/]")
 
+    # Build rejection options with icons and colors
     if "reject" in allowed:
-        labels.append("  [3] No - Reject this operation")
-        labels.append("  [4] Tell the agent what to do instead")
+        labels.append("[red][3] \u2717 No[/] - Reject this operation")
+        labels.append("[cyan][4] \u270f Tell the agent what to do instead[/]")
         valid_choices.extend(["3", "4"])
     else:
-        labels.append("  [3] (Reject not allowed for this request)")
-        labels.append("  [4] (Reject with guidance not allowed)")
+        labels.append("[dim][3] (Reject not allowed for this request)[/]")
+        labels.append("[dim][4] (Reject with guidance not allowed)[/]")
 
-    return {"labels": labels, "valid": set(valid_choices)}
+    return {
+        "labels": labels,
+        "valid": set(valid_choices),
+    }
