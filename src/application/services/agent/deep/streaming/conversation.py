@@ -13,6 +13,7 @@ from langgraph.types import Command
 from .event_handler import DeepAgentEventHandler
 from ..hitl.handler import handle_hitl_interrupt
 from ..hitl.session_manager import SessionHITLManager
+from ..hitl.file_ops import FileOpTracker
 
 
 def _get_agent_config(ctx) -> Dict[str, Any]:
@@ -63,7 +64,18 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     hitl_config = metadata.get("hitl_config", {})
     hitl_manager = _ensure_hitl_manager(ctx, hitl_config)
 
-    event_handler = DeepAgentEventHandler(ctx.console, **streaming_opts)
+    # Create file operation tracker for this query
+    file_tracker = FileOpTracker()
+
+    # Pass file_tracker to event_handler for result display
+    event_handler = DeepAgentEventHandler(
+        ctx.console,
+        file_tracker=file_tracker,
+        **streaming_opts
+    )
+
+    # Pass file_tracker to hitl_manager for approval preview
+    hitl_manager._file_tracker = file_tracker
 
     session_id = ctx.session_id or "default"
     runtime_input = agent.create_runtime_input(query)

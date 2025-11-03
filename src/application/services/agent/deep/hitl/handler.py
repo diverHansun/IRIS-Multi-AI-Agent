@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 from rich.markup import escape
 from langgraph.types import Interrupt
 
-from .preview import build_approval_preview
+from .file_ops import build_approval_preview, render_diff_block
 from .session_manager import SessionHITLManager
 
 
@@ -113,16 +113,13 @@ async def _resolve_decision(
         header_lines.append(f"  Preview: {escape(preview.title)}")
         for detail in preview.details:
             header_lines.append(f"    {escape(detail)}")
-        if preview.warning:
-            header_lines.append(f"    Warning: {escape(preview.warning)}")
         if preview.error:
             header_lines.append(f"    Error: {escape(preview.error)}")
 
     ctx.console.print("\n".join(header_lines))
     if preview and preview.diff and not preview.error:
         ctx.console.print()
-        ctx.console.print("[dim]Diff preview:[/]")
-        ctx.console.print(f"[dim]{escape(preview.diff)}[/]")
+        render_diff_block(preview.diff, preview.diff_title or "Diff Preview", ctx.console)
 
     ctx.console.print()
 

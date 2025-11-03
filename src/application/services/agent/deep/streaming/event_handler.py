@@ -18,8 +18,6 @@ except ImportError:
 
 from langgraph.types import Interrupt
 
-from .file_tracker import FileOpTracker
-
 
 @dataclass
 class EventProcessingResult:
@@ -36,6 +34,7 @@ class DeepAgentEventHandler:
         self,
         console,
         *,
+        file_tracker=None,
         show_reasoning_steps: bool = True,
         show_tool_calls: bool = True,
         show_tool_results: bool = True,
@@ -59,7 +58,7 @@ class DeepAgentEventHandler:
         self._tool_call_buffers: Dict[Union[str, int], Dict[str, Any]] = {}
         self._displayed_tool_ids: set[str] = set()
         self._pending_text: str = ""
-        self._file_tracker = FileOpTracker()
+        self._file_tracker = file_tracker
 
         self._spinner_active: bool = False
         self._has_responded: bool = False
@@ -141,16 +140,31 @@ class DeepAgentEventHandler:
         else:
             tool_content = str(content) if content is not None else ""
 
-        record = self._file_tracker.complete_with_message(message)
+        # Track file operations if tracker is available
+        record = None
+        if self._file_tracker:
+            record = self._file_tracker.complete_with_message(message)
 
-        if tool_name == "shell" and tool_status != "success":
+        # Handle bash errors
+        if tool_name == "bash" and tool_status != "success":
             self._flush_text_buffer(final=True)
             if tool_content:
                 self._stop_spinner()
                 self.console.print()
                 self.console.print(tool_content, style="red", markup=False)
                 self.console.print()
-        elif tool_content and isinstance(tool_content, str):
+            return
+
+        # Display file operation results
+        if record and tool_name in {"write_real_file", "edit_real_file"}:
+            from ..hitl.file_ops import render_file_operation
+            self._flush_text_buffer(final=True)
+            self._stop_spinner()
+            render_file_operation(record, self.console)
+            return
+
+        # Handle generic tool errors
+        if tool_content and isinstance(tool_content, str):
             stripped = tool_content.lstrip()
             if stripped.lower().startswith("error"):
                 self._flush_text_buffer(final=True)
@@ -251,7 +265,8 @@ class DeepAgentEventHandler:
 
         if buffer_id is not None:
             self._displayed_tool_ids.add(buffer_id)
-            self._file_tracker.start_operation(buffer_name, parsed_args, buffer_id)
+            if self._file_tracker:
+                self._file_tracker.start_operation(buffer_name, parsed_args, buffer_id)
 
         self._tool_call_buffers.pop(buffer_key, None)
 
