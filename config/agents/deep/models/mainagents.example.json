@@ -33,11 +33,30 @@
         "safety_config": {
           "max_execution_time": 360,
           "hitl_config": {
-            "dangerous_tools": ["delete_file", "execute_shell", "rm", "sudo"],
+            "dangerous_tools": [
+              "delete_file",
+              "execute_shell",
+              "rm",
+              "sudo",
+              "write_real_file",
+              "edit_real_file"
+            ],
             "tools": {
               "delete_file": {
                 "allow_auto_approve": false,
                 "warning_message": "This operation cannot be undone!"
+              },
+              "write_real_file": {
+                "allow_auto_approve": false,
+                "warning_message": "Writing to the host filesystem can overwrite important source files."
+              },
+              "edit_real_file": {
+                "allow_auto_approve": false,
+                "warning_message": "Editing host files modifies source code or configuration."
+              },
+              "execute_shell": {
+                "allow_auto_approve": false,
+                "warning_message": "Shell commands can change or destroy host data."
               }
             }
           }
@@ -85,11 +104,30 @@
         "safety_config": {
           "max_execution_time": 360,
           "hitl_config": {
-            "dangerous_tools": ["delete_file", "execute_shell", "rm", "sudo"],
+            "dangerous_tools": [
+              "delete_file",
+              "execute_shell",
+              "rm",
+              "sudo",
+              "write_real_file",
+              "edit_real_file"
+            ],
             "tools": {
               "delete_file": {
                 "allow_auto_approve": false,
                 "warning_message": "This operation cannot be undone!"
+              },
+              "write_real_file": {
+                "allow_auto_approve": false,
+                "warning_message": "Writing to the host filesystem can overwrite important source files."
+              },
+              "edit_real_file": {
+                "allow_auto_approve": false,
+                "warning_message": "Editing host files modifies source code or configuration."
+              },
+              "execute_shell": {
+                "allow_auto_approve": false,
+                "warning_message": "Shell commands can change or destroy host data."
               }
             }
           }
@@ -137,11 +175,30 @@
         "safety_config": {
           "max_execution_time": 360,
           "hitl_config": {
-            "dangerous_tools": ["delete_file", "execute_shell", "rm", "sudo"],
+            "dangerous_tools": [
+              "delete_file",
+              "execute_shell",
+              "rm",
+              "sudo",
+              "write_real_file",
+              "edit_real_file"
+            ],
             "tools": {
               "delete_file": {
                 "allow_auto_approve": false,
                 "warning_message": "This operation cannot be undone!"
+              },
+              "write_real_file": {
+                "allow_auto_approve": false,
+                "warning_message": "Writing to the host filesystem can overwrite important source files."
+              },
+              "edit_real_file": {
+                "allow_auto_approve": false,
+                "warning_message": "Editing host files modifies source code or configuration."
+              },
+              "execute_shell": {
+                "allow_auto_approve": false,
+                "warning_message": "Shell commands can change or destroy host data."
               }
             }
           }
