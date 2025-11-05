@@ -35,8 +35,7 @@
           "memory_enabled": true,
           "supports_tools": true,
           "streaming": false,
-          "thinking_mode": true,
-          "system_prompt_file": "config/agents/basic/prompts/providers/glm_template.md"
+          "thinking_mode": false
         },
         "glm-4.5-flash": {
           "name": "GLM-4.5-Flash",
@@ -50,8 +49,7 @@
           "memory_enabled": true,
           "supports_tools": true,
           "streaming": false,
-          "thinking_mode": true,
-          "system_prompt_file": "config/agents/basic/prompts/providers/glm_template.md"
+          "thinking_mode": false
         }
       }
     },

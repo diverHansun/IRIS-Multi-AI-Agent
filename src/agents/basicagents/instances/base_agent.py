@@ -3,9 +3,16 @@ Refactored BaseAgent class.
 
 Pure executor that receives fully initialized components.
 No initialization logic, no hardcoded values - configuration driven only.
+
+Design Principles:
+- KISS: Simple and straightforward message parsing
+- SRP: Each method has a single, well-defined responsibility
+- DRY: Reusable extraction methods for common patterns
+- YAGNI: Only implement features that are currently needed
 """
 
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
@@ -102,18 +109,24 @@ class BaseAgent(ABC):
         Returns:
             Dictionary with execution results:
             - output: Final agent response
-            - intermediate_steps: List of tool calls
+            - intermediate_steps: List of tool calls (backward compatibility)
             - tool_calls: Number of tool calls
             - tool_names: List of tool names used
+            - reasoning_steps: List of reasoning steps for detailed display
+            - execution_time: Execution time in seconds
+            - should_show_details: Whether to show detailed steps
             - success: Whether execution succeeded
             - session_id: Session ID (if memory enabled)
             - memory_enabled: Whether memory is enabled
+            - error: Error message (if failed)
 
         Raises:
             AgentExecutionError: If execution fails
         """
         if not self.graph:
             raise AgentExecutionError("Agent graph is not available")
+
+        start_time = time.time()
 
         try:
             # Prepare graph input
@@ -128,10 +141,20 @@ class BaseAgent(ABC):
             else:
                 result = await self.graph.ainvoke(graph_input)
 
+            # Calculate execution time
+            execution_time = time.time() - start_time
+
             # Parse and format result
             parsed = self._parse_graph_output(result)
+
+            # Determine if detailed steps should be shown
+            should_show_details = self._should_show_details(parsed, execution_time)
+
+            # Add metadata
             parsed.update({
                 "success": True,
+                "execution_time": execution_time,
+                "should_show_details": should_show_details,
                 "session_id": session_id if self.enable_memory else None,
                 "memory_enabled": self.enable_memory,
             })
@@ -139,8 +162,23 @@ class BaseAgent(ABC):
             return parsed
 
         except Exception as exc:
+            execution_time = time.time() - start_time
             logger.error(f"Query execution failed: {exc}", exc_info=True)
-            raise AgentExecutionError(f"Query execution failed: {exc}") from exc
+
+            # Return error result with metadata
+            return {
+                "success": False,
+                "error": str(exc),
+                "output": "",
+                "tool_calls": 0,
+                "tool_names": [],
+                "reasoning_steps": [],
+                "intermediate_steps": [],
+                "execution_time": execution_time,
+                "should_show_details": False,
+                "session_id": session_id if self.enable_memory else None,
+                "memory_enabled": self.enable_memory,
+            }
 
     async def ainvoke(
         self,
@@ -232,37 +270,109 @@ class BaseAgent(ABC):
         """
         Parse graph output into standardized format.
 
+        Follows SRP principle: orchestrates extraction methods without
+        implementing extraction logic itself.
+
         Args:
             result: Raw graph execution result
 
         Returns:
-            Parsed result dictionary
+            Parsed result dictionary with all required fields
         """
         messages: List[BaseMessage] = result.get("messages", [])
+
+        # Extract final answer
         output = self._extract_final_output(messages)
+
+        # Extract tool statistics
+        tool_stats = self._extract_tool_stats(messages)
+
+        # Extract reasoning steps for detailed display
+        reasoning_steps = self._extract_reasoning_steps(messages)
+
+        # Extract intermediate steps for backward compatibility
         intermediate_steps = self._extract_intermediate_steps(messages)
-        tool_names = self._extract_tool_names(intermediate_steps)
+
+        logger.debug(
+            f"Parsed output: {len(messages)} messages, "
+            f"{tool_stats['tool_calls']} tool calls, "
+            f"{len(reasoning_steps)} reasoning steps"
+        )
 
         return {
             "output": output,
+            "tool_calls": tool_stats["tool_calls"],
+            "tool_names": tool_stats["tool_names"],
+            "reasoning_steps": reasoning_steps,
             "intermediate_steps": intermediate_steps,
-            "tool_calls": len(intermediate_steps),
-            "tool_names": tool_names,
         }
 
     def _extract_final_output(self, messages: List[BaseMessage]) -> str:
         """
         Extract final AI response from messages.
 
+        Implements proper ReAct pattern detection to skip intermediate steps
+        and extract only the final answer.
+
+        Detection rules:
+        1. Skip messages with tool_calls (intermediate tool invocation)
+        2. Skip ReAct intermediate steps (has 'action' but no 'final_answer')
+        3. Skip thinking-only steps (has 'thought' but no 'final_answer')
+        4. Extract final_answer from dict or return plain text
+
         Args:
-            messages: List of messages from graph
+            messages: List of messages from graph execution
 
         Returns:
-            Final output string
+            Final output string (cleaned and normalized)
         """
         for message in reversed(messages):
-            if isinstance(message, AIMessage):
-                return self._normalize_message_content(message.content)
+            if not isinstance(message, AIMessage):
+                continue
+
+            # Skip intermediate tool calls
+            if hasattr(message, "tool_calls") and message.tool_calls:
+                continue
+
+            content = message.content
+
+            # Handle string that looks like JSON
+            if isinstance(content, str) and content.strip().startswith("{"):
+                try:
+                    import json
+                    parsed_content = json.loads(content)
+                    if isinstance(parsed_content, dict):
+                        # Check if this is a ReAct intermediate step
+                        if "action" in parsed_content and "final_answer" not in parsed_content:
+                            continue
+                        if "thought" in parsed_content and "final_answer" not in parsed_content:
+                            continue
+                        # Extract final answer if present
+                        if "final_answer" in parsed_content:
+                            return self._normalize_message_content(parsed_content["final_answer"])
+                except json.JSONDecodeError:
+                    # Fall through to handle as plain text
+                    pass
+
+            # Handle dictionary content (ReAct format)
+            if isinstance(content, dict):
+                # Skip ReAct intermediate steps
+                if "action" in content and "final_answer" not in content:
+                    continue
+                if "thought" in content and "final_answer" not in content:
+                    continue
+
+                # Extract final answer
+                if "final_answer" in content:
+                    return self._normalize_message_content(content["final_answer"])
+
+                # Fallback: normalize entire dict
+                return self._normalize_message_content(content)
+
+            # Handle plain text or list content
+            return self._normalize_message_content(content)
+
+        logger.warning("No final output found in messages")
         return ""
 
     def _extract_intermediate_steps(
@@ -327,6 +437,106 @@ class BaseAgent(ABC):
                     names.append(tool_name)
         return names
 
+    def _extract_tool_stats(self, messages: List[BaseMessage]) -> Dict[str, Any]:
+        """
+        Extract tool call statistics from messages.
+
+        Follows DRY principle: reuses intermediate_steps extraction logic.
+
+        Args:
+            messages: List of messages from graph execution
+
+        Returns:
+            Dictionary with tool_calls count and tool_names list
+        """
+        tool_calls = 0
+        tool_names_set = set()
+
+        for message in messages:
+            if isinstance(message, AIMessage):
+                if hasattr(message, "tool_calls") and message.tool_calls:
+                    tool_calls += len(message.tool_calls)
+                    for tool_call in message.tool_calls:
+                        tool_name = tool_call.get("name", "unknown")
+                        tool_names_set.add(tool_name)
+
+        return {
+            "tool_calls": tool_calls,
+            "tool_names": sorted(list(tool_names_set)),
+        }
+
+    def _extract_reasoning_steps(self, messages: List[BaseMessage]) -> List[Dict[str, Any]]:
+        """
+        Extract reasoning steps for detailed display.
+
+        Captures tool invocations and their timing (if available).
+        Follows KISS principle: simple structure for display formatting.
+
+        Format (simple version):
+        [
+            {"step": 1, "description": "Tool: web_search"},
+            {"step": 2, "description": "Tool: read_file"},
+        ]
+
+        Args:
+            messages: List of messages from graph execution
+
+        Returns:
+            List of reasoning step dictionaries
+        """
+        steps = []
+        step_number = 0
+
+        for message in messages:
+            if isinstance(message, AIMessage):
+                if hasattr(message, "tool_calls") and message.tool_calls:
+                    for tool_call in message.tool_calls:
+                        step_number += 1
+                        tool_name = tool_call.get("name", "unknown")
+
+                        # Format: simple tool name only (no parameters for BasicAgent)
+                        steps.append({
+                            "step": step_number,
+                            "description": f"Tool: {tool_name}",
+                        })
+
+        return steps
+
+    def _should_show_details(self, parsed: Dict[str, Any], execution_time: float) -> bool:
+        """
+        Determine if detailed steps should be displayed.
+
+        Implements hybrid mode (intelligent switching) based on:
+        - Tool call count > 2
+        - Reasoning steps > 3
+        - Execution time > 30 seconds
+
+        Follows YAGNI principle: simple heuristics without over-engineering.
+
+        Args:
+            parsed: Parsed output dictionary
+            execution_time: Execution time in seconds
+
+        Returns:
+            True if detailed steps should be shown, False otherwise
+        """
+        tool_calls = parsed.get("tool_calls", 0)
+        reasoning_steps = len(parsed.get("reasoning_steps", []))
+
+        should_show = (
+            tool_calls > 2 or
+            reasoning_steps > 3 or
+            execution_time > 30.0
+        )
+
+        logger.debug(
+            f"Display mode decision: tool_calls={tool_calls}, "
+            f"reasoning_steps={reasoning_steps}, execution_time={execution_time:.1f}s "
+            f"-> show_details={should_show}"
+        )
+
+        return should_show
+
     def _normalize_message_content(self, content: Any) -> str:
         """
         Normalize message content to plain string.
@@ -339,14 +549,40 @@ class BaseAgent(ABC):
         """
         if isinstance(content, str):
             return content
+            
+        if isinstance(content, dict):
+            # Handle dict content: check for common keys like final_answer, output, text, content
+            # Priority order: final_answer > output > answer > text > content
+            if "final_answer" in content:
+                # Recursively normalize in case it's also a dict/list
+                return self._normalize_message_content(content["final_answer"])
+            if "output" in content:
+                return self._normalize_message_content(content["output"])
+            if "answer" in content:
+                return self._normalize_message_content(content["answer"])
+            if "text" in content:
+                return self._normalize_message_content(content["text"])
+            if "content" in content:
+                return self._normalize_message_content(content["content"])
+            
+            # If dict doesn't have recognized keys, log warning and convert to string
+            logger.warning(f"Unknown dict format in message content: {list(content.keys())}")
+            return str(content)
+            
         if isinstance(content, list):
             parts = []
             for item in content:
                 if isinstance(item, dict):
-                    parts.append(str(item.get("text") or item.get("content") or item))
+                    # Try to extract meaningful text from dict items
+                    text = (item.get("text") or 
+                           item.get("content") or 
+                           item.get("final_answer") or
+                           str(item))
+                    parts.append(text)
                 else:
                     parts.append(str(item))
             return " ".join(part for part in parts if part)
+            
         return str(content)
 
     def get_agent_info(self) -> Dict[str, Any]:

@@ -73,9 +73,10 @@ class ZhipuAgent(BaseAgent):
             "temperature": self.temperature,
             "max_iterations": self.max_iterations,
             "max_execution_time": self.max_execution_time,
-            "enable_memory": self.enable_memory,
-            "agent_type": self.config.agent_params.get("agent_type", "react"),
+            "tool_count": len(self.tools),
             "tools": [tool.name for tool in self.tools] if self.tools else [],
+            "memory_enabled": self.enable_memory,
+            "agent_type": self.config.agent_params.get("agent_type", "react"),
             "thinking_mode": self.config.provider_specific.get("thinking_mode", False),
         }
 
