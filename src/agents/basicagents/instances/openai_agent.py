@@ -1,56 +1,93 @@
-"""OpenAI agent implementation built on BaseAgent."""
+"""
+OpenAI agent implementation.
+
+Specialized agent for OpenAI models using function calling.
+"""
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from src.llm.managers import llm_manager
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import BaseTool
+from langgraph.graph.state import CompiledStateGraph
 
-from .base_agent import BaseAgent
+from src.agents.basicagents.config import AgentConfig
+from src.agents.basicagents.instances.base_agent import BaseAgent
+from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
 
 class OpenAIAgent(BaseAgent):
-    """OpenAI agent implementation configured for function calling."""
+    """
+    OpenAI agent for GPT models using function calling.
+
+    Supports all OpenAI models (gpt-4o, gpt-4o-mini, gpt-5, etc.)
+    with native function calling capabilities.
+    """
 
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
-        provider: str = "openai",
-        llm_adapter: Optional[Any] = None,
-        agent_adapter: Optional[Any] = None,
-        global_memory_manager: Optional[Any] = None,
-        **kwargs: Any,
-    ) -> None:
+        provider: str,
+        model: str,
+        llm: BaseChatModel,
+        graph: CompiledStateGraph,
+        tools: List[BaseTool],
+        checkpointer: Optional[UnifiedCheckpointer],
+        config: AgentConfig,
+    ):
+        """
+        Initialize OpenAI agent with fully initialized components.
+
+        Args:
+            provider: Provider name (should be 'openai')
+            model: Model name (e.g., 'gpt-4o', 'gpt-4o-mini')
+            llm: Initialized ChatOpenAI instance
+            graph: Compiled state graph
+            tools: List of tools
+            checkpointer: Unified checkpointer (None if memory disabled)
+            config: Agent configuration
+        """
         super().__init__(
-            model=model,
             provider=provider,
-            llm_adapter=llm_adapter,
-            agent_adapter=agent_adapter,
-            global_memory_manager=global_memory_manager,
-            **kwargs,
-        )
-        logger.info("Creating OpenAI agent instance: %s", model)
-
-    async def _create_llm_instance(self, llm_params: Dict[str, Any]):
-        """Create the OpenAI LLM with processed parameters."""
-        params = llm_params.copy()
-        model_name = params.pop("model", self.model)
-        self.model = model_name
-
-        if params.get("temperature") is not None:
-            self.temperature = params["temperature"]
-
-        llm = await llm_manager.create_llm(
-            provider="openai",
-            model=model_name,
-            mode="agent",
-            **params,
+            model=model,
+            llm=llm,
+            graph=graph,
+            tools=tools,
+            checkpointer=checkpointer,
+            config=config,
         )
 
-        logger.info("OpenAI LLM created: %s (%s)", model_name, params)
-        return llm
+        logger.info(f"OpenAIAgent initialized for model: {model}")
+
+    def get_info(self) -> Dict[str, Any]:
+        """
+        Return agent information for display and tracking.
+
+        Returns:
+            Dictionary containing agent metadata
+        """
+        return {
+            "provider": self.provider,
+            "model": self.model,
+            "temperature": self.temperature,
+            "max_iterations": self.max_iterations,
+            "max_execution_time": self.max_execution_time,
+            "enable_memory": self.enable_memory,
+            "agent_type": self.config.agent_params.get("agent_type", "function_calling"),
+            "tools": [tool.name for tool in self.tools] if self.tools else [],
+            "temperature_fixed": self.config.provider_specific.get("temperature_fixed", False),
+        }
+
+    def get_llm(self) -> BaseChatModel:
+        """Return the LLM instance for external use."""
+        return self.llm
 
     def _get_provider_name(self) -> str:
-        """Return provider identifier used by info lookups."""
-        return "openai"
+        """
+        Get provider identifier.
+
+        Returns:
+            Provider name string ('openai')
+        """
+        return self.provider

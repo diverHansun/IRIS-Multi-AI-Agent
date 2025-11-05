@@ -1,193 +1,191 @@
-"""Zhipu agent adapter responsible for LLM creation and graph creation."""
+"""
+Refactored Zhipu agent adapter.
+
+Handles Zhipu-specific LLM creation, graph creation, and agent instantiation.
+"""
 
 import logging
-from typing import Any, Dict, Optional, Sequence
+from typing import List, Optional
 
 from langchain.agents import create_agent
 from langchain_community.chat_models import ChatZhipuAI
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import BaseTool
+from langgraph.graph.state import CompiledStateGraph
 
-from .base import AgentAdapter
-from src.components.basicagents.prompts.registry import PromptRegistry
-from src.components.shared.memory.checkpointer import BaseAgentCheckpointer
-from src.core.providers.basicagents_provider_registry import BasicAgentsProviderRegistry
+from src.agents.basicagents.adapters.base import AgentAdapter
+from src.agents.basicagents.config import AgentConfig
+from src.agents.basicagents.exceptions import LLMCreationError, GraphCreationError
+from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
 
 class ZhipuAgentAdapter(AgentAdapter):
-    """Zhipu agent adapter using official ChatZhipuAI SDK."""
+    """
+    Zhipu agent adapter using official ChatZhipuAI SDK.
 
-    def __init__(
-        self,
-        model: Optional[str],
-        provider_registry: Optional[BasicAgentsProviderRegistry] = None,
-    ):
+    Handles Zhipu-specific features:
+    - thinking_mode for glm-4.5 models
+    - Model-based agent type selection (react vs function_calling)
+    - System prompt configuration
+    """
+
+    def __init__(self, config: AgentConfig):
         """
         Initialize Zhipu agent adapter.
 
         Args:
-            model: Model name. If None, uses default model
-            provider_registry: Optional custom registry instance
+            config: Fully resolved AgentConfig instance
         """
-        super().__init__("zhipu", model, provider_registry=provider_registry)
+        super().__init__(config)
 
-    def _create_llm_instance(
-        self,
-        api_key: Optional[str],
-        base_url: Optional[str],
-        llm_params: Dict[str, Any],
-        user_params: Dict[str, Any],
-    ) -> ChatZhipuAI:
+    def create_llm(self) -> BaseChatModel:
         """
-        Create ChatZhipuAI instance using official SDK.
+        Create ChatZhipuAI instance.
 
-        Zhipu uses official SDK, does not need base_url.
-
-        Args:
-            api_key: Zhipu API key from environment
-            base_url: Not used for Zhipu (official SDK)
-            llm_params: LLM parameters (temperature, max_tokens, etc.)
-            user_params: Additional user parameters
+        Uses config.llm_params for all parameters.
+        Applies thinking_mode if specified in provider_specific.
 
         Returns:
             ChatZhipuAI instance
 
         Raises:
-            ValueError: If API key is not provided
+            LLMCreationError: If LLM creation fails
         """
-        if not api_key:
-            raise ValueError("Zhipu API key is required but not found in environment")
+        try:
+            llm_params = self.config.llm_params
 
-        # Build ChatZhipuAI parameters
-        zhipu_params = {
-            "model": llm_params["model"],
-            "zhipuai_api_key": api_key,
-            "streaming": llm_params.get("streaming", False),
-        }
+            # Build ChatZhipuAI parameters
+            zhipu_params = {
+                "model": llm_params["model"],
+                "zhipuai_api_key": llm_params["api_key"],
+                "streaming": llm_params.get("streaming", False),
+            }
 
-        # Add optional parameters
-        if llm_params.get("temperature") is not None:
-            zhipu_params["temperature"] = llm_params["temperature"]
+            # Add optional parameters (no hardcoded defaults)
+            if llm_params.get("temperature") is not None:
+                zhipu_params["temperature"] = llm_params["temperature"]
 
-        if llm_params.get("max_tokens") is not None:
-            zhipu_params["max_tokens"] = llm_params["max_tokens"]
+            if llm_params.get("max_tokens") is not None:
+                zhipu_params["max_tokens"] = llm_params["max_tokens"]
 
-        # Add thinking_mode for glm-4.5 models
-        if self._config.get("thinking_mode"):
-            zhipu_params["thinking"] = True
-            logger.debug(f"Model {self.model} using thinking_mode=True")
+            # Zhipu-specific: thinking_mode
+            if self.config.provider_specific.get("thinking_mode"):
+                zhipu_params["thinking"] = True
+                logger.debug(f"Model {self.model} using thinking_mode")
 
-        logger.debug(f"Creating ChatZhipuAI with params: {zhipu_params.keys()}")
+            logger.debug(f"Creating ChatZhipuAI with params: {list(zhipu_params.keys())}")
 
-        return ChatZhipuAI(**zhipu_params)
+            return ChatZhipuAI(**zhipu_params)
 
-    def get_agent_params(self, **user_params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Collect Zhipu agent parameters.
+        except Exception as e:
+            raise LLMCreationError(
+                provider=self.provider,
+                model=self.model,
+                reason=str(e)
+            ) from e
 
-        Args:
-            **user_params: User-provided parameter overrides
-
-        Returns:
-            Merged agent parameters
-        """
-        params = super().get_agent_params(**user_params)
-
-        if self.model in ["glm-4.5", "glm-4.5-flash"]:
-            logger.debug(
-                "Model %s using configured max_iterations=%s",
-                self.model,
-                params.get("max_iterations"),
-            )
-
-        return params
-
-    def create_agent_graph(
+    def create_graph(
         self,
-        llm: Any,
-        tools: Sequence[Any],
-        *,
-        checkpointer: Optional[BaseAgentCheckpointer] = None,
-        **params: Any,
-    ):
+        llm: BaseChatModel,
+        tools: List[BaseTool],
+        checkpointer: Optional[UnifiedCheckpointer],
+    ) -> CompiledStateGraph:
         """
-        Create the CompiledStateGraph for Zhipu models.
+        Create agent graph for Zhipu models.
+
+        Uses system_prompt from config.provider_specific.
+        Falls back to default prompt if not configured.
 
         Args:
             llm: ChatZhipuAI instance
             tools: List of tools
-            checkpointer: Optional checkpointer for memory
-            **params: Additional parameters
+            checkpointer: UnifiedCheckpointer instance or None
 
         Returns:
-            CompiledStateGraph instance
+            Compiled state graph
+
+        Raises:
+            GraphCreationError: If graph creation fails
         """
-        agent_params = self.get_agent_params(**params)
+        try:
+            # Get system_prompt from config (no hardcoded prompts)
+            system_prompt = self.config.provider_specific.get("system_prompt")
 
-        # Select appropriate prompt based on model capabilities
-        if self.model in ["glm-4.5", "glm-4.5-flash"]:
-            logger.info("Model %s using Tool Calling prompt", self.model)
-            template_text = PromptRegistry.get_prompt(
-                agent_type="tool_calling",
-                provider="glm",
-                locale="zh_CN",
+            if not system_prompt:
+                # Fallback to default prompt
+                system_prompt = (
+                    "You are a helpful assistant. Use the available tools when necessary "
+                    "and provide clear, direct answers when a tool call is not required."
+                )
+                logger.debug("Using default system prompt (no prompt configured)")
+
+            logger.debug(f"Creating graph with system_prompt length: {len(system_prompt)}")
+
+            graph = create_agent(
+                model=llm,
+                tools=tools,
+                system_prompt=system_prompt,
+                checkpointer=checkpointer if checkpointer else None,
             )
-        else:
-            logger.info("Model %s using ReAct prompt", self.model)
-            template_text = PromptRegistry.get_prompt(
-                agent_type="react_json",
-                provider="glm",
-                locale="zh_CN",
+
+            logger.info(
+                f"Graph created for {self.provider}/{self.model} "
+                f"(agent_type={self.config.agent_params.get('agent_type')})"
             )
 
-        system_prompt = self._convert_template_to_system_prompt(template_text)
+            return graph
 
-        graph = create_agent(
-            model=llm,
-            tools=tools,
-            system_prompt=system_prompt,
-            checkpointer=checkpointer.checkpointer if checkpointer else None,
-        )
+        except Exception as e:
+            raise GraphCreationError(
+                provider=self.provider,
+                model=self.model,
+                reason=str(e)
+            ) from e
 
-        logger.info(
-            "CompiledStateGraph created: provider=%s model=%s max_iterations=%s max_execution_time=%s",
-            self.provider,
-            self.model,
-            agent_params.get("max_iterations"),
-            agent_params.get("max_execution_time"),
-        )
-
-        return graph
-
-    def _convert_template_to_system_prompt(self, template_text: str) -> str:
+    def _instantiate_agent(
+        self,
+        llm: BaseChatModel,
+        graph: CompiledStateGraph,
+        tools: List[BaseTool],
+        checkpointer: Optional[UnifiedCheckpointer],
+    ):
         """
-        Convert legacy template text into a concise system prompt.
+        Instantiate Zhipu agent.
+
+        Selects agent class based on agent_type:
+        - function_calling -> ZhipuFCallAgent
+        - react -> ZhipuAgent
 
         Args:
-            template_text: Template text from prompt registry
+            llm: ChatZhipuAI instance
+            graph: Compiled state graph
+            tools: List of tools
+            checkpointer: UnifiedCheckpointer instance or None
 
         Returns:
-            System prompt string
+            ZhipuAgent or ZhipuFCallAgent instance
         """
-        return (
-            "You are a helpful assistant. Use the available tools when necessary and "
-            "provide clear, direct answers when a tool call is not required."
+        from src.agents.basicagents.instances import ZhipuAgent, ZhipuFCallAgent
+
+        # Select agent class based on agent_type from config
+        agent_type = self.config.agent_params.get("agent_type", "react")
+
+        if agent_type == "function_calling":
+            agent_class = ZhipuFCallAgent
+            logger.debug(f"Using ZhipuFCallAgent for {self.model}")
+        else:
+            agent_class = ZhipuAgent
+            logger.debug(f"Using ZhipuAgent for {self.model}")
+
+        # Create agent with all initialized components
+        return agent_class(
+            provider=self.config.provider,
+            model=self.config.model,
+            llm=llm,
+            graph=graph,
+            tools=tools,
+            checkpointer=checkpointer,
+            config=self.config,
         )
-
-    def supports_function_calling(self) -> bool:
-        """
-        Return whether the model supports function calling.
-
-        Returns:
-            True if model supports function calling, False otherwise
-        """
-        return self.model in ["glm-4.5", "glm-4.5-flash"]
-
-    def get_agent_type(self) -> str:
-        """
-        Return the preferred agent type.
-
-        Returns:
-            "function_calling" or "react"
-        """
-        return "function_calling" if self.supports_function_calling() else "react"

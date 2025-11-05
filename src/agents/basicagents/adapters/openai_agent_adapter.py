@@ -1,170 +1,192 @@
-"""OpenAI agent adapter implementing LangChain agent graph creation."""
+"""
+Refactored OpenAI agent adapter.
+
+Handles OpenAI-specific LLM creation, graph creation, and agent instantiation.
+"""
 
 import logging
-from typing import Any, Dict, Optional, Sequence
+from typing import List, Optional
 
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import BaseTool
+from langgraph.graph.state import CompiledStateGraph
 
-from .base import AgentAdapter
-from src.components.shared.memory.checkpointer import BaseAgentCheckpointer
-from src.core.providers.basicagents_provider_registry import BasicAgentsProviderRegistry
+from src.agents.basicagents.adapters.base import AgentAdapter
+from src.agents.basicagents.config import AgentConfig
+from src.agents.basicagents.exceptions import LLMCreationError, GraphCreationError
+from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
 
 class OpenAIAgentAdapter(AgentAdapter):
-    """OpenAI agent adapter using ChatOpenAI."""
+    """
+    OpenAI agent adapter using ChatOpenAI.
 
-    def __init__(
-        self,
-        model: Optional[str],
-        provider_registry: Optional[BasicAgentsProviderRegistry] = None,
-    ):
+    Handles OpenAI-specific features:
+    - temperature_fixed for models that enforce specific temperature
+    - Custom base_url support for proxies/alternative endpoints
+    - System prompt configuration
+    """
+
+    def __init__(self, config: AgentConfig):
         """
         Initialize OpenAI agent adapter.
 
         Args:
-            model: Model name. If None, uses default model
-            provider_registry: Optional custom registry instance
+            config: Fully resolved AgentConfig instance
         """
-        super().__init__("openai", model, provider_registry=provider_registry)
+        super().__init__(config)
 
-    def _create_llm_instance(
-        self,
-        api_key: Optional[str],
-        base_url: Optional[str],
-        llm_params: Dict[str, Any],
-        user_params: Dict[str, Any],
-    ) -> ChatOpenAI:
+    def create_llm(self) -> BaseChatModel:
         """
         Create ChatOpenAI instance.
 
-        OpenAI can use custom base_url for proxy/alternative endpoints.
-
-        Args:
-            api_key: OpenAI API key from environment
-            base_url: API base URL (from config or env override)
-            llm_params: LLM parameters (temperature, max_tokens, etc.)
-            user_params: Additional user parameters
+        Uses config.llm_params for all parameters.
+        Handles temperature_fixed if specified in provider_specific.
 
         Returns:
             ChatOpenAI instance
 
         Raises:
-            ValueError: If API key is not provided
+            LLMCreationError: If LLM creation fails
         """
-        if not api_key:
-            raise ValueError("OpenAI API key is required but not found in environment")
+        try:
+            llm_params = self.config.llm_params
 
-        # Build ChatOpenAI parameters
-        openai_params = {
-            "model": llm_params["model"],
-            "openai_api_key": api_key,
-            "streaming": llm_params.get("streaming", False),
-        }
+            # Build ChatOpenAI parameters
+            openai_params = {
+                "model": llm_params["model"],
+                "openai_api_key": llm_params["api_key"],
+                "streaming": llm_params.get("streaming", False),
+            }
 
-        # Add base_url if provided (for proxy/alternative endpoints)
-        if base_url:
-            openai_params["base_url"] = base_url
-            logger.debug(f"Using custom base_url: {base_url}")
+            # Add base_url if provided (for proxy/alternative endpoints)
+            if llm_params.get("base_url"):
+                openai_params["base_url"] = llm_params["base_url"]
+                logger.debug(f"Using custom base_url: {llm_params['base_url']}")
 
-        # Add optional parameters
-        if llm_params.get("temperature") is not None:
-            # Handle temperature_fixed for GPT-5 models
-            if self._config.get("temperature_fixed"):
-                fixed_temp = self._config.get("temperature", 1.0)
-                openai_params["temperature"] = fixed_temp
-                if llm_params["temperature"] != fixed_temp:
-                    logger.warning(
-                        "Model %s enforces temperature=%s (user input %s ignored)",
-                        self.model,
-                        fixed_temp,
-                        llm_params["temperature"],
+            # Handle temperature (check for temperature_fixed)
+            if llm_params.get("temperature") is not None:
+                if self.config.provider_specific.get("temperature_fixed"):
+                    # Model enforces a fixed temperature
+                    fixed_temp = llm_params["temperature"]
+                    openai_params["temperature"] = fixed_temp
+                    logger.info(
+                        f"Model {self.model} enforces temperature={fixed_temp} "
+                        "(temperature_fixed=true)"
                     )
-            else:
-                openai_params["temperature"] = llm_params["temperature"]
+                else:
+                    openai_params["temperature"] = llm_params["temperature"]
 
-        if llm_params.get("max_tokens") is not None:
-            openai_params["max_tokens"] = llm_params["max_tokens"]
+            # Add max_tokens if provided
+            if llm_params.get("max_tokens") is not None:
+                openai_params["max_tokens"] = llm_params["max_tokens"]
 
-        logger.debug(f"Creating ChatOpenAI with params: {openai_params.keys()}")
+            logger.debug(f"Creating ChatOpenAI with params: {list(openai_params.keys())}")
 
-        return ChatOpenAI(**openai_params)
+            return ChatOpenAI(**openai_params)
 
-    def get_agent_params(self, **user_params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Collect OpenAI specific agent parameters.
+        except Exception as e:
+            raise LLMCreationError(
+                provider=self.provider,
+                model=self.model,
+                reason=str(e)
+            ) from e
 
-        Args:
-            **user_params: User-provided parameter overrides
-
-        Returns:
-            Merged agent parameters
-        """
-        params = super().get_agent_params(**user_params)
-        logger.debug("OpenAI agent params: %s", params)
-        return params
-
-    def create_agent_graph(
+    def create_graph(
         self,
-        llm: Any,
-        tools: Sequence[Any],
-        *,
-        checkpointer: Optional[BaseAgentCheckpointer] = None,
-        **params: Any,
-    ):
+        llm: BaseChatModel,
+        tools: List[BaseTool],
+        checkpointer: Optional[UnifiedCheckpointer],
+    ) -> CompiledStateGraph:
         """
-        Create the CompiledStateGraph for OpenAI models.
+        Create agent graph for OpenAI models.
+
+        Uses system_prompt from config.provider_specific.
+        Falls back to default prompt if not configured.
 
         Args:
             llm: ChatOpenAI instance
             tools: List of tools
-            checkpointer: Optional checkpointer for memory
-            **params: Additional parameters
+            checkpointer: UnifiedCheckpointer instance or None
 
         Returns:
-            CompiledStateGraph instance
+            Compiled state graph
+
+        Raises:
+            GraphCreationError: If graph creation fails
         """
-        agent_params = self.get_agent_params(**params)
+        try:
+            # Get system_prompt from config (no hardcoded prompts)
+            system_prompt = self.config.provider_specific.get("system_prompt")
 
-        system_prompt = (
-            "You are a helpful assistant. Use the provided tools when necessary to "
-            "produce accurate and concise answers. Explain tool usage briefly and "
-            "reply directly when no tool call is required."
-        )
+            if not system_prompt:
+                # Fallback to default prompt
+                system_prompt = (
+                    "You are a helpful assistant. Use the provided tools when necessary to "
+                    "produce accurate and concise answers. Explain tool usage briefly and "
+                    "reply directly when no tool call is required."
+                )
+                logger.debug("Using default system prompt (no prompt configured)")
 
-        graph = create_agent(
-            model=llm,
+            logger.debug(f"Creating graph with system_prompt length: {len(system_prompt)}")
+
+            graph = create_agent(
+                model=llm,
+                tools=tools,
+                system_prompt=system_prompt,
+                checkpointer=checkpointer if checkpointer else None,
+            )
+
+            logger.info(
+                f"Graph created for {self.provider}/{self.model} "
+                f"(agent_type={self.config.agent_params.get('agent_type')})"
+            )
+
+            return graph
+
+        except Exception as e:
+            raise GraphCreationError(
+                provider=self.provider,
+                model=self.model,
+                reason=str(e)
+            ) from e
+
+    def _instantiate_agent(
+        self,
+        llm: BaseChatModel,
+        graph: CompiledStateGraph,
+        tools: List[BaseTool],
+        checkpointer: Optional[UnifiedCheckpointer],
+    ):
+        """
+        Instantiate OpenAI agent.
+
+        Returns OpenAIAgent instance.
+
+        Args:
+            llm: ChatOpenAI instance
+            graph: Compiled state graph
+            tools: List of tools
+            checkpointer: UnifiedCheckpointer instance or None
+
+        Returns:
+            OpenAIAgent instance
+        """
+        from src.agents.basicagents.instances import OpenAIAgent
+
+        logger.debug(f"Using OpenAIAgent for {self.model}")
+
+        # Create agent with all initialized components
+        return OpenAIAgent(
+            provider=self.config.provider,
+            model=self.config.model,
+            llm=llm,
+            graph=graph,
             tools=tools,
-            system_prompt=system_prompt,
-            checkpointer=checkpointer.checkpointer if checkpointer else None,
+            checkpointer=checkpointer,
+            config=self.config,
         )
-
-        logger.info(
-            "CompiledStateGraph created for provider=%s model=%s max_iterations=%s max_execution_time=%s",
-            self.provider,
-            self.model,
-            agent_params.get("max_iterations"),
-            agent_params.get("max_execution_time"),
-        )
-
-        return graph
-
-    def supports_function_calling(self) -> bool:
-        """
-        OpenAI models support function calling.
-
-        Returns:
-            True (all OpenAI models support function calling)
-        """
-        return True
-
-    def get_agent_type(self) -> str:
-        """
-        Return the default agent type.
-
-        Returns:
-            "function_calling"
-        """
-        return "function_calling"

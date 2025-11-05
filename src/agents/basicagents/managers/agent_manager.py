@@ -1,16 +1,25 @@
 """
-Agent Manager - Unified entry point for agent creation and management.
+Refactored AgentManager - Unified entry point for agent creation.
 
-Responsible for coordinating agent creation and applying configuration parameters.
+Simplified manager that directly calls Adapter (Factory layer removed).
+Focuses on configuration resolution and routing to appropriate Adapter.
 
 Following SOLID principles:
 - SRP: Manages only agent creation workflow
-- OCP: Extendable via factory pattern
-- DIP: Depends on BasicAgentsProviderRegistry abstraction
+- OCP: Extendable via adapter pattern
+- DIP: Depends on AgentConfig and AgentAdapter abstractions
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+import warnings
+from typing import Any, Dict, List, Optional
+
+from src.agents.basicagents.config import AgentConfig
+from src.agents.basicagents.exceptions import (
+    ProviderNotFoundError,
+    AgentCreationError,
+)
+from src.core.providers import basicagents_registry
 
 logger = logging.getLogger(__name__)
 
@@ -19,36 +28,37 @@ class AgentManager:
     """
     Agent manager for BasicAgents module.
 
+    New implementation:
+    - Parses configuration once via AgentConfig
+    - Routes to appropriate Adapter
+    - Adapter handles full assembly
+    - No Factory layer
+
     Responsibilities:
     - Coordinate agent creation workflow
-    - Integrate Agent Adapter and Factory
-    - Apply agent configuration parameters
+    - Resolve configuration via AgentConfig
+    - Route to correct Adapter
     """
 
     def __init__(self):
         """Initialize Agent Manager."""
-        from src.core.providers import basicagents_registry
-        from src.agents.basicagents.factories.registry import FactoryRegistry
-
         self.provider_registry = basicagents_registry
-        self.factory_registry = FactoryRegistry()
-
-        logger.info("AgentManager initialized")
+        logger.info("AgentManager initialized (new implementation)")
 
     async def create_agent(
         self,
         provider: str,
-        model: str = None,
-        agent_type: str = "auto",
-        **user_params
+        model: Optional[str] = None,
+        **user_params: Any
     ):
         """
-        Create Agent instance.
+        Create Agent instance using new optimized path.
+
+        This is the new implementation that bypasses Factory layer.
 
         Args:
             provider: Provider name (zhipu, openai, ollama)
             model: Model name. If None, uses default model
-            agent_type: Agent type ("auto", "react", "function_calling")
             **user_params: User-provided parameters to override config defaults
                 - temperature: Temperature parameter
                 - max_iterations: Maximum iterations
@@ -58,89 +68,107 @@ class AgentManager:
                 etc.
 
         Returns:
-            Initialized Agent instance
+            Fully initialized Agent instance
+
+        Raises:
+            ProviderNotFoundError: If provider not found
+            ModelNotFoundError: If model not found
+            AuthenticationError: If API key not found
+            ConfigurationError: If configuration invalid
+            AgentCreationError: If agent creation fails
 
         Example:
             >>> from src.agents.basicagents.managers import agent_manager
             >>> agent = await agent_manager.create_agent(
             ...     provider="zhipu",
             ...     model="glm-4.5",
-            ...     verbose=True
+            ...     temperature=0.3,
             ... )
         """
         provider = provider.lower()
 
-        # Get provider configuration to resolve default model
-        provider_config = self._get_provider_config(provider)
-        if not model:
-            model = provider_config.get("default_model")
-
-        logger.info(f"Creating agent: {provider}/{model}")
-
-        # Create Agent Adapter (includes LLM creation capability)
-        agent_adapter = self._create_agent_adapter(provider, model)
-
-        # Create LLM using agent adapter
-        llm = agent_adapter.create_llm(**user_params)
-
-        # Get Factory and create Agent
-        factory = self.factory_registry.get_factory(provider)
-        if not factory:
-            raise ValueError(f"No factory found for provider: {provider}")
-
-        # Use Factory to create Agent
-        agent = await factory.create_agent_with_adapters(
-            model=model,
-            llm_adapter=None,  # No longer needed, adapter creates LLM directly
-            agent_adapter=agent_adapter,
-            llm=llm,  # Pass created LLM directly
-            **user_params
-        )
-
-        logger.info(f"Agent created: {agent.__class__.__name__}")
-        return agent
-
-    def _get_provider_config(self, provider: str) -> Dict[str, Any]:
-        """
-        Get provider configuration.
-
-        Args:
-            provider: Provider name
-
-        Returns:
-            Provider configuration dict
-
-        Raises:
-            ValueError: If provider not found
-        """
         try:
-            config = self.provider_registry.get_provider_config(provider)
-            if not config:
-                raise ValueError(f"Provider {provider} not found")
-            return config
-        except Exception as e:
-            logger.error(f"Failed to get provider config: {e}")
-            raise
+            # Step 1: Parse configuration (validates everything including API key)
+            logger.info(f"Creating agent: {provider}/{model}")
+            config = AgentConfig.from_registry(
+                self.provider_registry,
+                provider,
+                model,
+                **user_params
+            )
 
-    def _create_agent_adapter(self, provider: str, model: str):
+            # Step 2: Create Adapter
+            adapter = self._create_adapter(provider, config)
+
+            # Step 3: Adapter creates fully initialized agent
+            agent = await adapter.create_agent()
+
+            logger.info(f"Agent created successfully: {agent.__class__.__name__}")
+            return agent
+
+        except (ProviderNotFoundError, AgentCreationError) as e:
+            # Re-raise our custom exceptions
+            raise
+        except Exception as e:
+            # Wrap unexpected exceptions
+            logger.error(f"Unexpected error during agent creation: {e}", exc_info=True)
+            raise AgentCreationError(
+                f"Failed to create agent for {provider}/{model}: {e}"
+            ) from e
+
+    async def create_agent_legacy(
+        self,
+        provider: str,
+        model: Optional[str] = None,
+        agent_type: str = "auto",
+        **user_params: Any
+    ):
         """
-        Create Agent adapter.
+        Create Agent instance using legacy path (DEPRECATED).
+
+        This method maintains backward compatibility with old Factory-based approach.
+        Use create_agent() instead.
 
         Args:
             provider: Provider name
             model: Model name
+            agent_type: Agent type (not used in new implementation)
+            **user_params: User parameters
 
         Returns:
-            Agent adapter instance
+            Initialized Agent instance
 
-        Raises:
-            ValueError: If no adapter found for provider
+        Deprecated:
+            Use create_agent() instead. This method will be removed in future versions.
         """
-        from src.agents.basicagents.adapters import (
-            ZhipuAgentAdapter,
-            OpenAIAgentAdapter,
+        warnings.warn(
+            "create_agent_legacy() is deprecated. Use create_agent() instead. "
+            "Legacy path will be removed in v5.0.",
+            DeprecationWarning,
+            stacklevel=2
         )
 
+        # Call new implementation
+        return await self.create_agent(provider, model, **user_params)
+
+    def _create_adapter(self, provider: str, config: AgentConfig):
+        """
+        Create appropriate Adapter for provider.
+
+        Args:
+            provider: Provider name
+            config: Resolved AgentConfig
+
+        Returns:
+            Adapter instance
+
+        Raises:
+            ProviderNotFoundError: If no adapter found for provider
+        """
+        from src.agents.basicagents.adapters.zhipu_agent_adapter import ZhipuAgentAdapter
+        from src.agents.basicagents.adapters.openai_agent_adapter import OpenAIAgentAdapter
+
+        # Adapter mapping
         adapter_map = {
             "zhipu": ZhipuAgentAdapter,
             "openai": OpenAIAgentAdapter,
@@ -148,12 +176,11 @@ class AgentManager:
 
         adapter_class = adapter_map.get(provider)
         if not adapter_class:
-            raise ValueError(f"No Agent adapter found for provider: {provider}")
+            available_providers = list(adapter_map.keys())
+            raise ProviderNotFoundError(provider, available_providers)
 
-        return adapter_class(
-            model=model,
-            provider_registry=self.provider_registry,
-        )
+        logger.debug(f"Creating {adapter_class.__name__} for {provider}")
+        return adapter_class(config=config)
 
     def get_available_agents(self) -> List[Dict[str, Any]]:
         """
@@ -170,9 +197,8 @@ class AgentManager:
             provider = provider_key.lower()
             models = provider_config.get("models", {})
 
-            # Use predefined model list from configuration
+            # Iterate through model configurations
             for model_name, model_config in models.items():
-                # Determine agent type from config
                 agent_type = model_config.get("agent_type", "react")
 
                 agents.append({
@@ -191,8 +217,8 @@ class AgentManager:
 agent_manager = AgentManager()
 
 
-# Convenience functions
-async def create_agent(provider: str, model: str = None, **kwargs):
+# Convenience function
+async def create_agent(provider: str, model: Optional[str] = None, **kwargs):
     """
     Convenience function to create Agent instance.
 

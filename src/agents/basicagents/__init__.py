@@ -1,13 +1,20 @@
 """
-智能代理模块
+BasicAgents Module - Refactored Architecture
 
-提供各种Agent提供商的实现。
+Streamlined agent creation with Adapter pattern (Factory layer removed).
 
-架构说明：
-- instances/: Agent具体实现（BaseAgent, ZhipuAgent, OpenAIAgent）
-- factories/: 抽象工厂模式（FactoryRegistry, ZhipuFactory, OpenAIFactory）
-- builders/: 建造者模式（AgentBuilder, AgentPresets）
-- agent_factory.py: 统一工厂入口（内部使用Registry，保持向后兼容）
+Architecture:
+- instances/: Agent implementations (BaseAgent, ZhipuAgent, OpenAIAgent)
+- adapters/: Provider-specific adapters for LLM/graph creation
+- managers/: Agent manager for unified agent creation
+- config.py: Centralized configuration via AgentConfig
+- exceptions.py: Unified error handling
+
+Usage:
+    from src.agents.basicagents import agent_manager
+
+    agent = await agent_manager.create_agent("zhipu", "glm-4.5-flash")
+    result = await agent.invoke("query", session_id="user123")
 """
 
 # Agent Instances
@@ -18,33 +25,33 @@ from .instances import (
     OpenAIAgent,
 )
 
-# Factory Pattern - 现在从 factories 模块导入
-from .factories import (
-    # Abstract Factory Pattern
-    BaseAgentFactory,
-    ZhipuAgentFactory,
-    OpenAIAgentFactory,
-    FactoryRegistry,
-    get_global_registry,
-    agent_factory,
-)
-
-# 向后兼容：AgentFactory 类别名
-AgentFactory = FactoryRegistry
-
-# Builder Pattern removed in v4.0
-# Use agent_manager.create_agent() instead
-
-# Manager Pattern (Recommended)
+# Manager Pattern (Recommended API)
 from .managers import (
     agent_manager,
     AgentManager,
+    create_agent,
+    get_available_agents,
+)
+
+# Configuration
+from .config import AgentConfig
+
+# Exceptions
+from .exceptions import (
+    BasicAgentError,
+    ConfigurationError,
+    AuthenticationError,
+    ProviderNotFoundError,
+    ModelNotFoundError,
+    AgentCreationError,
 )
 
 __all__ = [
     # Recommended API
     "agent_manager",
     "AgentManager",
+    "create_agent",
+    "get_available_agents",
 
     # Agent instances
     "BaseAgent",
@@ -52,12 +59,14 @@ __all__ = [
     "ZhipuFCallAgent",
     "OpenAIAgent",
 
-    # Factory Pattern
-    "AgentFactory",
-    "agent_factory",
-    "BaseAgentFactory",
-    "ZhipuAgentFactory",
-    "OpenAIAgentFactory",
-    "FactoryRegistry",
-    "get_global_registry",
+    # Configuration
+    "AgentConfig",
+
+    # Exceptions
+    "BasicAgentError",
+    "ConfigurationError",
+    "AuthenticationError",
+    "ProviderNotFoundError",
+    "ModelNotFoundError",
+    "AgentCreationError",
 ] 

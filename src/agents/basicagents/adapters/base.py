@@ -1,220 +1,236 @@
-"""Base class for agent adapters.
+"""
+Refactored AgentAdapter base class.
 
-Responsible for resolving provider configuration, preparing parameters,
-and creating LLM instances for agents.
+Core assembler responsible for creating fully initialized Agent instances.
+Adapter directly connects configuration to instance creation, eliminating Factory layer.
 
 Following SOLID principles:
-- SRP: Manages agent configuration and LLM creation
-- OCP: Extendable via subclasses
-- DIP: Depends on BasicAgentsProviderRegistry abstraction
+- SRP: Manages agent assembly workflow
+- OCP: Extendable via provider-specific subclasses
+- DIP: Depends on AgentConfig abstraction
 """
 
 import logging
-import os
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, List, Optional
 
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
-from src.core.providers.basicagents_provider_registry import (
-    BasicAgentsProviderRegistry,
-    basicagents_registry as default_registry,
+from src.agents.basicagents.config import AgentConfig
+from src.agents.basicagents.exceptions import (
+    LLMCreationError,
+    ToolLoadingError,
+    GraphCreationError,
+    AgentCreationError,
 )
+from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
 
 class AgentAdapter(ABC):
     """
-    Base class for agent parameter adapters.
+    Base class for agent adapters.
+
+    Adapter is the core assembler that creates fully initialized Agent instances.
+    It orchestrates the creation of all components (LLM, tools, checkpointer, graph)
+    and assembles them into a ready-to-use Agent.
 
     Responsibilities:
-    - Load and manage agent configuration from BasicAgentsProviderRegistry
-    - Create LLM instances with complete configuration
-    - Provide agent-specific parameters
-    - Create agent graphs
+    1. Create LLM instance (provider-specific)
+    2. Load tools (common across providers)
+    3. Create checkpointer (common across providers)
+    4. Create agent graph (provider-specific)
+    5. Instantiate agent with all components (provider-specific)
+
+    The adapter receives AgentConfig with all resolved parameters and uses it
+    to create components without any hardcoded values.
     """
 
-    def __init__(
-        self,
-        provider: str,
-        model: Optional[str],
-        provider_registry: Optional[BasicAgentsProviderRegistry] = None,
-    ):
+    def __init__(self, config: AgentConfig):
         """
-        Initialize agent adapter.
+        Initialize agent adapter with resolved configuration.
 
         Args:
-            provider: Provider name
-            model: Model name. If None, uses default model
-            provider_registry: Optional custom registry instance
+            config: Fully resolved AgentConfig instance
         """
-        self.provider_registry = provider_registry or default_registry
-        self.provider = provider.lower()
-
-        # Get complete agent configuration
-        try:
-            self._config = self.provider_registry.get_agent_config(
-                self.provider, model
-            )
-            self.model = self._config["model"]
-        except ValueError as e:
-            logger.error(f"Failed to initialize agent adapter: {e}")
-            raise
+        self.config = config
+        self.provider = config.provider
+        self.model = config.model
 
         logger.debug(
-            "Agent adapter initialized: provider=%s model=%s",
-            self.provider,
-            self.model,
+            f"AgentAdapter initialized: {self.provider}/{self.model}"
         )
 
-    def get_agent_params(self, **user_params: Any) -> Dict[str, Any]:
+    async def create_agent(self):
         """
-        Get agent parameters with user overrides.
+        Create fully initialized agent instance.
 
-        Args:
-            **user_params: User-provided parameter overrides
+        This is the main entry point for agent creation. It orchestrates
+        all creation steps and returns a ready-to-use agent.
 
         Returns:
-            Merged agent parameters dict
-        """
-        params = {
-            "agent_type": self._config.get("agent_type", "react"),
-            "max_iterations": self._config.get("max_iterations", 8),
-            "max_execution_time": self._config.get("max_execution_time", 300),
-            "memory_enabled": self._config.get("memory_enabled", True),
-        }
-
-        # Apply user overrides
-        for key, value in user_params.items():
-            if value is not None:
-                params[key] = value
-
-        logger.debug(
-            "Resolved agent params for %s/%s: %s",
-            self.provider,
-            self.model,
-            params,
-        )
-        return params
-
-    def create_llm(self, **user_params: Any) -> Any:
-        """
-        Create LLM instance using complete agent configuration.
-
-        Configuration priority: user_params > env vars > config file
-
-        Args:
-            **user_params: User-provided parameter overrides
-
-        Returns:
-            LangChain compatible LLM instance
+            Fully initialized Agent instance
 
         Raises:
-            ValueError: If API key not found or configuration invalid
+            LLMCreationError: If LLM creation fails
+            ToolLoadingError: If tool loading fails
+            GraphCreationError: If graph creation fails
+            AgentCreationError: If agent instantiation fails
         """
-        # Get API key from environment
-        api_key_env = self._config.get("api_key_env")
-        if api_key_env:
-            api_key = os.getenv(api_key_env)
-            if not api_key:
-                raise ValueError(
-                    f"API key not found in environment variable: {api_key_env}"
-                )
-        else:
-            api_key = None  # For providers that don't need API key (e.g., Ollama)
+        try:
+            # Step 1: Create LLM (provider-specific)
+            logger.info(f"Creating LLM for {self.provider}/{self.model}")
+            llm = self.create_llm()
 
-        # Get base_url (priority: user_params > env > config)
-        base_url = (
-            user_params.get("base_url")
-            or self._config.get("base_url")
-        )
+            # Step 2: Load tools (common)
+            logger.info("Loading tools")
+            tools = await self.load_tools()
 
-        # Build LLM parameters
-        llm_params = {
-            "model": self.model,
-            "temperature": self._config.get("temperature", 0.1),
-            "max_tokens": self._config.get("max_tokens"),
-            "streaming": self._config.get("streaming", False),
-        }
+            # Step 3: Create checkpointer (common)
+            logger.info("Creating checkpointer")
+            checkpointer = self.create_checkpointer()
 
-        # Apply user overrides for LLM params
-        for key in ["temperature", "max_tokens", "streaming"]:
-            if key in user_params and user_params[key] is not None:
-                llm_params[key] = user_params[key]
+            # Step 4: Create graph (provider-specific)
+            logger.info("Creating agent graph")
+            graph = self.create_graph(llm, tools, checkpointer)
 
-        # Provider-specific LLM creation
-        return self._create_llm_instance(
-            api_key=api_key,
-            base_url=base_url,
-            llm_params=llm_params,
-            user_params=user_params,
-        )
+            # Step 5: Instantiate agent (provider-specific)
+            logger.info("Instantiating agent")
+            agent = self._instantiate_agent(llm, graph, tools, checkpointer)
+
+            logger.info(
+                f"Agent created successfully: {agent.__class__.__name__} "
+                f"({self.provider}/{self.model})"
+            )
+
+            return agent
+
+        except (LLMCreationError, ToolLoadingError, GraphCreationError) as e:
+            # Re-raise our custom exceptions
+            raise
+        except Exception as e:
+            # Wrap unexpected exceptions
+            raise AgentCreationError(
+                f"Unexpected error during agent creation for {self.provider}/{self.model}: {e}"
+            ) from e
 
     @abstractmethod
-    def _create_llm_instance(
-        self,
-        api_key: Optional[str],
-        base_url: Optional[str],
-        llm_params: Dict[str, Any],
-        user_params: Dict[str, Any],
-    ) -> Any:
+    def create_llm(self) -> BaseChatModel:
         """
-        Create provider-specific LLM instance.
+        Create LLM instance.
 
-        Subclasses must implement this method to create their specific LLM client.
-
-        Args:
-            api_key: Resolved API key
-            base_url: Resolved base URL
-            llm_params: LLM parameters (temperature, max_tokens, etc.)
-            user_params: Additional user parameters
+        Provider-specific implementation. Uses self.config.llm_params for configuration.
 
         Returns:
-            LangChain compatible LLM instance
+            Initialized chat model instance
+
+        Raises:
+            LLMCreationError: If LLM creation fails
         """
         pass
 
+    async def load_tools(self) -> List[BaseTool]:
+        """
+        Load tools using UnifiedToolManager.
+
+        Common implementation across all providers.
+
+        Returns:
+            List of initialized tools
+
+        Raises:
+            ToolLoadingError: If tool loading fails
+        """
+        try:
+            from src.components.shared.tools.unified_manager import UnifiedToolManager
+
+            tool_manager = UnifiedToolManager(auto_register_defaults=True)
+            await tool_manager.initialize_all()
+            tools = tool_manager.get_all_tools()
+
+            logger.info(f"Loaded {len(tools)} tools")
+            return tools
+
+        except Exception as e:
+            raise ToolLoadingError(f"Failed to load tools: {e}") from e
+
+    def create_checkpointer(self) -> Optional[UnifiedCheckpointer]:
+        """
+        Create checkpointer if memory is enabled.
+
+        Common implementation across all providers.
+        Uses self.config.agent_params for configuration.
+
+        Returns:
+            UnifiedCheckpointer instance if memory enabled, None otherwise
+        """
+        if not self.config.agent_params.get("memory_enabled", True):
+            logger.info("Memory disabled, skipping checkpointer creation")
+            return None
+
+        # Create unified checkpointer with independent GlobalMemoryManager
+        checkpointer = UnifiedCheckpointer(
+            storage_dir="data/sessions",
+            max_messages=50,
+        )
+
+        logger.info("Checkpointer created")
+        return checkpointer
+
     @abstractmethod
-    def create_agent_graph(
+    def create_graph(
         self,
-        llm: Any,
-        tools: Sequence[Any],
-        *,
-        checkpointer: Optional[Any] = None,
-        **params: Any,
+        llm: BaseChatModel,
+        tools: List[BaseTool],
+        checkpointer: Optional[UnifiedCheckpointer],
     ) -> CompiledStateGraph:
         """
-        Create a CompiledStateGraph using the prepared parameters.
+        Create agent graph.
+
+        Provider-specific implementation. Uses self.config for configuration
+        including system_prompt, agent_type, etc.
 
         Args:
-            llm: LLM instance
+            llm: Initialized chat model
             tools: List of tools
-            checkpointer: Optional checkpointer for memory
-            **params: Additional parameters
+            checkpointer: Checkpointer instance or None
 
         Returns:
-            CompiledStateGraph instance
+            Compiled state graph
+
+        Raises:
+            GraphCreationError: If graph creation fails
         """
         pass
 
-    def get_model_info(self) -> Dict[str, Any]:
+    @abstractmethod
+    def _instantiate_agent(
+        self,
+        llm: BaseChatModel,
+        graph: CompiledStateGraph,
+        tools: List[BaseTool],
+        checkpointer: Optional[UnifiedCheckpointer],
+    ):
         """
-        Return metadata for the associated model.
+        Instantiate agent with all components.
+
+        Provider-specific implementation. Returns the appropriate Agent subclass
+        (e.g., ZhipuAgent, ZhipuFCallAgent, OpenAIAgent).
+
+        Args:
+            llm: Initialized chat model
+            graph: Compiled state graph
+            tools: List of tools
+            checkpointer: Checkpointer instance or None
 
         Returns:
-            Model information dict
+            Fully initialized Agent instance
         """
-        return {
-            "provider": self.provider.lower(),
-            "model": self.model,
-            "agent_type": self._config.get("agent_type", "react"),
-            "supports_tools": self._config.get("supports_tools", False),
-            "max_tokens": self._config.get("max_tokens"),
-            "context_window": self._config.get("context_window"),
-            "max_iterations": self._config.get("max_iterations", 8),
-            "max_execution_time": self._config.get("max_execution_time", 300),
-        }
+        pass
 
     def __repr__(self) -> str:
+        """String representation for debugging."""
         return f"{self.__class__.__name__}(provider={self.provider}, model={self.model})"

@@ -111,13 +111,8 @@ class BasicAgentService(BaseEngineService):
     def reload_config(self) -> Dict[str, Any]:
         success = reload_llm_config()
         if success:
-            try:
-                from src.agents.basicagents.factories.registry import get_global_registry
-
-                registry = get_global_registry()
-                registry.clear_cache()
-            except Exception:
-                pass
+            # Note: Factory registry removed in new architecture
+            # Configuration is reloaded via provider registry on next agent creation
             return {"type": "success", "message": "Agent configuration reloaded.", "payload": {}}
         return {"type": "error", "message": "Failed to reload agent configuration.", "payload": {}}
 
