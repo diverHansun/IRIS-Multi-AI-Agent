@@ -230,8 +230,13 @@ config/dify/workflows/*.yaml
 coding_guide.md
 config/agents/deep/middleware/filesystem.json
 iris.bat
+#LLM configuration files
+config/llm/models/providers.json
 
-# Agent configuration files with sensitive API keys
+# BasicAgents configuration files with sensitive API keys
+config/agents/basic/models/providers.json
+
+# DeepAgents configuration files with sensitive API keys
 config/agents/deep/models/mainagents.json
 config/agents/deep/models/subagents.json
 
