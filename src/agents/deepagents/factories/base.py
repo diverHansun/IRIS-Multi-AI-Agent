@@ -12,7 +12,7 @@ from src.agents.deepagents.managers.subagent_manager import SubAgentManager
 from src.components.deepagents.runtime import create_deep_agent_runtime
 from src.components.deepagents.runtime_middlewares import SubAgent
 from src.components.shared.tools.unified_manager import UnifiedToolManager
-from src.components.shared.memory.checkpointer import create_default_checkpointer
+from src.components.shared.memory import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +70,14 @@ class BaseDeepAgentFactory(ABC):
 
         # Initialize checkpointer for memory persistence if not provided
         checkpointer = user_params.get("checkpointer")
-        if checkpointer is None and global_memory_manager is not None:
-            checkpointer_wrapper = create_default_checkpointer()
-            checkpointer = checkpointer_wrapper.checkpointer
-            logger.info("Created default checkpointer for deep agent with global memory")
+        if checkpointer is None:
+            # Use UnifiedCheckpointer for persistent storage
+            # Share storage directory with Basic mode
+            checkpointer = UnifiedCheckpointer(
+                storage_dir="data/sessions",
+                max_messages=50,
+            )
+            logger.info("Created UnifiedCheckpointer for deep agent with persistent storage")
 
         # Get runtime and safety config from adapter
         runtime_config = adapter.get_runtime_config()
