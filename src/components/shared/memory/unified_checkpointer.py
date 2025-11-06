@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -167,6 +167,10 @@ class UnifiedCheckpointer(BaseCheckpointSaver):
 
         Implements LangGraph BaseCheckpointSaver interface.
 
+        Note: Only HumanMessage and AIMessage are persisted to disk.
+        ToolMessage objects are filtered out to prevent context bloat,
+        as final answers are already included in AIMessage responses.
+
         Args:
             config: Runnable configuration containing thread_id (session_id)
             checkpoint: Checkpoint data to save
@@ -181,12 +185,22 @@ class UnifiedCheckpointer(BaseCheckpointSaver):
         # Extract messages from checkpoint
         messages: List[BaseMessage] = checkpoint["channel_values"].get("messages", [])
 
+        # Filter: Only persist HumanMessage and AIMessage
+        # ToolMessage contains intermediate execution details and can be large
+        filtered_messages = [
+            msg for msg in messages
+            if isinstance(msg, (HumanMessage, AIMessage))
+        ]
+
         # Save to GlobalMemoryManager (replace mode)
         history = self.global_memory.get_session_history(session_id)
         history.clear()
-        history.add_messages(messages)
+        history.add_messages(filtered_messages)
 
-        logger.debug(f"Saved checkpoint for session {session_id}: {len(messages)} messages")
+        logger.debug(
+            f"Saved checkpoint for session {session_id}: "
+            f"{len(filtered_messages)} messages (filtered from {len(messages)} total)"
+        )
 
         return config
 

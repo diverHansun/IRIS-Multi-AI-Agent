@@ -60,14 +60,25 @@ class SessionStorage:
         }
     
     def _dict_to_message(self, msg_dict: Dict[str, Any]) -> BaseMessage:
-        """将字典转换为消息对象"""
-        if msg_dict["type"] == "HumanMessage":
-            return HumanMessage(content=msg_dict["content"])
-        elif msg_dict["type"] == "AIMessage":
-            return AIMessage(content=msg_dict["content"])
+        """
+        Convert dictionary to message object.
+
+        Note: ToolMessage types in old session data are intentionally
+        converted to HumanMessage for backward compatibility.
+        New sessions should not contain ToolMessage in persisted data.
+        """
+        msg_type = msg_dict.get("type", "HumanMessage")
+        content = msg_dict.get("content", "")
+
+        if msg_type == "HumanMessage":
+            return HumanMessage(content=content)
+        elif msg_type == "AIMessage":
+            return AIMessage(content=content)
         else:
-            # 默认作为HumanMessage处理
-            return HumanMessage(content=msg_dict["content"])
+            # Legacy data may contain ToolMessage or other types
+            # Convert to HumanMessage for backward compatibility
+            logger.debug(f"Converting legacy message type '{msg_type}' to HumanMessage")
+            return HumanMessage(content=content)
     
     def save_session(self, session_id: str, messages: List[BaseMessage], metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
