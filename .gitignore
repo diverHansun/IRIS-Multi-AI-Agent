@@ -249,5 +249,5 @@ claude-agent-sdk-python/
 deepagents_cli-0.0.7/
 
 # DeepAgents (子仓库，但保留 src/components/deepagents/)
-/deepagents/
+deepagents/
 !src/components/deepagents/
