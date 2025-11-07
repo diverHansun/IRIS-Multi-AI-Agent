@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from langchain.agents.middleware.types import AgentMiddleware, AgentState, PrivateStateAttr
 from langchain.tools.tool_node import ToolCallRequest
@@ -156,7 +156,7 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
 
         Args:
             request: Tool call request
-            handler: Default handler (not used for shell tool)
+            handler: Default handler (used for non-shell tools)
 
         Returns:
             Tool message with command result
@@ -164,32 +164,18 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
         if not isinstance(request.tool, ShellTool):
             return handler(request)
 
-        # Get session from state
-        session = self._get_or_create_session(request.state)
-
-        # Extract command and timeout
-        args = request.tool_call.get("args", {})
-        command = args.get("command", "")
-        timeout_override = args.get("timeout")
-
-        # Execute command
-        result = self._execute_command(session, command, timeout_override)
-
-        # Return tool message
-        tool_call_id = request.tool_call.get("id")
-        return ToolMessage(
-            content=result,
-            tool_call_id=tool_call_id,
-            name="shell",
-        )
+        return self._execute_shell_tool(request)
 
     async def awrap_tool_call(
         self,
         request: ToolCallRequest,
-        handler: Callable[[ToolCallRequest], Command | ToolMessage],
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
     ) -> ToolMessage | Command:
-        """Async version of wrap_tool_call."""
-        return self.wrap_tool_call(request, handler)
+        """Async version of wrap_tool_call with proper awaiting semantics."""
+        if isinstance(request.tool, ShellTool):
+            return self._execute_shell_tool(request)
+
+        return await handler(request)
 
     def _get_or_create_session(self, state: AgentState) -> PersistentShellSession:
         """
@@ -240,6 +226,22 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
             state["shell_session"] = new_session
 
         return new_session
+
+    def _execute_shell_tool(self, request: ToolCallRequest) -> ToolMessage:
+        """Execute the shell tool and wrap the result in a ToolMessage."""
+        session = self._get_or_create_session(request.state)
+
+        args = request.tool_call.get("args", {}) or {}
+        command = args.get("command", "")
+        timeout_override = args.get("timeout")
+
+        result = self._execute_command(session, command, timeout_override)
+        tool_call_id = request.tool_call.get("id")
+        return ToolMessage(
+            content=result,
+            tool_call_id=tool_call_id,
+            name="shell",
+        )
 
     def _execute_command(
         self,
