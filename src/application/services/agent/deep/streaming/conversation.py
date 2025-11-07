@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from rich.markup import escape
 
 from langgraph.errors import GraphRecursionError
-from langgraph.types import Command
+from langgraph.types import Command, Interrupt
 
 from .event_handler import DeepAgentEventHandler
-from ..hitl.handler import handle_hitl_interrupt
+from ..hitl.handler import handle_hitl_interrupt, HITLDecisionError
 from ..hitl.session_manager import SessionHITLManager
 from ..hitl.file_ops import FileOpTracker
 
@@ -65,7 +65,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     hitl_manager = _ensure_hitl_manager(ctx, hitl_config)
 
     # Create file operation tracker for this query
-    file_tracker = FileOpTracker()
+    file_tracker = FileOpTracker(console=ctx.console)
 
     # Pass file_tracker to event_handler for result display
     event_handler = DeepAgentEventHandler(
@@ -90,29 +90,22 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
     try:
         while True:
-            resume_command: Optional[Command] = None
+            # Variables to capture interrupt state during streaming
+            captured_interrupts: Optional[Tuple[Interrupt, ...]] = None
+
             try:
                 async for event in agent.runtime.astream(
                     pending_input,
                     config=runtime_config,
                     stream_mode=["messages", "updates"],
                     subgraphs=True,
+                    durability="exit",
                 ):
                     result = event_handler.handle_event(event)
+
+                    # Capture interrupts but don't process them yet
                     if result.interrupts:
-                        resume_payloads = await handle_hitl_interrupt(
-                            ctx,
-                            result.interrupts,
-                            hitl_manager,
-                            hitl_config,
-                        )
-                        resume_data: Any
-                        if len(resume_payloads) == 1:
-                            resume_data = resume_payloads[0]
-                        else:
-                            resume_data = resume_payloads
-                        resume_command = Command(resume=resume_data)
-                        break
+                        captured_interrupts = result.interrupts
 
                     if deadline is not None and time.perf_counter() > deadline:
                         timed_out = True
@@ -120,14 +113,39 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             except GraphRecursionError as exc:
                 ctx.console.print(f"[bold red]Recursion limit exceeded:[/] {escape(str(exc))}")
                 return ""
+            except Exception as exc:
+                ctx.console.print(f"[bold red]Unexpected error in agent streaming:[/] {escape(str(exc))}")
+                return ""
 
             if timed_out:
                 break
 
-            if resume_command is None:
-                break
+            # Process HITL interrupts after streaming completes
+            if captured_interrupts:
+                try:
+                    resume_payloads = await handle_hitl_interrupt(
+                        ctx,
+                        captured_interrupts,
+                        hitl_manager,
+                        hitl_config,
+                    )
+                    resume_data: Any
+                    if len(resume_payloads) == 1:
+                        resume_data = resume_payloads[0]
+                    else:
+                        resume_data = resume_payloads
 
-            pending_input = resume_command
+                    pending_input = Command(resume=resume_data)
+                    # Continue while loop to resume
+                except HITLDecisionError as exc:
+                    ctx.console.print(f"[bold red]HITL approval failed:[/] {escape(str(exc))}")
+                    return ""
+                except Exception as exc:
+                    ctx.console.print(f"[bold red]Unexpected error during HITL processing:[/] {escape(str(exc))}")
+                    return ""
+            else:
+                # No interrupts - normal completion
+                break
     except KeyboardInterrupt:
         ctx.console.print("\n[yellow]Execution interrupted by user.[/]")
         return ""

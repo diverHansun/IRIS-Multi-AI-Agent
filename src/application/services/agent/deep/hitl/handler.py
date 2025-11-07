@@ -10,7 +10,8 @@ from rich.markup import escape
 from rich.panel import Panel
 from langgraph.types import Interrupt
 
-from .file_ops import build_approval_preview, render_diff_block
+from .file_ops import build_approval_preview as build_file_preview, render_diff_block
+from .preview import build_approval_preview as build_shell_preview
 from .session_manager import SessionHITLManager
 
 
@@ -108,7 +109,9 @@ async def _resolve_decision(
         ]
     )
 
-    preview = build_approval_preview(tool_name, args)
+    # Try file_ops preview first (for write_real_file, edit_real_file)
+    # Fall back to shell preview (for execute_shell)
+    preview = build_file_preview(tool_name, args) or build_shell_preview(tool_name, args)
     if preview:
         header_lines.append("")
         header_lines.append(f"  Preview: {escape(preview.title)}")

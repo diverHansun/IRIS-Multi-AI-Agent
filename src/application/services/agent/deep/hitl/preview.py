@@ -21,6 +21,7 @@ class ApprovalPreview:
     title: str
     details: List[str]
     diff: Optional[str] = None
+    diff_title: Optional[str] = None
     diff_truncated: bool = False
     warning: Optional[str] = None
     error: Optional[str] = None
@@ -107,6 +108,7 @@ def _build_write_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
         title=f"Write {display_path}",
         details=details,
         diff=diff_info.diff,
+        diff_title=f"Diff {display_path}" if diff_info.diff else None,
         diff_truncated=diff_info.truncated,
     )
     if diff_info.truncated:
@@ -167,6 +169,7 @@ def _build_edit_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
         title=f"Edit {display_path}",
         details=details,
         diff=diff_info.diff,
+        diff_title=f"Diff {display_path}" if diff_info.diff else None,
         diff_truncated=diff_info.truncated,
     )
     if diff_info.truncated:

@@ -127,6 +127,7 @@ class DeepAgentEventHandler:
         """Process tool completion messages and handle errors."""
         tool_name = getattr(message, "name", "")
         tool_status = getattr(message, "status", "success")
+        tool_call_id = getattr(message, "tool_call_id", None)
         content = message.content
 
         if isinstance(content, list):
@@ -175,21 +176,52 @@ class DeepAgentEventHandler:
 
     def _process_ai_message_content_blocks(self, message: BaseMessage) -> None:
         """Process content_blocks from AIMessage/AIMessageChunk."""
-        if not hasattr(message, "content_blocks"):
+        has_content_blocks = hasattr(message, "content_blocks")
+        has_tool_calls = hasattr(message, "tool_calls") and message.tool_calls
+
+        # Process content_blocks if available
+        if has_content_blocks:
+            for block in message.content_blocks:
+                block_type = block.get("type")
+
+                if block_type == "text":
+                    self._handle_text_block(block)
+                elif block_type == "reasoning":
+                    pass
+                elif block_type == "tool_call_chunk":
+                    self._handle_tool_call_chunk(block)
+
+            if getattr(message, "chunk_position", None) == "last":
+                self._flush_text_buffer(final=True)
+
+        # IMPORTANT: Also process tool_calls directly if present
+        # This handles cases where AIMessage has tool_calls but they're not in content_blocks
+        if has_tool_calls:
+            for tool_call in message.tool_calls:
+                self._process_direct_tool_call(tool_call)
+
+    def _process_direct_tool_call(self, tool_call: Dict[str, Any]) -> None:
+        """Process a complete tool call from AIMessage.tool_calls."""
+        tool_id = tool_call.get("id")
+        tool_name = tool_call.get("name")
+        tool_args = tool_call.get("args", {})
+
+        if not tool_name:
             return
 
-        for block in message.content_blocks:
-            block_type = block.get("type")
+        # Skip if already displayed
+        if tool_id and tool_id in self._displayed_tool_ids:
+            return
 
-            if block_type == "text":
-                self._handle_text_block(block)
-            elif block_type == "reasoning":
-                pass
-            elif block_type == "tool_call_chunk":
-                self._handle_tool_call_chunk(block)
+        # Register with file tracker
+        if tool_id:
+            self._displayed_tool_ids.add(tool_id)
+            if self._file_tracker:
+                self._file_tracker.start_operation(tool_name, tool_args, tool_id)
 
-        if getattr(message, "chunk_position", None) == "last":
-            self._flush_text_buffer(final=True)
+        # Display the tool call
+        if self.show_tool_calls:
+            self._render_tool_call(tool_name, tool_args)
 
     def _handle_text_block(self, block: Dict[str, Any]) -> None:
         """Accumulate text blocks for buffered rendering."""
