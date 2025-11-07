@@ -6,14 +6,27 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langgraph.checkpoint.memory import MemorySaver
 
 from src.agents.deepagents.adapters.base import BaseDeepAgentAdapter
+from src.components.shared.memory.global_memory import GlobalMemoryManager
+from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
 
 class BaseDeepAgent:
-    """Common functionality shared by DeepAgent instances."""
+    """
+    Common functionality shared by DeepAgent instances.
+
+    Implements dual checkpointer architecture:
+    - MemorySaver for runtime state restoration (HITL support)
+    - UnifiedCheckpointer for long-term conversation persistence
+
+    This design follows SOLID principles:
+    - SRP: Separates runtime execution state from persistent storage
+    - OCP: Allows different checkpointer implementations without modifying agent logic
+    """
 
     def __init__(
         self,
@@ -29,6 +42,25 @@ class BaseDeepAgent:
         self.system_prompt: Optional[str] = self.metadata.get("system_prompt")
         self.global_memory_manager = global_memory_manager
         self.enable_memory = global_memory_manager is not None
+
+        # Runtime checkpointer for HITL interrupt/resume support
+        # Uses MemorySaver to preserve complete execution state including ToolMessage and __interrupt__
+        self.runtime_checkpointer = MemorySaver()
+
+        # Storage checkpointer for long-term conversation persistence
+        self.storage_checkpointer = None
+        if isinstance(global_memory_manager, UnifiedCheckpointer):
+            self.storage_checkpointer = global_memory_manager
+        elif isinstance(global_memory_manager, GlobalMemoryManager):
+            try:
+                storage_dir = getattr(global_memory_manager.storage, "storage_dir", "data/sessions")
+                max_messages = getattr(global_memory_manager, "max_messages", 50)
+                self.storage_checkpointer = UnifiedCheckpointer(
+                    storage_dir=str(storage_dir),
+                    max_messages=max_messages,
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Failed to create storage checkpointer: %s", exc)
 
     @property
     def function_type(self) -> str:

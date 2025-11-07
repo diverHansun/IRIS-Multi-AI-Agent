@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Dict, Optional, Tuple
 
@@ -14,6 +15,8 @@ from .event_handler import DeepAgentEventHandler
 from ..hitl.handler import handle_hitl_interrupt, HITLDecisionError
 from ..hitl.session_manager import SessionHITLManager
 from ..hitl.file_ops import FileOpTracker
+
+logger = logging.getLogger(__name__)
 
 
 def _get_agent_config(ctx) -> Dict[str, Any]:
@@ -51,8 +54,89 @@ def _resolve_safety(metadata: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _sync_history_to_runtime(agent: Any, runtime_config: Dict[str, Any]) -> None:
+    """
+    Synchronize conversation history from storage checkpointer to runtime checkpointer.
+
+    This enables the runtime to have access to previous conversation context
+    while using MemorySaver for HITL support.
+
+    Args:
+        agent: Agent instance with dual checkpointers
+        runtime_config: Runtime configuration containing thread_id
+    """
+    if not hasattr(agent, "storage_checkpointer") or agent.storage_checkpointer is None:
+        return
+
+    try:
+        # Load checkpoint from storage (UnifiedCheckpointer)
+        checkpoint_tuple = agent.storage_checkpointer.get_tuple(runtime_config)
+
+        if checkpoint_tuple:
+            # Ensure checkpoint has required metadata for LangGraph
+            checkpoint_ns = runtime_config.get("configurable", {}).get("checkpoint_ns", "")
+            metadata_with_ns = dict(checkpoint_tuple.metadata or {})
+            metadata_with_ns.setdefault("checkpoint_ns", checkpoint_ns)
+
+            # Restore to runtime checkpointer (MemorySaver)
+            agent.runtime_checkpointer.put(
+                runtime_config,
+                checkpoint_tuple.checkpoint,
+                metadata_with_ns,
+                checkpoint_tuple.checkpoint.get("channel_versions", {})
+            )
+            logger.debug(
+                "Loaded conversation history to runtime checkpointer for thread_id=%s",
+                runtime_config.get("configurable", {}).get("thread_id")
+            )
+    except Exception as exc:
+        logger.warning("Failed to sync history to runtime checkpointer: %s", exc)
+
+
+def _sync_runtime_to_storage(agent: Any, runtime_config: Dict[str, Any]) -> None:
+    """
+    Synchronize final state from runtime checkpointer to storage checkpointer.
+
+    After streaming completes, save the filtered conversation
+    (HumanMessage/AIMessage only) to long-term storage.
+
+    Args:
+        agent: Agent instance with dual checkpointers
+        runtime_config: Runtime configuration containing thread_id
+    """
+    if not hasattr(agent, "storage_checkpointer") or agent.storage_checkpointer is None:
+        return
+
+    try:
+        # Get final checkpoint from runtime (MemorySaver)
+        final_checkpoint = agent.runtime_checkpointer.get_tuple(runtime_config)
+
+        if final_checkpoint:
+            # Save to storage (UnifiedCheckpointer automatically filters)
+            # Pass channel_versions as new_versions parameter
+            agent.storage_checkpointer.put(
+                runtime_config,
+                final_checkpoint.checkpoint,
+                final_checkpoint.metadata,
+                final_checkpoint.checkpoint.get("channel_versions", {})
+            )
+            logger.debug(
+                "Saved conversation history to storage checkpointer for thread_id=%s",
+                runtime_config.get("configurable", {}).get("thread_id")
+            )
+    except Exception as exc:
+        logger.warning("Failed to sync runtime to storage checkpointer: %s", exc)
+
+
 async def handle_deep_agent_query(ctx, query: str) -> str:
-    """Route query to deep agent instance using streaming execution."""
+    """
+    Route query to deep agent instance using streaming execution.
+
+    Implements dual checkpointer session lifecycle:
+    1. Load conversation history from storage_checkpointer to runtime_checkpointer
+    2. Execute with runtime_checkpointer (supports HITL)
+    3. Save filtered messages back to storage_checkpointer
+    """
     config = _get_agent_config(ctx)
     agent: Any = config.get("agent_instance")
     if agent is None:
@@ -65,7 +149,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     hitl_manager = _ensure_hitl_manager(ctx, hitl_config)
 
     # Create file operation tracker for this query
-    file_tracker = FileOpTracker(console=ctx.console)
+    file_tracker = FileOpTracker()
 
     # Pass file_tracker to event_handler for result display
     event_handler = DeepAgentEventHandler(
@@ -82,6 +166,10 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     runtime_config = agent.create_runtime_config(session_id)
     max_execution_time = safety_opts.get("max_execution_time")
     deadline = time.perf_counter() + max_execution_time if isinstance(max_execution_time, (int, float)) else None
+
+    # Session lifecycle: Load history from storage to runtime checkpointer
+    # Following SOLID SRP: Conversation handler manages session synchronization
+    _sync_history_to_runtime(agent, runtime_config)
 
     ctx.console.print("[dim]Deep agent reasoning...[/]")
 
@@ -153,6 +241,10 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     if timed_out:
         ctx.console.print("[bold red]Deep agent execution timed out.[/]")
         return ""
+
+    # Session lifecycle: Save filtered messages from runtime to storage checkpointer
+    # This persists the conversation while keeping storage lean
+    _sync_runtime_to_storage(agent, runtime_config)
 
     final_state = event_handler.last_agent_state
     if not final_state:

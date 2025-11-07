@@ -68,17 +68,6 @@ class BaseDeepAgentFactory(ABC):
         # Get LLM parameters from adapter
         model_settings = adapter.get_llm_params()
 
-        # Initialize checkpointer for memory persistence if not provided
-        checkpointer = user_params.get("checkpointer")
-        if checkpointer is None:
-            # Use UnifiedCheckpointer for persistent storage
-            # Share storage directory with Basic mode
-            checkpointer = UnifiedCheckpointer(
-                storage_dir="data/sessions",
-                max_messages=50,
-            )
-            logger.info("Created UnifiedCheckpointer for deep agent with persistent storage")
-
         # Get runtime and safety config from adapter
         runtime_config = adapter.get_runtime_config()
         safety_config = adapter.get_safety_config()
@@ -96,28 +85,8 @@ class BaseDeepAgentFactory(ABC):
             virtual_config = filesystem_config if isinstance(filesystem_config, dict) else {}
         use_long_term_memory = bool(virtual_config.get("long_term_memory", False))
 
-        runtime = create_deep_agent_runtime(
-            model=adapter.get_model_identifier(),
-            system_prompt=system_prompt,
-            tools=tools,
-            model_settings=model_settings,
-            middleware_config=resolved_middleware,
-            subagents=subagent_specs,
-            use_long_term_memory=use_long_term_memory,
-            interrupt_on=interrupt_on,
-            checkpointer=checkpointer,
-            store=user_params.get("store"),
-            cache=user_params.get("cache"),
-            name=user_params.get("name"),
-            debug=user_params.get("debug", False),
-            recursion_limit=recursion_limit,
-            step_timeout=step_timeout,
-            stream_mode=stream_mode,
-            max_execution_time=max_execution_time,
-            filesystem_middlewares=filesystem_middlewares,  # DRY: reuse instances from tool injection
-        )
-
-        # Get display config from adapter
+        # Create agent instance first to access runtime_checkpointer
+        # Following SOLID SRP: Agent manages its own checkpointer lifecycle
         display_config = adapter.get_display_config()
         metadata_config = adapter.get_metadata()
 
@@ -157,6 +126,30 @@ class BaseDeepAgentFactory(ABC):
             metadata=metadata,
             global_memory_manager=global_memory_manager,
         )
+
+        # Create runtime with agent's runtime_checkpointer (MemorySaver)
+        # This supports HITL interrupt/resume while keeping complete execution state
+        runtime = create_deep_agent_runtime(
+            model=adapter.get_model_identifier(),
+            system_prompt=system_prompt,
+            tools=tools,
+            model_settings=model_settings,
+            middleware_config=resolved_middleware,
+            subagents=subagent_specs,
+            use_long_term_memory=use_long_term_memory,
+            interrupt_on=interrupt_on,
+            checkpointer=agent.runtime_checkpointer,
+            store=user_params.get("store"),
+            cache=user_params.get("cache"),
+            name=user_params.get("name"),
+            debug=user_params.get("debug", False),
+            recursion_limit=recursion_limit,
+            step_timeout=step_timeout,
+            stream_mode=stream_mode,
+            max_execution_time=max_execution_time,
+            filesystem_middlewares=filesystem_middlewares,
+        )
+
         agent.set_runtime(runtime)
         return agent
 
