@@ -208,6 +208,6 @@ def build_approval_preview(tool_name: str, args: Dict[str, Any] | None) -> Appro
         return _build_write_preview(args)
     if tool_name == "edit_real_file":
         return _build_edit_preview(args)
-    if tool_name == "execute_shell":
+    if tool_name == "shell":
         return _build_shell_preview(args)
     return None

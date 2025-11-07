@@ -1,0 +1,12 @@
+{
+  "enabled": true,
+  "workspace_root": ".",
+  "shell_type": "cmd",
+  "command_timeout": 30.0,
+  "startup_timeout": 10.0,
+  "termination_timeout": 5.0,
+  "max_output_lines": 100,
+  "max_output_bytes": 1048576,
+  "environment": {},
+  "startup_commands": []
+}

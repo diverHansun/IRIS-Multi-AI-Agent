@@ -110,7 +110,7 @@ async def _resolve_decision(
     )
 
     # Try file_ops preview first (for write_real_file, edit_real_file)
-    # Fall back to shell preview (for execute_shell)
+    # Fall back to shell preview (for shell)
     preview = build_file_preview(tool_name, args) or build_shell_preview(tool_name, args)
     if preview:
         header_lines.append("")

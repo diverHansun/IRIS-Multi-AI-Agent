@@ -301,16 +301,18 @@ class DeepAgentsProviderRegistry:
         )
 
     def _load_middleware_config(self, *, use_cache: bool = True) -> Dict[str, Any]:
-        """Load middleware configuration for filesystem settings."""
+        """Load middleware configuration for filesystem and shell settings."""
         middleware_dir = self.base_path / "middleware"
         filesystem_dir = middleware_dir / "filesystem"
 
         virtual_cfg: Dict[str, Any] = {}
         real_cfg: Dict[str, Any] = {}
+        shell_cfg: Dict[str, Any] = {}
 
         virtual_path = filesystem_dir / "virtual_filesystem.json"
         real_path = filesystem_dir / "real_filesystem.json"
         legacy_path = middleware_dir / "filesystem.json"
+        shell_path = middleware_dir / "shell.json"
 
         if virtual_path.exists():
             virtual_cfg = self._load_json(virtual_path, use_cache=use_cache)
@@ -320,11 +322,15 @@ class DeepAgentsProviderRegistry:
         if real_path.exists():
             real_cfg = self._load_json(real_path, use_cache=use_cache)
 
+        if shell_path.exists():
+            shell_cfg = self._load_json(shell_path, use_cache=use_cache)
+
         return {
             "filesystem": {
                 "virtual": virtual_cfg,
                 "real": real_cfg,
             },
+            "shell": shell_cfg,
         }
 
     def _load_json(self, path: Path, *, use_cache: bool) -> Dict[str, Any]:

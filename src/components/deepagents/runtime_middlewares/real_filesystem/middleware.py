@@ -44,7 +44,6 @@ class RealFilesystemMiddleware(AgentMiddleware):
             factory.build_edit_tool,
             factory.build_glob_tool,
             factory.build_grep_tool,
-            factory.build_execute_shell_tool,
         ]
         if tool_descriptions:
             descriptions = list(tool_descriptions)

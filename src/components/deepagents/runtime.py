@@ -58,6 +58,7 @@ def create_deep_agent_runtime(
     middleware_config = middleware_config or {}
     filesystem_cfg = middleware_config.get("filesystem", {}) or {}
     subagents_cfg = middleware_config.get("subagents", {})
+    shell_cfg = middleware_config.get("shell", {}) or {}
 
     # Coerce provided filesystem middlewares into a list while supporting legacy parameter.
     provided_filesystem_middlewares: List[AgentMiddleware] = []
@@ -122,7 +123,29 @@ def create_deep_agent_runtime(
     
     # Add filesystem middleware if enabled
     deepagent_middleware.extend(provided_filesystem_middlewares)
-    
+
+    # Add shell middleware if enabled (only for main agent, not subagents)
+    if isinstance(shell_cfg, dict) and shell_cfg.get("enabled", False):
+        try:
+            from .runtime_middlewares.shell import ShellToolMiddleware, build_shell_config
+
+            shell_config = build_shell_config(shell_cfg)
+            shell_middleware = ShellToolMiddleware(config=shell_config)
+            deepagent_middleware.append(shell_middleware)
+
+            # Add shell tool to tools list
+            shell_tool = shell_middleware.tools[0]
+            tools = list(tools) if tools else []
+            tools.append(shell_tool)
+
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info("Shell middleware enabled for main agent")
+        except Exception as exc:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning("Failed to enable shell middleware: %s", exc, exc_info=True)
+
     # Add subagent middleware
     deepagent_middleware.append(subagent_middleware)
     deepagent_middleware.extend([

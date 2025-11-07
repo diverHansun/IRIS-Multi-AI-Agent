@@ -1,0 +1,33 @@
+{
+  "_comment": "Shell middleware configuration for persistent shell sessions",
+  "enabled": true,
+  "workspace_root": ".",
+  "_workspace_root_comment": "Working directory for shell commands. Use '.' for current directory or absolute path",
+
+  "shell_type": "cmd",
+  "_shell_type_comment": "Shell executable type: 'cmd', 'powershell' (Windows), 'bash' (Linux/Mac)",
+
+  "command_timeout": 30.0,
+  "_command_timeout_comment": "Timeout in seconds for each command execution",
+
+  "startup_timeout": 10.0,
+  "_startup_timeout_comment": "Timeout in seconds for shell session startup",
+
+  "termination_timeout": 5.0,
+  "_termination_timeout_comment": "Timeout in seconds for graceful shell termination",
+
+  "max_output_lines": 100,
+  "_max_output_lines_comment": "Maximum number of output lines to return (prevents overwhelming output)",
+
+  "max_output_bytes": 1048576,
+  "_max_output_bytes_comment": "Maximum output size in bytes (1MB default, prevents memory issues)",
+
+  "environment": {
+    "LANG": "en_US.UTF-8",
+    "LC_ALL": "en_US.UTF-8"
+  },
+  "_environment_comment": "Environment variables to set in shell session (optional)",
+
+  "startup_commands": [],
+  "_startup_commands_comment": "Commands to run when shell starts (e.g., ['cd /workspace', 'source .env'])"
+}
