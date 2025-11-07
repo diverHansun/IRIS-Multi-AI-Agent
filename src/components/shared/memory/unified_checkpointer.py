@@ -187,9 +187,11 @@ class UnifiedCheckpointer(BaseCheckpointSaver):
 
         # Filter: Only persist HumanMessage and AIMessage
         # ToolMessage contains intermediate execution details and can be large
+        # Also filter out any non-BaseMessage objects (defensive programming)
+        # In case LangGraph internal structures leak through (e.g., write operations, coroutines)
         filtered_messages = [
             msg for msg in messages
-            if isinstance(msg, (HumanMessage, AIMessage))
+            if isinstance(msg, BaseMessage) and isinstance(msg, (HumanMessage, AIMessage))
         ]
 
         # Save to GlobalMemoryManager (replace mode)

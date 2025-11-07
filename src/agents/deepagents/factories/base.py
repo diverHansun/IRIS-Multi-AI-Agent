@@ -63,6 +63,10 @@ class BaseDeepAgentFactory(ABC):
 
         # Inject virtual filesystem tools if enabled (SOLID: SRP - Factory manages tool composition)
         tools, filesystem_middlewares = self._inject_filesystem_tools(tools, resolved_middleware)
+
+        # Inject shell tool if enabled (only for main agent, not subagents)
+        tools, shell_middleware = self._inject_shell_tool(tools, resolved_middleware)
+
         tool_names = [tool.name if hasattr(tool, 'name') else tool.__name__ for tool in tools] if tools else []
 
         # Get LLM parameters from adapter
@@ -148,6 +152,7 @@ class BaseDeepAgentFactory(ABC):
             stream_mode=stream_mode,
             max_execution_time=max_execution_time,
             filesystem_middlewares=filesystem_middlewares,
+            shell_middleware=shell_middleware,
         )
 
         agent.set_runtime(runtime)
@@ -170,7 +175,7 @@ class BaseDeepAgentFactory(ABC):
         """
         provider_middleware = adapter.get_middleware_config()
         resolved = {}
-        for key in ("filesystem", "subagents", "patch_tool_calls"):
+        for key in ("filesystem", "subagents", "patch_tool_calls", "shell"):
             value = provider_middleware.get(key)
             if isinstance(value, dict):
                 resolved[key] = value
@@ -384,6 +389,31 @@ class BaseDeepAgentFactory(ABC):
                 logger.warning("Failed to inject real filesystem tools: %s", exc, exc_info=True)
 
         return updated_tools or tools, middlewares
+
+    def _inject_shell_tool(self, tools, middleware_config):
+        """Inject shell tool if enabled and return shell middleware."""
+        shell_config = middleware_config.get("shell", {})
+
+        updated_tools = list(tools) if tools else []
+        shell_middleware = None
+
+        if isinstance(shell_config, dict) and shell_config.get("enabled", False):
+            try:
+                from src.components.deepagents.runtime_middlewares.shell import (
+                    ShellToolMiddleware,
+                    build_shell_config,
+                )
+
+                config = build_shell_config(shell_config)
+                shell_middleware = ShellToolMiddleware(config=config)
+                shell_tools = shell_middleware.get_tools()
+                if shell_tools:
+                    updated_tools.extend(shell_tools)
+                    logger.info("Injected shell tool for main agent")
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Failed to inject shell tool: %s", exc, exc_info=True)
+
+        return updated_tools or tools, shell_middleware
 
     def describe(self) -> Dict[str, Any]:
         """Return metadata describing the factory."""

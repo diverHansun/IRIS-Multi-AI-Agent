@@ -385,7 +385,7 @@ class RealFilesystemToolFactory:
             file_path: str,
             content: str,
             encoding: str = "utf-8",
-        ) -> Dict[str, Any] | str:
+        ) -> str:
             try:
                 normalised_encoding = self._coerce_encoding(encoding)
             except ValueError as exc:
@@ -423,7 +423,7 @@ class RealFilesystemToolFactory:
 
             # TODO: persist operation details for session auditing once storage is available.
 
-            return {
+            result = {
                 "status": "success",
                 "path": display_path,
                 "encoding": normalised_encoding,
@@ -434,6 +434,9 @@ class RealFilesystemToolFactory:
                 "diff_stats": {"added": diff_info.added_lines, "removed": diff_info.removed_lines},
                 "diff_truncated": diff_info.truncated,
             }
+
+            import json
+            return json.dumps(result, ensure_ascii=False, indent=2)
 
         return write_real_file
 
@@ -448,7 +451,7 @@ class RealFilesystemToolFactory:
             new_string: str,
             encoding: str = "utf-8",
             replace_all: bool = False,
-        ) -> Dict[str, Any] | str:
+        ) -> str:
             try:
                 normalised_encoding = self._coerce_encoding(encoding)
             except ValueError as exc:
@@ -492,7 +495,7 @@ class RealFilesystemToolFactory:
 
             # TODO: persist operation details for session auditing once storage is available.
 
-            return {
+            result = {
                 "status": "success",
                 "path": display_path,
                 "encoding": normalised_encoding,
@@ -503,6 +506,9 @@ class RealFilesystemToolFactory:
                 "diff_stats": {"added": diff_info.added_lines, "removed": diff_info.removed_lines},
                 "diff_truncated": diff_info.truncated,
             }
+
+            import json
+            return json.dumps(result, ensure_ascii=False, indent=2)
 
         return edit_real_file
 

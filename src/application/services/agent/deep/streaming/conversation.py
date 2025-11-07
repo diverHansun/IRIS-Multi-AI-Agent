@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from rich.markup import escape
+
+import asyncio
 
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command, Interrupt
@@ -93,6 +95,58 @@ def _sync_history_to_runtime(agent: Any, runtime_config: Dict[str, Any]) -> None
         logger.warning("Failed to sync history to runtime checkpointer: %s", exc)
 
 
+def _flatten_checkpoint_messages(entries: Any) -> List[Any]:
+    """Extract BaseMessage instances from nested checkpoint structures."""
+
+    from langchain_core.messages import BaseMessage
+
+    flattened: List[Any] = []
+    stack: List[Any] = [entries]
+
+    while stack:
+        item = stack.pop()
+
+        if isinstance(item, BaseMessage):
+            flattened.append(item)
+            continue
+
+        if item is None:
+            continue
+
+        if asyncio.iscoroutine(item):
+            # Skip coroutines entirely
+            continue
+
+        if isinstance(item, dict):
+            item_type = item.get("type")
+            value = item.get("value")
+
+            if item_type == "message" and isinstance(value, BaseMessage):
+                flattened.append(value)
+                continue
+
+            # Some LangGraph write operations wrap the message in the "value" field
+            if value is not None:
+                stack.append(value)
+
+            # Also traverse other dict values (lists, tuples, etc.)
+            for dict_value in item.values():
+                if dict_value is value:
+                    continue
+                stack.append(dict_value)
+            continue
+
+        if isinstance(item, (list, tuple)):
+            stack.extend(reversed(item))
+            continue
+
+        if isinstance(item, set):
+            stack.extend(item)
+            continue
+
+    return flattened
+
+
 def _sync_runtime_to_storage(agent: Any, runtime_config: Dict[str, Any]) -> None:
     """
     Synchronize final state from runtime checkpointer to storage checkpointer.
@@ -112,13 +166,31 @@ def _sync_runtime_to_storage(agent: Any, runtime_config: Dict[str, Any]) -> None
         final_checkpoint = agent.runtime_checkpointer.get_tuple(runtime_config)
 
         if final_checkpoint:
+            # Clean checkpoint before passing to storage
+            # Filter out LangGraph internal structures (coroutines, write operations)
+            # that may exist in messages during HITL operations
+            from langchain_core.messages import BaseMessage
+
+            checkpoint_copy = final_checkpoint.checkpoint.copy()
+            channel_values = dict(checkpoint_copy.get("channel_values", {}))
+            messages = channel_values.get("messages", [])
+
+            filtered_messages = _flatten_checkpoint_messages(messages)
+            channel_values["messages"] = filtered_messages
+            checkpoint_copy["channel_values"] = channel_values
+
+            logger.debug(
+                "Filtered checkpoint messages: %d -> %d (removed %d non-message objects)",
+                len(messages), len(filtered_messages), len(messages) - len(filtered_messages)
+            )
+
             # Save to storage (UnifiedCheckpointer automatically filters)
             # Pass channel_versions as new_versions parameter
             agent.storage_checkpointer.put(
                 runtime_config,
-                final_checkpoint.checkpoint,
+                checkpoint_copy,
                 final_checkpoint.metadata,
-                final_checkpoint.checkpoint.get("channel_versions", {})
+                checkpoint_copy.get("channel_versions", {})
             )
             logger.debug(
                 "Saved conversation history to storage checkpointer for thread_id=%s",
