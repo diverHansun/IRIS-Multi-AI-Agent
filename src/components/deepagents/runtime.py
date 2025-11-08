@@ -19,10 +19,12 @@ from langgraph.types import Checkpointer
 from .runtime_middlewares import (
     JsonArgsParserMiddleware,
     PatchToolCallsMiddleware,
+    ExecutionTimeoutMiddleware,
+)
+from .runtime_middlewares.subagents import (
     SubAgent,
     CompiledSubAgent,
     SubAgentMiddleware,
-    ExecutionTimeoutMiddleware,
 )
 from .runtime_middlewares.virtual_filesystem import VirtualFilesystemMiddleware
 
