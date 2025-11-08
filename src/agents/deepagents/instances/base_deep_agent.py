@@ -42,6 +42,7 @@ class BaseDeepAgent:
         self.system_prompt: Optional[str] = self.metadata.get("system_prompt")
         self.global_memory_manager = global_memory_manager
         self.enable_memory = global_memory_manager is not None
+        self.checkpoint_namespace = self._compute_checkpoint_namespace()
 
         # Runtime checkpointer for HITL interrupt/resume support
         # Uses MemorySaver to preserve complete execution state including ToolMessage and __interrupt__
@@ -61,6 +62,9 @@ class BaseDeepAgent:
                 )
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("Failed to create storage checkpointer: %s", exc)
+        elif global_memory_manager is not None:
+            # Accept custom checkpointer implementations for compatibility.
+            self.storage_checkpointer = global_memory_manager
 
     @property
     def function_type(self) -> str:
@@ -145,11 +149,36 @@ class BaseDeepAgent:
             "session_id": session_id,
         }
 
+    def _compute_checkpoint_namespace(self) -> str:
+        """Generate a deterministic namespace for LangGraph checkpoints."""
+        provider = getattr(self.adapter, "provider", "unknown") or "unknown"
+        function_type = getattr(self.adapter, "function_type", None) or "default"
+        provider_key = self._sanitize_namespace_component(str(provider))
+        function_key = self._sanitize_namespace_component(str(function_type))
+        return f"deep_agent::{provider_key}::{function_key}"
+
+    @staticmethod
+    def _sanitize_namespace_component(value: str) -> str:
+        """Keep checkpoint namespace components filesystem friendly."""
+        lowered = value.lower().strip()
+        if not lowered:
+            return "default"
+        return "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in lowered)
+
+    def get_checkpoint_namespace(self) -> str:
+        """Public accessor so orchestrators can ensure configs include namespace."""
+        return self.checkpoint_namespace
+
     def _build_runtime_input(self, query: str) -> Dict[str, Any]:
         return {"messages": [HumanMessage(content=query)]}
 
     def _build_runtime_config(self, session_id: str) -> Dict[str, Any]:
-        return {"configurable": {"thread_id": session_id}}
+        return {
+            "configurable": {
+                "thread_id": session_id,
+                "checkpoint_ns": self.get_checkpoint_namespace(),
+            }
+        }
 
     def create_runtime_input(self, query: str) -> Dict[str, Any]:
         """Public helper used by streaming orchestrators to build runtime input."""

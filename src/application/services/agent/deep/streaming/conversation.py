@@ -56,6 +56,25 @@ def _resolve_safety(metadata: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _ensure_checkpoint_namespace(agent: Any, runtime_config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Guarantee LangGraph runtime configs include checkpoint namespace metadata.
+    """
+    configurable = runtime_config.setdefault("configurable", {})
+    checkpoint_ns = configurable.get("checkpoint_ns")
+    if checkpoint_ns:
+        return runtime_config
+
+    namespace = getattr(agent, "checkpoint_namespace", None)
+    if namespace is None and hasattr(agent, "get_checkpoint_namespace"):
+        try:
+            namespace = agent.get_checkpoint_namespace()
+        except Exception:  # pylint: disable=broad-except
+            namespace = None
+    configurable["checkpoint_ns"] = namespace or "deep_agent::default"
+    return runtime_config
+
+
 def _sync_history_to_runtime(agent: Any, runtime_config: Dict[str, Any]) -> None:
     """
     Synchronize conversation history from storage checkpointer to runtime checkpointer.
@@ -69,6 +88,8 @@ def _sync_history_to_runtime(agent: Any, runtime_config: Dict[str, Any]) -> None
     """
     if not hasattr(agent, "storage_checkpointer") or agent.storage_checkpointer is None:
         return
+
+    runtime_config = _ensure_checkpoint_namespace(agent, runtime_config)
 
     try:
         # Load checkpoint from storage (UnifiedCheckpointer)
@@ -160,6 +181,8 @@ def _sync_runtime_to_storage(agent: Any, runtime_config: Dict[str, Any]) -> None
     """
     if not hasattr(agent, "storage_checkpointer") or agent.storage_checkpointer is None:
         return
+
+    runtime_config = _ensure_checkpoint_namespace(agent, runtime_config)
 
     try:
         # Get final checkpoint from runtime (MemorySaver)
