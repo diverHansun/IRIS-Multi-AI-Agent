@@ -31,14 +31,18 @@ class ZhipuAgentAdapter(AgentAdapter):
     - System prompt configuration
     """
 
-    def __init__(self, config: AgentConfig):
+    def __init__(
+        self,
+        config: AgentConfig,
+        shared_checkpointer: Optional[UnifiedCheckpointer] = None,
+    ):
         """
         Initialize Zhipu agent adapter.
 
         Args:
             config: Fully resolved AgentConfig instance
         """
-        super().__init__(config)
+        super().__init__(config, shared_checkpointer=shared_checkpointer)
 
     def create_llm(self) -> BaseChatModel:
         """

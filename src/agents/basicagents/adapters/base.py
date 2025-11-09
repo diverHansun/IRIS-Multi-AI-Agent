@@ -49,7 +49,11 @@ class AgentAdapter(ABC):
     to create components without any hardcoded values.
     """
 
-    def __init__(self, config: AgentConfig):
+    def __init__(
+        self,
+        config: AgentConfig,
+        shared_checkpointer: Optional[UnifiedCheckpointer] = None,
+    ):
         """
         Initialize agent adapter with resolved configuration.
 
@@ -59,6 +63,7 @@ class AgentAdapter(ABC):
         self.config = config
         self.provider = config.provider
         self.model = config.model
+        self._shared_checkpointer = shared_checkpointer
 
         logger.debug(
             f"AgentAdapter initialized: {self.provider}/{self.model}"
@@ -170,6 +175,10 @@ class AgentAdapter(ABC):
         if not self.config.agent_params.get("memory_enabled", True):
             logger.info("Memory disabled, skipping checkpointer creation")
             return None
+
+        if self._shared_checkpointer is not None:
+            logger.info("Using shared unified checkpointer from memory sync")
+            return self._shared_checkpointer
 
         # Create unified checkpointer with independent GlobalMemoryManager
         checkpointer = UnifiedCheckpointer(

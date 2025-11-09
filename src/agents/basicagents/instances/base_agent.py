@@ -25,6 +25,7 @@ from langgraph.graph.state import CompiledStateGraph
 from src.agents.basicagents.config import AgentConfig
 from src.agents.basicagents.exceptions import AgentExecutionError
 from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
+from src.components.shared.memory.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 
@@ -252,19 +253,8 @@ class BaseAgent(ABC):
         if not self.enable_memory or not self.checkpointer:
             return extra_config
 
-        # Build base config with thread_id for checkpointer
-        base_config = {"configurable": {"thread_id": session_id}}
-
-        if extra_config is None:
-            return base_config
-
-        # Merge configurations
-        merged = dict(extra_config)
-        base_configurable = base_config.get("configurable", {})
-        extra_configurable = extra_config.get("configurable", {})
-        merged["configurable"] = {**base_configurable, **extra_configurable}
-
-        return merged
+        session_ctx = self._create_session_context(session_id)
+        return session_ctx.build_runtime_config(extra_config)
 
     def _parse_graph_output(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -612,6 +602,14 @@ class BaseAgent(ABC):
             Agent information dictionary
         """
         return self.get_agent_info()
+
+    def _create_session_context(self, session_id: str) -> SessionContext:
+        return SessionContext(
+            session_id=session_id,
+            agent_type="basic",
+            provider=self.provider,
+            function_type=self.config.agent_params.get("agent_type", "default"),
+        )
 
     def get_llm(self) -> Optional[BaseChatModel]:
         """

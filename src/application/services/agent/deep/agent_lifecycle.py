@@ -50,6 +50,9 @@ async def _instantiate_agent(
         global_memory_manager=ctx.global_memory,
         function_type=function_type,
     )
+    if getattr(ctx, "memory_sync", None):
+        shared_checkpointer = ctx.memory_sync.get_storage_checkpointer()
+        setattr(agent, "storage_checkpointer", shared_checkpointer)
     return agent, resolved_provider, resolved_model
 
 

@@ -83,6 +83,7 @@ class UnifiedCheckpointer(BaseCheckpointSaver):
         storage_dir: str = "data/sessions",
         max_messages: int = 50,
         serde: Optional[Any] = None,
+        global_memory: Optional[GlobalMemoryManager] = None,
     ):
         """
         Initialize unified checkpointer.
@@ -94,8 +95,8 @@ class UnifiedCheckpointer(BaseCheckpointSaver):
         """
         super().__init__(serde=serde)
 
-        # Create GlobalMemoryManager instance for persistence
-        self.global_memory = GlobalMemoryManager(
+        # Reuse provided GlobalMemoryManager when available to share storage
+        self.global_memory = global_memory or GlobalMemoryManager(
             storage_dir=storage_dir,
             max_messages=max_messages
         )

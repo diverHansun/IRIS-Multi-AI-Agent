@@ -20,6 +20,7 @@ from src.agents.basicagents.exceptions import (
     AgentCreationError,
 )
 from src.core.providers import basicagents_registry
+from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,9 @@ class AgentManager:
         self,
         provider: str,
         model: Optional[str] = None,
-        **user_params: Any
+        *,
+        shared_checkpointer: Optional[UnifiedCheckpointer] = None,
+        **user_params: Any,
     ):
         """
         Create Agent instance using new optimized path.
@@ -98,7 +101,11 @@ class AgentManager:
             )
 
             # Step 2: Create Adapter
-            adapter = self._create_adapter(provider, config)
+            adapter = self._create_adapter(
+                provider,
+                config,
+                shared_checkpointer=shared_checkpointer,
+            )
 
             # Step 3: Adapter creates fully initialized agent
             agent = await adapter.create_agent()
@@ -151,7 +158,13 @@ class AgentManager:
         # Call new implementation
         return await self.create_agent(provider, model, **user_params)
 
-    def _create_adapter(self, provider: str, config: AgentConfig):
+    def _create_adapter(
+        self,
+        provider: str,
+        config: AgentConfig,
+        *,
+        shared_checkpointer: Optional[UnifiedCheckpointer] = None,
+    ):
         """
         Create appropriate Adapter for provider.
 
@@ -180,7 +193,7 @@ class AgentManager:
             raise ProviderNotFoundError(provider, available_providers)
 
         logger.debug(f"Creating {adapter_class.__name__} for {provider}")
-        return adapter_class(config=config)
+        return adapter_class(config=config, shared_checkpointer=shared_checkpointer)
 
     def get_available_agents(self) -> List[Dict[str, Any]]:
         """

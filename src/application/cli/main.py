@@ -8,7 +8,11 @@ import asyncio
 import logging
 from typing import Optional
 
-from src.components.shared.memory import GlobalMemoryManager, SessionManager
+from src.components.shared.memory import (
+    GlobalMemoryManager,
+    SessionManager,
+    MemorySyncAdapter,
+)
 
 from src.application.commands import dispatch
 from src.application.commands.parser import extract_command_name, is_command, parse_command
@@ -68,6 +72,7 @@ def _initialize_memory(ctx: AppState) -> None:
     ctx.console.print("[yellow]Initializing memory system...[/]")
     ctx.global_memory = GlobalMemoryManager(storage_dir="data/sessions", max_messages=50)
     ctx.session_manager = SessionManager(ctx.global_memory)
+    ctx.memory_sync = MemorySyncAdapter(ctx.global_memory)
     ctx.session_id = ctx.session_manager.prompt_for_session_choice()
     ctx.console.print(f"[dim]Current Session ID: {ctx.session_id}[/]")
     ctx.hitl_manager = SessionHITLManager()

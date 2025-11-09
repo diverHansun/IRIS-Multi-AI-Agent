@@ -71,6 +71,7 @@ class AppState:
 
     global_memory: Any = None
     session_manager: Any = None
+    memory_sync: Any = None
     session_id: Optional[str] = None
     streaming_manager: Any = None
     mcp_manager: Any = None

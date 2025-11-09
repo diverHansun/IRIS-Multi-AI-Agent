@@ -24,10 +24,15 @@ async def _instantiate_agent(ctx, provider: str | None, model: str | None) -> An
         else:
             raise RuntimeError("No basic agent providers available")
 
+    shared_checkpointer = None
+    if getattr(ctx, "memory_sync", None):
+        shared_checkpointer = ctx.memory_sync.get_storage_checkpointer()
+
     agent = await agent_manager.create_agent(
         provider=provider,
         model=model,
         global_memory_manager=ctx.global_memory,
+        shared_checkpointer=shared_checkpointer,
     )
 
     if hasattr(agent, "verbose"):

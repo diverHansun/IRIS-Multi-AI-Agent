@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from rich.markup import escape
 
-import asyncio
-
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command, Interrupt
+
+from src.components.shared.memory.session_context import SessionContext
 
 from .event_handler import DeepAgentEventHandler
 from ..hitl.handler import handle_hitl_interrupt, HITLDecisionError
@@ -56,173 +57,6 @@ def _resolve_safety(metadata: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _ensure_checkpoint_namespace(agent: Any, runtime_config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Guarantee LangGraph runtime configs include checkpoint namespace metadata.
-    """
-    configurable = runtime_config.setdefault("configurable", {})
-    checkpoint_ns = configurable.get("checkpoint_ns")
-    if checkpoint_ns:
-        return runtime_config
-
-    namespace = getattr(agent, "checkpoint_namespace", None)
-    if namespace is None and hasattr(agent, "get_checkpoint_namespace"):
-        try:
-            namespace = agent.get_checkpoint_namespace()
-        except Exception:  # pylint: disable=broad-except
-            namespace = None
-    configurable["checkpoint_ns"] = namespace or "deep_agent::default"
-    return runtime_config
-
-
-def _sync_history_to_runtime(agent: Any, runtime_config: Dict[str, Any]) -> None:
-    """
-    Synchronize conversation history from storage checkpointer to runtime checkpointer.
-
-    This enables the runtime to have access to previous conversation context
-    while using MemorySaver for HITL support.
-
-    Args:
-        agent: Agent instance with dual checkpointers
-        runtime_config: Runtime configuration containing thread_id
-    """
-    if not hasattr(agent, "storage_checkpointer") or agent.storage_checkpointer is None:
-        return
-
-    runtime_config = _ensure_checkpoint_namespace(agent, runtime_config)
-
-    try:
-        # Load checkpoint from storage (UnifiedCheckpointer)
-        checkpoint_tuple = agent.storage_checkpointer.get_tuple(runtime_config)
-
-        if checkpoint_tuple:
-            # Ensure checkpoint has required metadata for LangGraph
-            checkpoint_ns = runtime_config.get("configurable", {}).get("checkpoint_ns", "")
-            metadata_with_ns = dict(checkpoint_tuple.metadata or {})
-            metadata_with_ns.setdefault("checkpoint_ns", checkpoint_ns)
-
-            # Restore to runtime checkpointer (MemorySaver)
-            agent.runtime_checkpointer.put(
-                runtime_config,
-                checkpoint_tuple.checkpoint,
-                metadata_with_ns,
-                checkpoint_tuple.checkpoint.get("channel_versions", {})
-            )
-            logger.debug(
-                "Loaded conversation history to runtime checkpointer for thread_id=%s",
-                runtime_config.get("configurable", {}).get("thread_id")
-            )
-    except Exception as exc:
-        logger.warning("Failed to sync history to runtime checkpointer: %s", exc)
-
-
-def _flatten_checkpoint_messages(entries: Any) -> List[Any]:
-    """Extract BaseMessage instances from nested checkpoint structures."""
-
-    from langchain_core.messages import BaseMessage
-
-    flattened: List[Any] = []
-    stack: List[Any] = [entries]
-
-    while stack:
-        item = stack.pop()
-
-        if isinstance(item, BaseMessage):
-            flattened.append(item)
-            continue
-
-        if item is None:
-            continue
-
-        if asyncio.iscoroutine(item):
-            # Skip coroutines entirely
-            continue
-
-        if isinstance(item, dict):
-            item_type = item.get("type")
-            value = item.get("value")
-
-            if item_type == "message" and isinstance(value, BaseMessage):
-                flattened.append(value)
-                continue
-
-            # Some LangGraph write operations wrap the message in the "value" field
-            if value is not None:
-                stack.append(value)
-
-            # Also traverse other dict values (lists, tuples, etc.)
-            for dict_value in item.values():
-                if dict_value is value:
-                    continue
-                stack.append(dict_value)
-            continue
-
-        if isinstance(item, (list, tuple)):
-            stack.extend(reversed(item))
-            continue
-
-        if isinstance(item, set):
-            stack.extend(item)
-            continue
-
-    return flattened
-
-
-def _sync_runtime_to_storage(agent: Any, runtime_config: Dict[str, Any]) -> None:
-    """
-    Synchronize final state from runtime checkpointer to storage checkpointer.
-
-    After streaming completes, save the filtered conversation
-    (HumanMessage/AIMessage only) to long-term storage.
-
-    Args:
-        agent: Agent instance with dual checkpointers
-        runtime_config: Runtime configuration containing thread_id
-    """
-    if not hasattr(agent, "storage_checkpointer") or agent.storage_checkpointer is None:
-        return
-
-    runtime_config = _ensure_checkpoint_namespace(agent, runtime_config)
-
-    try:
-        # Get final checkpoint from runtime (MemorySaver)
-        final_checkpoint = agent.runtime_checkpointer.get_tuple(runtime_config)
-
-        if final_checkpoint:
-            # Clean checkpoint before passing to storage
-            # Filter out LangGraph internal structures (coroutines, write operations)
-            # that may exist in messages during HITL operations
-            from langchain_core.messages import BaseMessage
-
-            checkpoint_copy = final_checkpoint.checkpoint.copy()
-            channel_values = dict(checkpoint_copy.get("channel_values", {}))
-            messages = channel_values.get("messages", [])
-
-            filtered_messages = _flatten_checkpoint_messages(messages)
-            channel_values["messages"] = filtered_messages
-            checkpoint_copy["channel_values"] = channel_values
-
-            logger.debug(
-                "Filtered checkpoint messages: %d -> %d (removed %d non-message objects)",
-                len(messages), len(filtered_messages), len(messages) - len(filtered_messages)
-            )
-
-            # Save to storage (UnifiedCheckpointer automatically filters)
-            # Pass channel_versions as new_versions parameter
-            agent.storage_checkpointer.put(
-                runtime_config,
-                checkpoint_copy,
-                final_checkpoint.metadata,
-                checkpoint_copy.get("channel_versions", {})
-            )
-            logger.debug(
-                "Saved conversation history to storage checkpointer for thread_id=%s",
-                runtime_config.get("configurable", {}).get("thread_id")
-            )
-    except Exception as exc:
-        logger.warning("Failed to sync runtime to storage checkpointer: %s", exc)
-
-
 async def handle_deep_agent_query(ctx, query: str) -> str:
     """
     Route query to deep agent instance using streaming execution.
@@ -262,9 +96,28 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     max_execution_time = safety_opts.get("max_execution_time")
     deadline = time.perf_counter() + max_execution_time if isinstance(max_execution_time, (int, float)) else None
 
-    # Session lifecycle: Load history from storage to runtime checkpointer
-    # Following SOLID SRP: Conversation handler manages session synchronization
-    _sync_history_to_runtime(agent, runtime_config)
+    provider_name = getattr(getattr(agent, "adapter", None), "provider", None)
+    metadata_provider = metadata.get("provider") if isinstance(metadata, dict) else None
+    provider_value = provider_name or metadata_provider or "unknown"
+    function_type = getattr(agent, "function_type", "default") or "default"
+    session_ctx = SessionContext(
+        session_id=session_id,
+        agent_type="deep",
+        provider=provider_value,
+        function_type=function_type,
+    )
+    runtime_config = session_ctx.build_runtime_config(runtime_config)
+
+    memory_sync = getattr(ctx, "memory_sync", None)
+    runtime_checkpointer = getattr(agent, "runtime_checkpointer", None)
+    if memory_sync:
+        runtime_config = memory_sync.load_into_runtime(
+            session_ctx,
+            runtime_checkpointer,
+            runtime_config,
+        )
+    else:
+        logger.debug("MemorySyncAdapter unavailable; runtime history not preloaded.")
 
     ctx.console.print("[dim]Deep agent reasoning...[/]")
 
@@ -337,9 +190,15 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         ctx.console.print("[bold red]Deep agent execution timed out.[/]")
         return ""
 
-    # Session lifecycle: Save filtered messages from runtime to storage checkpointer
-    # This persists the conversation while keeping storage lean
-    _sync_runtime_to_storage(agent, runtime_config)
+    if memory_sync:
+        memory_sync.persist_from_runtime(
+            session_ctx,
+            runtime_checkpointer,
+            runtime_config,
+            event_handler.last_agent_state,
+        )
+    else:
+        logger.debug("MemorySyncAdapter unavailable; skipping persistence sync.")
 
     final_state = event_handler.last_agent_state
     if not final_state:

@@ -14,9 +14,13 @@ Architecture:
 from .global_memory import GlobalMemoryManager
 from .session_manager import SessionManager
 from .unified_checkpointer import UnifiedCheckpointer
+from .session_context import SessionContext
+from .memory_sync import MemorySyncAdapter
 
 __all__ = [
     'GlobalMemoryManager',
     'SessionManager',
     'UnifiedCheckpointer',
+    'SessionContext',
+    'MemorySyncAdapter',
 ]
