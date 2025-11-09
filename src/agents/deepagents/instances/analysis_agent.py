@@ -17,6 +17,7 @@ class AnalysisAgent(BaseDeepAgent):
         runtime: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
         global_memory_manager: Optional[Any] = None,
+        memory_sync: Optional[Any] = None,
     ) -> None:
         base_metadata = {"capabilities": ["data_analysis", "reporting", "insights"]}
         if metadata:
@@ -26,4 +27,5 @@ class AnalysisAgent(BaseDeepAgent):
             runtime=runtime,
             metadata=base_metadata,
             global_memory_manager=global_memory_manager,
+            memory_sync=memory_sync,
         )

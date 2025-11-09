@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 from src.agents.deepagents.factories.registry import DeepAgentFactoryRegistry
 from src.agents.deepagents.adapters.base import BaseDeepAgentAdapter
+from src.components.shared.memory import MemorySyncAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class DeepAgentManager:
         *,
         function_type: str = "research",
         global_memory_manager: Optional[Any] = None,
+        memory_sync: Optional[MemorySyncAdapter] = None,
         **user_params: Any,
     ) -> Any:
         """Create a DeepAgent instance for the requested function type."""
@@ -41,6 +43,8 @@ class DeepAgentManager:
         if global_memory_manager is None:
             global_memory_manager = user_params.pop("global_memory_manager", None)
 
+        if memory_sync is None:
+            memory_sync = user_params.pop("memory_sync", None)
         logger.info("Creating deep agent for provider=%s model=%s function=%s", provider_key, model, function_type)
 
         resolved_model = self._get_provider_config(provider_key, model)
@@ -67,6 +71,7 @@ class DeepAgentManager:
             subagent_manager=self.subagent_manager,
             middleware_config=middleware_config,
             global_memory_manager=global_memory_manager,
+            memory_sync=memory_sync,
             **user_params,
         )
 

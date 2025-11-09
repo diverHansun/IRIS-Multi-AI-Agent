@@ -11,6 +11,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from src.agents.deepagents.adapters.base import BaseDeepAgentAdapter
 from src.components.shared.memory.global_memory import GlobalMemoryManager
 from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
+from src.components.shared.memory.memory_sync import MemorySyncAdapter
+from src.components.shared.memory.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,7 @@ class BaseDeepAgent:
         runtime: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
         global_memory_manager: Optional[Any] = None,
+        memory_sync: Optional[MemorySyncAdapter] = None,
     ) -> None:
         self.adapter = adapter
         self.runtime = runtime
@@ -43,6 +46,8 @@ class BaseDeepAgent:
         self.global_memory_manager = global_memory_manager
         self.enable_memory = global_memory_manager is not None
         self.checkpoint_namespace = self._compute_checkpoint_namespace()
+        self.memory_sync = memory_sync
+        self._session_checkpoints: Dict[str, Optional[str]] = {}
 
         # Runtime checkpointer for HITL interrupt/resume support
         # Uses MemorySaver to preserve complete execution state including ToolMessage and __interrupt__
@@ -65,6 +70,12 @@ class BaseDeepAgent:
         elif global_memory_manager is not None:
             # Accept custom checkpointer implementations for compatibility.
             self.storage_checkpointer = global_memory_manager
+
+        if self.memory_sync is None and isinstance(global_memory_manager, GlobalMemoryManager):
+            try:
+                self.memory_sync = MemorySyncAdapter(global_memory_manager)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Failed to initialize MemorySyncAdapter automatically: %s", exc)
 
     @property
     def function_type(self) -> str:
@@ -95,7 +106,14 @@ class BaseDeepAgent:
             raise RuntimeError("Deep agent runtime has not been initialized")
 
         payload = self._build_runtime_input(query)
-        config = self._build_runtime_config(session_id)
+        payload = self.enhance_runtime_input(session_id, payload)
+        base_config = self._build_runtime_config(session_id)
+        session_ctx: Optional[SessionContext] = None
+        if self.memory_sync:
+            session_ctx = self.create_session_context(session_id)
+            config = self._load_history_into_runtime(session_ctx, base_config)
+        else:
+            config = base_config
 
         try:
             result = await self.runtime.ainvoke(payload, config=config)
@@ -103,6 +121,7 @@ class BaseDeepAgent:
             logger.error("Deep agent invocation failed: %s", exc, exc_info=True)
             return self._build_error_response(exc, session_id)
 
+        self._persist_runtime_history(session_ctx, config, result)
         return self._prepare_success_result(query, session_id, result)
 
     async def ainvoke(
@@ -179,6 +198,88 @@ class BaseDeepAgent:
                 "checkpoint_ns": self.get_checkpoint_namespace(),
             }
         }
+
+    def _fetch_conversation_history(self, session_id: str) -> List[BaseMessage]:
+        """Retrieve existing conversation history for a session."""
+        if not self.enable_memory or not self.global_memory_manager:
+            return []
+        history_accessor = getattr(self.global_memory_manager, "get_session_history", None)
+        if not callable(history_accessor):
+            return []
+        try:
+            history = history_accessor(session_id)
+            messages = getattr(history, "messages", history)
+            if isinstance(messages, list):
+                return list(messages)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.debug("Failed to fetch conversation history for session %s: %s", session_id, exc)
+        return []
+
+    def enhance_runtime_input(self, session_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge stored conversation history into runtime input payload."""
+        if not isinstance(payload, dict):
+            return payload
+        pending_messages = payload.get("messages")
+        if not isinstance(pending_messages, list):
+            return payload
+        history = self._fetch_conversation_history(session_id)
+        if not history:
+            return payload
+        merged_payload = dict(payload)
+        merged_payload["messages"] = history + pending_messages
+        return merged_payload
+
+    def create_session_context(self, session_id: str) -> SessionContext:
+        """Create SessionContext carrying stored checkpoint metadata."""
+        checkpoint_id = self._session_checkpoints.get(session_id)
+        return SessionContext(
+            session_id=session_id,
+            agent_type="deep",
+            provider=getattr(self.adapter, "provider", "unknown") or "unknown",
+            function_type=self.function_type or "default",
+            checkpoint_id=checkpoint_id,
+        )
+
+    def _load_history_into_runtime(
+        self,
+        session_ctx: SessionContext,
+        runtime_config: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if not self.memory_sync:
+            return runtime_config
+
+        updated_config = self.memory_sync.load_into_runtime(
+            session_ctx,
+            self.runtime_checkpointer,
+            session_ctx.build_runtime_config(runtime_config),
+        )
+        self._track_session_checkpoint(session_ctx)
+        return updated_config
+
+    def _persist_runtime_history(
+        self,
+        session_ctx: Optional[SessionContext],
+        runtime_config: Dict[str, Any],
+        agent_state: Optional[Dict[str, Any]],
+    ) -> None:
+        if not self.memory_sync or session_ctx is None:
+            return
+
+        self.memory_sync.persist_from_runtime(
+            session_ctx,
+            self.runtime_checkpointer,
+            runtime_config,
+            agent_state,
+        )
+        self._track_session_checkpoint(session_ctx)
+
+    def update_session_checkpoint(self, session_ctx: SessionContext) -> None:
+        """Allow orchestrators to persist checkpoint metadata after streaming runs."""
+        self._track_session_checkpoint(session_ctx)
+
+    def _track_session_checkpoint(self, session_ctx: SessionContext) -> None:
+        if session_ctx.checkpoint_id:
+            self._session_checkpoints[session_ctx.session_id] = session_ctx.checkpoint_id
 
     def create_runtime_input(self, query: str) -> Dict[str, Any]:
         """Public helper used by streaming orchestrators to build runtime input."""

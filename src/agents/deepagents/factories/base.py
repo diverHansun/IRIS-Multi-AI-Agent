@@ -12,7 +12,7 @@ from src.agents.deepagents.managers.subagent_manager import SubAgentManager
 from src.components.deepagents.runtime import create_deep_agent_runtime
 from src.components.deepagents.runtime_middlewares.subagents import SubAgent
 from src.components.shared.tools.unified_manager import UnifiedToolManager
-from src.components.shared.memory import UnifiedCheckpointer
+from src.components.shared.memory import MemorySyncAdapter, UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class BaseDeepAgentFactory(ABC):
         subagent_manager: SubAgentManager,
         middleware_config: Dict[str, Any],
         global_memory_manager: Optional[Any] = None,
+        memory_sync: Optional[MemorySyncAdapter] = None,
         **user_params: Any,
     ) -> BaseDeepAgent:
         """Create the deep agent."""
@@ -129,6 +130,7 @@ class BaseDeepAgentFactory(ABC):
             adapter=adapter,
             metadata=metadata,
             global_memory_manager=global_memory_manager,
+            memory_sync=memory_sync,
         )
 
         # Create runtime with agent's runtime_checkpointer (MemorySaver)

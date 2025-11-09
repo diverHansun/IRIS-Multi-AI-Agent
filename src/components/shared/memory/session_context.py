@@ -25,7 +25,10 @@ class SessionContext:
         return self.session_id or "default"
 
     def checkpoint_namespace(self) -> str:
-        return f"{_sanitize(self.agent_type)}::{_sanitize(self.provider)}::{_sanitize(self.function_type)}"
+        agent_segment = _sanitize(self.agent_type)
+        if not agent_segment.endswith("_agent"):
+            agent_segment = _sanitize(f"{self.agent_type}_agent")
+        return f"{agent_segment}::{_sanitize(self.provider)}::{_sanitize(self.function_type)}"
 
     def build_runtime_config(self, base_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Merge session routing metadata into a LangGraph runtime config."""

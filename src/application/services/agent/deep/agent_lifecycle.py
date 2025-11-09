@@ -48,6 +48,7 @@ async def _instantiate_agent(
         provider=resolved_provider,
         model=resolved_model,
         global_memory_manager=ctx.global_memory,
+        memory_sync=getattr(ctx, "memory_sync", None),
         function_type=function_type,
     )
     if getattr(ctx, "memory_sync", None):

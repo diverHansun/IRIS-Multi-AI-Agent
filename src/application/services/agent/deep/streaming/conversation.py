@@ -12,7 +12,6 @@ from rich.markup import escape
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command, Interrupt
 
-from src.components.shared.memory.session_context import SessionContext
 
 from .event_handler import DeepAgentEventHandler
 from ..hitl.handler import handle_hitl_interrupt, HITLDecisionError
@@ -96,26 +95,22 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     max_execution_time = safety_opts.get("max_execution_time")
     deadline = time.perf_counter() + max_execution_time if isinstance(max_execution_time, (int, float)) else None
 
-    provider_name = getattr(getattr(agent, "adapter", None), "provider", None)
-    metadata_provider = metadata.get("provider") if isinstance(metadata, dict) else None
-    provider_value = provider_name or metadata_provider or "unknown"
-    function_type = getattr(agent, "function_type", "default") or "default"
-    session_ctx = SessionContext(
-        session_id=session_id,
-        agent_type="deep",
-        provider=provider_value,
-        function_type=function_type,
-    )
+    session_ctx = agent.create_session_context(session_id)
     runtime_config = session_ctx.build_runtime_config(runtime_config)
 
-    memory_sync = getattr(ctx, "memory_sync", None)
+    agent_memory_sync = getattr(agent, "memory_sync", None)
+    if agent_memory_sync is None:
+        agent_memory_sync = getattr(ctx, "memory_sync", None)
+        if agent_memory_sync is not None:
+            setattr(agent, "memory_sync", agent_memory_sync)
     runtime_checkpointer = getattr(agent, "runtime_checkpointer", None)
-    if memory_sync:
-        runtime_config = memory_sync.load_into_runtime(
+    if agent_memory_sync:
+        runtime_config = agent_memory_sync.load_into_runtime(
             session_ctx,
             runtime_checkpointer,
             runtime_config,
         )
+        agent.update_session_checkpoint(session_ctx)
     else:
         logger.debug("MemorySyncAdapter unavailable; runtime history not preloaded.")
 
@@ -190,13 +185,14 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         ctx.console.print("[bold red]Deep agent execution timed out.[/]")
         return ""
 
-    if memory_sync:
-        memory_sync.persist_from_runtime(
+    if agent_memory_sync:
+        agent_memory_sync.persist_from_runtime(
             session_ctx,
             runtime_checkpointer,
             runtime_config,
             event_handler.last_agent_state,
         )
+        agent.update_session_checkpoint(session_ctx)
     else:
         logger.debug("MemorySyncAdapter unavailable; skipping persistence sync.")
 
