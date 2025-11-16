@@ -10,19 +10,21 @@ from langgraph.runtime import Runtime
 from .config import RealFilesystemOptions, build_real_filesystem_options
 from .tools import RealFilesystemToolFactory
 
-REAL_FILESYSTEM_PROMPT = """You can inspect the host project using real filesystem tools.
+REAL_FILESYSTEM_PROMPT = """You can access and modify the host project files using real filesystem tools.
 
 Key rules:
-- Access is strictly read-only; never attempt to modify host files.
-- Only paths within the configured allowlist and allowed extensions are reachable.
-- Hidden files remain hidden unless explicitly requested.
-- Prefer listing files before reading, and use pagination for large files.
+- **Read operations**: Unrestricted. Use list, read, glob, grep freely to explore the codebase.
+- **Write/Edit operations**: Automatic approval workflow. System will pause, show diff preview, and wait for user confirmation.
+- Only paths within the configured allowlist and allowed extensions are accessible.
+- Use pagination (offset/limit) when reading large files to avoid context overflow.
 
 Available tools:
-- list_real_files(directory_path=None, recursive=False, include_hidden=False)
-- read_real_file(file_path, offset=0, limit=2000, encoding="utf-8")
-- glob_real_files(pattern, base_path=None, recursive=True, include_hidden=False)
-- grep_real_files(pattern, file_pattern=None, base_path=None, case_sensitive=True, context_lines=0, max_results=100, include_hidden=False)"""
+- list_real_files(directory_path, recursive, include_hidden)
+- read_real_file(file_path, offset, limit, encoding)
+- glob_real_files(pattern, base_path, recursive, include_hidden)
+- grep_real_files(pattern, file_pattern, base_path, case_sensitive, context_lines, max_results, include_hidden)
+- write_real_file(file_path, content, encoding) [Triggers approval]
+- edit_real_file(file_path, old_string, new_string, encoding, replace_all) [Triggers approval]"""
 
 
 class RealFilesystemMiddleware(AgentMiddleware):

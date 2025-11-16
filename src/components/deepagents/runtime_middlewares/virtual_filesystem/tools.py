@@ -40,37 +40,21 @@ EDIT_TOOL_NAME = "edit_virtual_file"
 VIRTUAL_FILESYSTEM_TOOL_NAMES = (LIST_TOOL_NAME, READ_TOOL_NAME, WRITE_TOOL_NAME, EDIT_TOOL_NAME)
 
 
-LIST_FILES_PROMPT = """Enumerate files available inside the virtual filesystem.
+LIST_FILES_PROMPT = """List files in the virtual filesystem.
 
-Usage guidelines:
-- Call this tool before reading or editing to understand available files.
-- Provide an optional absolute path to scope the results to a directory.
-- Paths always start with '/' and use forward slashes.
-- Files in long-term memory are prefixed with '/memories/'."""
+Call this first before reading or editing. Provide optional path to filter by directory."""
 
-READ_FILE_PROMPT = """Render the contents of a file with line numbers.
+READ_FILE_PROMPT = """Read a file from the virtual filesystem with line numbers.
 
-Usage guidelines:
-- File paths must be absolute (starting with '/').
-- Reads up to 2000 lines by default; use offset and limit for pagination.
-- Long lines are truncated for display but retained in storage.
-- Files with '/memories/' prefix are read from long-term storage."""
+Use offset and limit for pagination when reading large files (e.g., offset=0, limit=500 for first 500 lines)."""
 
-WRITE_FILE_PROMPT = """Create a brand-new file in the virtual filesystem.
+WRITE_FILE_PROMPT = """Create a new file in the virtual filesystem.
 
-Usage guidelines:
-- The target path must not already exist; read or edit instead of overwriting.
-- Provide the full contents of the file in a single call.
-- Use '/memories/' prefix to store in long-term memory (persists across sessions).
-- Use this only when creating new files is explicitly required."""
+Target path must not exist. Follow path conventions: /workspace/tool_results/, /workspace/shared/, /workspace/processing/."""
 
-EDIT_FILE_PROMPT = """Apply precise text replacements to an existing file.
+EDIT_FILE_PROMPT = """Edit an existing file in the virtual filesystem.
 
-Usage guidelines:
-- Ensure the file has been read in the current conversation before editing.
-- By default only the first occurrence is replaced; set replace_all=true otherwise.
-- Strings must match the file contents exactly (after the line number prefix).
-- Works with both transient files and long-term memory files."""
+Read the file first to ensure old_string matches exactly. Set replace_all=true to replace all occurrences."""
 
 
 class PathLocation:

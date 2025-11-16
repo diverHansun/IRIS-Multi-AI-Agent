@@ -21,12 +21,28 @@ from .types import (
 )
 from .utils import format_with_line_numbers, string_to_file_data
 
-BASE_PROMPT = """You can interact with a sandboxed in-memory filesystem using dedicated tools.
+BASE_PROMPT = """You have access to an in-memory virtual filesystem for storing intermediate data.
 
 Key principles:
-- Never assume access to the host machine; only work with the sandboxed files you create or read.
-- Prefer listing files before reading or editing.
-- All file operations are safe and isolated from the host system."""
+- **No restrictions**: All operations are safe, unlimited, and require no approval.
+- **Complete isolation**: Fully isolated from the host machine.
+- **Primary use cases**: Store large tool results, share data between agents, cache intermediate computations.
+
+Path conventions (follow strictly):
+- **/workspace/tool_results/**: Large outputs from search/API tools (e.g., /workspace/tool_results/web_search_results.txt)
+- **/workspace/shared/**: Data shared between main agent and subagents (e.g., /workspace/shared/task_context.json)
+- **/workspace/processing/**: Intermediate computation results (e.g., /workspace/processing/parsed_data.json)
+
+Available tools:
+- list_virtual_files(path) - List files in directory
+- read_virtual_file(file_path, offset, limit) - Read with pagination
+- write_virtual_file(file_path, content) - Create new file
+- edit_virtual_file(file_path, old_string, new_string, replace_all) - Edit existing file
+
+Best practices:
+- Use descriptive paths indicating content purpose
+- Read large files in chunks using offset/limit
+- List files first to understand filesystem structure"""
 
 LONG_TERM_PROMPT = f"""Long-term storage is available. Files saved there must be prefixed with '{MEMORIES_PREFIX}' when using the tools. Use it to preserve information across interactions."""
 

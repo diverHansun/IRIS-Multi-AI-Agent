@@ -65,19 +65,11 @@ Usage guidelines:
 
 WRITE_PROMPT = """Write text content to a file on the host machine.
 
-Usage guidelines:
-- Paths must stay within the configured allowlist and use permitted extensions.
-- Content must be UTF-8 by default; specify a different encoding if required.
-- Avoid large files; operations over the configured size limit are rejected.
-- Always request approval before overwriting existing files."""
+Triggers approval workflow with diff preview. Paths must stay within allowlist and use permitted extensions."""
 
 EDIT_PROMPT = """Apply find-and-replace edits to a file on the host machine.
 
-Usage guidelines:
-- Target file must already exist and use an allowed extension.
-- old_string must match the current file contents exactly.
-- replace_all controls whether all occurrences are replaced.
-- Only text files encoded in UTF-8 (configurable) are supported."""
+Triggers approval workflow with diff preview. Always read the file first to ensure old_string matches exactly."""
 
 GLOB_PROMPT = """Search for files on the host machine using glob patterns.
 
