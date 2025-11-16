@@ -236,11 +236,19 @@ class VirtualFilesystemToolFactory:
         def ls(
             runtime: ToolRuntime[None, FilesystemState],
             path: str | None = None,
-        ) -> List[str]:
-            state_files = self._list_files_from_state(runtime.state)
-            long_term_files = self._list_files_from_store(runtime)
-            combined = state_files + long_term_files
-            return list_directory(combined, path)
+        ) -> List[str] | str:
+            # Wrap all operations in try-except to prevent conversation interruption
+            try:
+                state_files = self._list_files_from_state(runtime.state)
+                long_term_files = self._list_files_from_store(runtime)
+                combined = state_files + long_term_files
+                return list_directory(combined, path)
+            except ValueError as exc:
+                # Return error message instead of raising exception
+                return f"Error: {exc}"
+            except Exception as exc:
+                # Catch any unexpected errors
+                return f"Error listing files: {exc}"
 
         return ls
 
@@ -254,20 +262,25 @@ class VirtualFilesystemToolFactory:
             offset: int = DEFAULT_READ_OFFSET,
             limit: int = DEFAULT_READ_LIMIT,
         ) -> str:
-            location = self.classify_path(file_path)
-            if location.is_long_term:
-                file_data = self._fetch_file_from_store(runtime, location.path)
-            else:
-                file_data = self._fetch_file_from_state(runtime.state, location.path)
-            content_str = file_data_to_string(file_data)
-            warning = empty_content_warning(content_str)
-            if warning:
-                return warning
+            # Wrap all operations in try-except to prevent conversation interruption
             try:
+                location = self.classify_path(file_path)
+                if location.is_long_term:
+                    file_data = self._fetch_file_from_store(runtime, location.path)
+                else:
+                    file_data = self._fetch_file_from_state(runtime.state, location.path)
+                content_str = file_data_to_string(file_data)
+                warning = empty_content_warning(content_str)
+                if warning:
+                    return warning
                 lines = slice_content(file_data, offset=offset, limit=limit)
+                return format_with_line_numbers(lines, start_line=offset + 1, style="tab")
             except ValueError as exc:
-                return str(exc)
-            return format_with_line_numbers(lines, start_line=offset + 1, style="tab")
+                # Return error message instead of raising exception
+                return f"Error: {exc}"
+            except Exception as exc:
+                # Catch any unexpected errors
+                return f"Error reading file '{file_path}': {exc}"
 
         return read_file
 
@@ -280,10 +293,18 @@ class VirtualFilesystemToolFactory:
             content: str,
             runtime: ToolRuntime[None, FilesystemState],
         ) -> Command | str:
-            location = self.classify_path(file_path)
-            if location.is_long_term:
-                return self._write_file_to_store(runtime, path=location.path, content=content)
-            return self._write_file_to_state(runtime, path=location.path, content=content)
+            # Wrap all operations in try-except to prevent conversation interruption
+            try:
+                location = self.classify_path(file_path)
+                if location.is_long_term:
+                    return self._write_file_to_store(runtime, path=location.path, content=content)
+                return self._write_file_to_state(runtime, path=location.path, content=content)
+            except ValueError as exc:
+                # Return error message instead of raising exception
+                return f"Error: {exc}"
+            except Exception as exc:
+                # Catch any unexpected errors
+                return f"Error writing file '{file_path}': {exc}"
 
         return write_file
 
@@ -298,15 +319,33 @@ class VirtualFilesystemToolFactory:
             runtime: ToolRuntime[None, FilesystemState],
             replace_all: bool = False,
         ) -> Command | str:
-            if not runtime.tool_call_id:
-                raise ValueError("Tool call ID missing while attempting to edit")
+            # Wrap all operations in try-except to prevent conversation interruption
+            try:
+                if not runtime.tool_call_id:
+                    return "Error: Tool call ID missing while attempting to edit"
 
-            location = self.classify_path(file_path)
-            if location.is_long_term:
-                store = _require_store(runtime)
-                namespace = _namespace()
+                location = self.classify_path(file_path)
+                if location.is_long_term:
+                    store = _require_store(runtime)
+                    namespace = _namespace()
+                    try:
+                        file_data = self._fetch_file_from_store(runtime, location.path)
+                    except ValueError as exc:
+                        return str(exc)
+                    edit_result = self._edit_file_content(
+                        file_data,
+                        old_string=old_string,
+                        new_string=new_string,
+                        replace_all=replace_all,
+                    )
+                    if isinstance(edit_result, str):
+                        return edit_result
+                    updated, message = edit_result
+                    store.put(namespace, location.path, store_payload_from_file_data(updated))
+                    return message
+
                 try:
-                    file_data = self._fetch_file_from_store(runtime, location.path)
+                    file_data = self._fetch_file_from_state(runtime.state, location.path)
                 except ValueError as exc:
                     return str(exc)
                 edit_result = self._edit_file_content(
@@ -318,29 +357,19 @@ class VirtualFilesystemToolFactory:
                 if isinstance(edit_result, str):
                     return edit_result
                 updated, message = edit_result
-                store.put(namespace, location.path, store_payload_from_file_data(updated))
-                return message
-
-            try:
-                file_data = self._fetch_file_from_state(runtime.state, location.path)
+                update = {
+                    "files": {location.path: updated},
+                    "messages": [
+                        ToolMessage(f"{message} in {location.path}", tool_call_id=runtime.tool_call_id)
+                    ],
+                }
+                return Command(update=update)
             except ValueError as exc:
-                return str(exc)
-            edit_result = self._edit_file_content(
-                file_data,
-                old_string=old_string,
-                new_string=new_string,
-                replace_all=replace_all,
-            )
-            if isinstance(edit_result, str):
-                return edit_result
-            updated, message = edit_result
-            update = {
-                "files": {location.path: updated},
-                "messages": [
-                    ToolMessage(f"{message} in {location.path}", tool_call_id=runtime.tool_call_id)
-                ],
-            }
-            return Command(update=update)
+                # Return error message instead of raising exception
+                return f"Error: {exc}"
+            except Exception as exc:
+                # Catch any unexpected errors
+                return f"Error editing file '{file_path}': {exc}"
 
         return edit_file
 
