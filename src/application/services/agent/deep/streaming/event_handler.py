@@ -156,12 +156,27 @@ class DeepAgentEventHandler:
                 self.console.print()
             return
 
-        # Display file operation results
+        # Display file operation results (only for write/edit, skip read operations)
         if record and tool_name in {"write_real_file", "edit_real_file"}:
             from ..hitl.file_ops import render_file_operation
             self._flush_text_buffer(final=True)
             self._stop_spinner()
             render_file_operation(record, self.console)
+            return
+
+        # Skip read operation results - they are internal and don't need to be shown
+        # Real filesystem: read, list, glob, grep
+        # Virtual filesystem: read, list
+        if tool_name in (
+            "read_real_file",
+            "read_virtual_file",
+            "list_real_files",
+            "list_virtual_files",
+            "write_virtual_file",
+            "edit_virtual_file",
+            "glob_real_files",
+            "grep_real_files",
+        ):
             return
 
         # Handle generic tool errors
@@ -306,7 +321,27 @@ class DeepAgentEventHandler:
             self._render_tool_call(buffer_name, parsed_args)
 
     def _render_tool_call(self, tool_name: str, tool_args: Dict[str, Any]) -> None:
-        """Render a tool call display."""
+        """Render a tool call display.
+
+        Only renders write/edit operations. Read/grep/glob operations are hidden
+        as they are internal to the agent's reasoning process.
+        """
+        # Skip read operations - they are internal and don't need to be shown
+        # Real filesystem: read, list, glob, grep
+        # Virtual filesystem: read, list
+        if tool_name in (
+            "read_file",
+            "read_real_file",
+            "read_virtual_file",
+            "list_real_files",
+            "list_virtual_files",
+            "write_virtual_file",
+            "edit_virtual_file",
+            "grep_real_files",
+            "glob_real_files",
+        ):
+            return
+
         self._stop_spinner()
 
         if not self._has_responded:

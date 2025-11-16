@@ -440,10 +440,9 @@ def render_file_operation(record: FileOperationRecord, console) -> None:
             console.print(f"[red]Error: {record.error}[/red]")
         return
 
-    # Display operation summary with icon
+    # Display operation summary
     display_path = format_display_path(record.file_path)
-    operation_icon = "\u2713"  # Checkmark
-    console.print(f"\n[green]{operation_icon} File operation completed: {display_path}[/green]")
+    console.print(f"\n[green][+] File operation completed: {display_path}[/green]")
 
     # Display metrics for write/edit operations
     if record.tool_name in {"write_real_file", "edit_real_file"}:

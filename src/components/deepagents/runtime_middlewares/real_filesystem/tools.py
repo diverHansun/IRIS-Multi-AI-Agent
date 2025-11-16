@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
 import subprocess
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -280,6 +282,125 @@ class RealFilesystemToolFactory:
         safe_text = truncated.decode("utf-8", errors="replace")
         return f"{safe_text}\n... (output truncated to {MAX_CAPTURED_OUTPUT} bytes)", True
 
+    def _try_ripgrep_search(
+        self,
+        pattern: str,
+        base_dir: Path,
+        file_pattern: str | None,
+        case_sensitive: bool,
+        context_lines: int,
+        limit: int,
+        include_hidden: bool,
+    ) -> str | None:
+        """Try to use ripgrep for fast searching. Returns None if ripgrep is unavailable.
+
+        This method implements the performance optimization strategy by using ripgrep
+        as the primary search engine, falling back to Python if unavailable.
+        Follows YAGNI by only adding complexity where needed (performance-critical path).
+        """
+        cmd = ["rg", "--json", "--no-heading"]
+
+        if not case_sensitive:
+            cmd.append("-i")
+
+        if context_lines > 0:
+            cmd.extend(["-C", str(context_lines)])
+
+        if file_pattern:
+            cmd.extend(["--glob", file_pattern])
+
+        if not include_hidden:
+            cmd.append("--hidden")
+
+        cmd.extend(["--max-count", str(limit)])
+        cmd.extend(["--", pattern, str(base_dir)])
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+        except FileNotFoundError:
+            return None
+        except subprocess.TimeoutExpired:
+            return None
+
+        if proc.returncode not in (0, 1):
+            return None
+
+        return self._parse_ripgrep_json_output(proc.stdout, limit)
+
+    def _parse_ripgrep_json_output(self, json_output: str, limit: int) -> str:
+        """Parse ripgrep JSON output into formatted string with line numbers.
+
+        Follows DRY by reusing the same output format as Python implementation.
+        """
+        import json as json_lib
+
+        matches: List[str] = []
+        current_file: str | None = None
+        file_matches: Dict[str, List[tuple[int, str]]] = {}
+
+        for line in json_output.splitlines():
+            if not line.strip():
+                continue
+
+            try:
+                data = json_lib.loads(line)
+            except json_lib.JSONDecodeError:
+                continue
+
+            if data.get("type") != "match":
+                continue
+
+            match_data = data.get("data", {})
+            path_data = match_data.get("path", {})
+            file_path = path_data.get("text")
+
+            if not file_path:
+                continue
+
+            line_number = match_data.get("line_number")
+            line_text = match_data.get("lines", {}).get("text", "").rstrip("\n")
+
+            if line_number is None:
+                continue
+
+            try:
+                relative_path = relative_display_path(Path(file_path), self.options.project_root)
+            except (ValueError, OSError):
+                relative_path = file_path
+
+            if relative_path not in file_matches:
+                file_matches[relative_path] = []
+
+            file_matches[relative_path].append((int(line_number), line_text))
+
+            if len(file_matches) * 10 >= limit:
+                break
+
+        for file_path, lines in file_matches.items():
+            if len(matches) >= limit:
+                break
+
+            lines.sort(key=lambda x: x[0])
+
+            for line_num, line_text in lines:
+                if len(matches) >= limit:
+                    break
+
+                formatted_lines = format_with_line_numbers([line_text], start_line=line_num)
+                header = f"# {file_path}:{line_num}"
+                matches.append(f"{header}\n{formatted_lines}")
+
+        if not matches:
+            return "No matches found."
+
+        return "\n\n".join(matches)
+
     # ------------------------------------------------------------------ list tool
     def build_list_tool(self, description: str | None = None) -> BaseTool:
         prompt = description or LIST_PROMPT
@@ -522,7 +643,20 @@ class RealFilesystemToolFactory:
             base_path: str | None = None,
             recursive: bool = True,
             include_hidden: bool = False,
-        ) -> List[str] | str:
+            include_metadata: bool = True,
+        ) -> str:
+            """Search for files using glob patterns with optional metadata.
+
+            Args:
+                pattern: Glob pattern (supports **, *, ?, character sets)
+                base_path: Base directory to search (defaults to project root)
+                recursive: Use recursive search (rglob)
+                include_hidden: Include hidden files
+                include_metadata: Include file size and modification time
+
+            Returns:
+                Formatted string with file paths and metadata
+            """
             if not pattern:
                 return "Pattern must not be empty"
 
@@ -546,17 +680,49 @@ class RealFilesystemToolFactory:
                         continue
                     if not self._is_allowed_file(path, include_hidden=include_hidden):
                         continue
-                    results.append(relative_display_path(path, self.options.project_root))
+
+                    display_path = relative_display_path(path, self.options.project_root)
+
+                    if include_metadata:
+                        try:
+                            stat_info = path.stat()
+                            size_bytes = stat_info.st_size
+                            modified_timestamp = stat_info.st_mtime
+
+                            if size_bytes >= 1024 * 1024:
+                                size_str = f"{size_bytes / (1024 * 1024):.2f} MB"
+                            elif size_bytes >= 1024:
+                                size_str = f"{size_bytes / 1024:.2f} KB"
+                            else:
+                                size_str = f"{size_bytes} bytes"
+
+                            modified_str = datetime.fromtimestamp(modified_timestamp).strftime("%Y-%m-%d %H:%M:%S")
+
+                            results.append(f"{display_path:60} | {size_str:12} | {modified_str}")
+                        except OSError:
+                            results.append(display_path)
+                    else:
+                        results.append(display_path)
+
                     if len(results) >= max_items:
                         truncated = True
                         break
             except OSError as exc:
                 return f"Failed to search '{base_dir}': {exc}"
 
-            if truncated:
-                results.append(f"... truncated at {max_items} results")
+            if not results:
+                return "No files matched the pattern."
 
-            return results
+            header = ""
+            if include_metadata:
+                header = f"{'Path':<60} | {'Size':>12} | Modified\n{'-' * 60} | {'-' * 12} | {'-' * 19}\n"
+
+            output = header + "\n".join(results)
+
+            if truncated:
+                output += f"\n... truncated at {max_items} results"
+
+            return output
 
         return glob_real_files
 
@@ -590,12 +756,26 @@ class RealFilesystemToolFactory:
             except PathValidationError as exc:
                 return str(exc)
 
-            search_glob = file_pattern or "**/*"
-            iterator = base_dir.rglob(search_glob)
-
             configured_limit = max(1, self.options.performance.grep_max_results)
             requested_limit = max_results if max_results is not None else configured_limit
             limit = max(1, min(requested_limit, configured_limit))
+
+            # Try ripgrep first for performance (10-100x faster)
+            ripgrep_result = self._try_ripgrep_search(
+                pattern=pattern,
+                base_dir=base_dir,
+                file_pattern=file_pattern,
+                case_sensitive=case_sensitive,
+                context_lines=context_lines,
+                limit=limit,
+                include_hidden=include_hidden,
+            )
+            if ripgrep_result is not None:
+                return ripgrep_result
+
+            # Fallback to Python implementation
+            search_glob = file_pattern or "**/*"
+            iterator = base_dir.rglob(search_glob)
             size_threshold = max(0, self.options.performance.grep_max_file_size)
 
             matches: List[str] = []
