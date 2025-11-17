@@ -15,11 +15,105 @@ import logging
 from typing import Any, Dict, List, Sequence, Optional
 
 from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
+from langchain.tools import ToolRuntime
+from langchain_core.tools import tool
 from langgraph.runtime import Runtime
+from langgraph.types import Command
 
 from .types import SubAgent, CompiledSubAgent
+from ..virtual_filesystem.types import FilesystemState
 
 logger = logging.getLogger(__name__)
+
+# State keys that should be excluded when passing state to subagents
+# Following official DeepAgents implementation pattern
+_EXCLUDED_STATE_KEYS = ("messages", "todos")
+
+
+def _prepare_subagent_state(
+    runtime: ToolRuntime[None, FilesystemState],
+    description: str
+) -> dict:
+    """Prepare subagent state by copying all state except excluded keys.
+
+    This function implements the state copying pattern from official DeepAgents,
+    enabling virtual filesystem sharing between main agent and subagents.
+
+    Args:
+        runtime: Tool runtime context containing current agent state
+        description: Task description to be sent as initial message to subagent
+
+    Returns:
+        Dictionary containing copied state with new messages list
+
+    Design principles applied:
+    - SRP: Single responsibility of preparing subagent state
+    - DRY: Reuses FilesystemState's reducer for merging (no duplication)
+    """
+    # Copy all state except messages and todos (SOLID-OCP: extensible pattern)
+    subagent_state = {
+        k: v for k, v in runtime.state.items()
+        if k not in _EXCLUDED_STATE_KEYS
+    }
+
+    # Create new messages list with task description
+    subagent_state["messages"] = [{"role": "user", "content": description}]
+
+    # Debug logging for transparency
+    logger.debug(
+        f"[SubAgent] Prepared state with keys: {list(subagent_state.keys())}, "
+        f"files count: {len(subagent_state.get('files', {}))}"
+    )
+
+    return subagent_state
+
+
+def _return_state_update(
+    result: dict,
+    tool_call_id: str
+) -> Command:
+    """Return Command object with state updates from subagent execution.
+
+    This function extracts state changes from subagent result and packages them
+    into a Command object for LangGraph to merge using the registered reducers.
+
+    Args:
+        result: Subagent execution result containing state updates
+        tool_call_id: Tool call ID for the ToolMessage
+
+    Returns:
+        Command object containing state updates and response message
+
+    Design principles applied:
+    - SRP: Single responsibility of packaging state updates
+    - DRY: Relies on existing _file_data_reducer for actual merging
+    """
+    # Extract state updates, excluding messages and todos
+    state_update = {
+        k: v for k, v in result.items()
+        if k not in _EXCLUDED_STATE_KEYS
+    }
+
+    # Extract response message from subagent
+    messages = result.get("messages", [])
+    response_text = ""
+    if messages:
+        last_msg = messages[-1]
+        response_text = last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+
+    # Debug logging for transparency
+    logger.debug(
+        f"[SubAgent] State update keys: {list(state_update.keys())}, "
+        f"files count: {len(state_update.get('files', {}))}"
+    )
+
+    # Return Command with state updates (files will be merged by reducer)
+    return Command(
+        update={
+            **state_update,
+            "messages": [{"role": "tool", "content": response_text, "tool_call_id": tool_call_id}],
+        }
+    )
 
 
 class SubAgentMiddleware(AgentMiddleware):
@@ -211,70 +305,97 @@ class SubAgentMiddleware(AgentMiddleware):
                 self._subagent_runnables[subagent_spec.name] = subagent_runnable
 
     def get_task_tool(self) -> Any | None:
-        """Create and return the task tool for subagent delegation.
+        """Create and return the task tool for subagent delegation with state sharing.
 
-        This method should be called by the runtime builder to get the task tool
-        before creating the agent, NOT dynamically added in middleware hooks.
+        This method creates a task tool using the @tool decorator pattern, which
+        enables automatic ToolRuntime injection for state sharing between main
+        agent and subagents.
 
         Returns:
             Task tool instance or None if no subagents available
+
+        Design principles applied:
+        - KISS: Uses @tool decorator instead of StructuredTool for simplicity
+        - SRP: Delegates state preparation and merging to helper functions
+        - DRY: Reuses virtual filesystem's existing reducer mechanism
         """
         if not self._subagent_runnables:
             return None
 
-        from langchain_core.tools import StructuredTool
-        from pydantic import BaseModel, Field
+        # Save reference to self for use in closure (KISS: simple pattern)
+        middleware_self = self
 
-        class TaskInput(BaseModel):
-            """Input schema for task delegation to subagents."""
+        # Build available types list for tool description
+        available_types = ", ".join(self._subagent_runnables.keys())
 
-            subagent_type: str = Field(description=f"Type of subagent to use. Options: {', '.join(self._subagent_runnables.keys())}")
-            description: str = Field(description="Detailed task description for the subagent")
+        @tool
+        async def task(
+            subagent_type: str,
+            description: str,
+            runtime: ToolRuntime[None, FilesystemState],
+        ) -> str | Command:
+            """Delegate complex tasks to specialized subagents.
 
-        async def invoke_task(subagent_type: str, description: str) -> str:
-            """Invoke a subagent to handle a specific task.
+            This tool enables the main agent to delegate tasks to specialized subagents.
+            State (including virtual filesystem) is automatically shared between agents.
 
             Args:
-                subagent_type: Type of subagent to use
-                description: Task description to pass to the subagent
+                subagent_type: Type of subagent to use. Available types: {available_types}
+                description: Detailed task description for the subagent
+                runtime: Runtime context (automatically injected, not visible to LLM)
 
             Returns:
-                Result from the subagent execution
+                Result from subagent execution, either as text or Command with state updates
             """
-            if subagent_type not in self._subagent_runnables:
-                error_msg = f"Error: Unknown subagent type '{subagent_type}'. Available: {list(self._subagent_runnables.keys())}"
+            # Validate subagent type
+            if subagent_type not in middleware_self._subagent_runnables:
+                error_msg = (
+                    f"Error: Unknown subagent type '{subagent_type}'. "
+                    f"Available: {list(middleware_self._subagent_runnables.keys())}"
+                )
                 logger.warning(error_msg)
                 return error_msg
 
-            # Log subagent invocation
+            # Log delegation
             logger.info(f"[SubAgent] Main agent delegating task to '{subagent_type}' subagent")
             logger.debug(f"[SubAgent] Task description: {description[:100]}...")
 
-            subagent = self._subagent_runnables[subagent_type]
+            subagent = middleware_self._subagent_runnables[subagent_type]
+
             try:
-                result = await subagent.ainvoke({"messages": [{"role": "user", "content": description}]})
-                # Extract the final message content
-                messages = result.get("messages", [])
-                if messages:
-                    response = messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
-                    logger.info(f"[SubAgent] '{subagent_type}' completed successfully")
-                    return response
-                logger.warning(f"[SubAgent] '{subagent_type}' completed but returned no response")
-                return "SubAgent completed but returned no response."
+                # Step 1: Prepare state - copy files, exclude messages/todos (DRY principle)
+                subagent_state = _prepare_subagent_state(runtime, description)
+
+                # Step 2: Execute subagent with copied state
+                result = await subagent.ainvoke(subagent_state)
+
+                logger.info(f"[SubAgent] '{subagent_type}' completed successfully")
+
+                # Step 3: Return Command for state merging
+                if not runtime.tool_call_id:
+                    # Graceful degradation: return text if no tool_call_id (KISS: simple fallback)
+                    logger.warning(
+                        f"[SubAgent] No tool_call_id available, "
+                        "state updates will not be merged"
+                    )
+                    messages = result.get("messages", [])
+                    if messages:
+                        last_msg = messages[-1]
+                        return last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+                    return "SubAgent completed but returned no response."
+
+                # Return Command with state updates (SRP: delegate to helper function)
+                return _return_state_update(result, runtime.tool_call_id)
+
             except Exception as exc:
                 error_msg = f"SubAgent execution failed: {exc}"
-                logger.error(f"[SubAgent] '{subagent_type}' failed: {exc}")
+                logger.error(f"[SubAgent] '{subagent_type}' failed: {exc}", exc_info=True)
                 return error_msg
 
-        task_tool = StructuredTool(
-            name="task",
-            description=f"Delegate complex tasks to specialized subagents. Available types: {', '.join(self._subagent_runnables.keys())}",
-            func=lambda **kwargs: None,  # Sync not supported
-            coroutine=invoke_task,
-            args_schema=TaskInput,
-        )
+        # Update docstring with available types
+        task.__doc__ = task.__doc__.format(available_types=available_types)
 
-        return task_tool
+        return task
 
     def describe(self) -> Dict[str, Any]:
         """Return metadata describing the middleware configuration.
