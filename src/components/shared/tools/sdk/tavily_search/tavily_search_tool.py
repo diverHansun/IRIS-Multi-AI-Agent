@@ -14,6 +14,11 @@ from langchain_core.tools import tool
 from langchain_tavily import TavilySearch, TavilyExtract, TavilyMap, TavilyCrawl
 
 from .config import get_config
+from .error_handler import (
+    TavilyErrorHandler,
+    RetryStrategy,
+    create_success_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,37 +38,55 @@ def tavily_search_basic(
     This is a simple search tool optimized for quick, straightforward queries.
     Returns up to 5 results with basic search depth.
 
+    Features:
+    - Automatic retry on transient errors (network, timeout)
+    - Detailed error classification with actionable suggestions
+    - Structured error responses for better debugging
+
     Args:
         query: Search query string
 
     Returns:
         Dictionary containing search results with query, results list, and response_time
+        On error: Structured error response with error_type, message, and suggestion
     """
+    config = get_config()
+
+    # Check API configuration
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
+
     try:
-        config = get_config()
-
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
-
         logger.info(f"Executing Tavily basic search: {query}")
 
-        search_tool = TavilySearch(
-            tavily_api_key=config.api_key,
-            max_results=config.search.max_results,
-            search_depth=config.search.search_depth,
-            topic=config.search.topic,
-            include_answer=config.search.include_answer,
-            include_raw_content=config.search.include_raw_content
+        def _do_search():
+            """Inner function for retry logic"""
+            search_tool = TavilySearch(
+                tavily_api_key=config.api_key,
+                max_results=config.search.max_results,
+                search_depth=config.search.search_depth,
+                topic=config.search.topic,
+                include_answer=config.search.include_answer,
+                include_raw_content=config.search.include_raw_content
+            )
+            return search_tool.invoke({"query": query})
+
+        # Execute with automatic retry on transient errors
+        results = RetryStrategy.execute_with_retry(
+            _do_search,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_search_basic"
         )
 
-        results = search_tool.invoke({"query": query})
-        return results
+        return create_success_response(results, operation="search")
 
     except Exception as e:
-        logger.error(f"Tavily basic search failed: {e}")
-        return {"error": f"Search failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="search",
+            timeout_seconds=config.api.timeout
+        )
 
 
 @tool
@@ -85,6 +108,11 @@ def tavily_search_advanced(
     Supports advanced search depth, domain filtering, time range filtering,
     and various content inclusion options for detailed research.
 
+    Features:
+    - Automatic retry on transient errors with exponential backoff
+    - Parameter validation and normalization
+    - Detailed error classification and suggestions
+
     Args:
         query: Search query string
         max_results: Maximum number of results to return (1-20)
@@ -100,38 +128,47 @@ def tavily_search_advanced(
     Returns:
         Dictionary containing search results with query, results list, optional answer, and response_time
     """
+    config = get_config()
+
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
+
     try:
-        config = get_config()
-
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
-
         # Validate and constrain parameters
         max_results = max(1, min(20, max_results))
 
         logger.info(f"Executing Tavily advanced search: {query} (depth={search_depth}, results={max_results})")
 
-        search_tool = TavilySearch(
-            tavily_api_key=config.api_key,
-            max_results=max_results,
-            search_depth=search_depth,
-            topic=topic,
-            include_answer=include_answer,
-            include_raw_content="markdown" if include_raw_content else False,
-            include_images=include_images,
-            time_range=time_range,
-            include_domains=include_domains or [],
-            exclude_domains=exclude_domains or []
+        def _do_search():
+            search_tool = TavilySearch(
+                tavily_api_key=config.api_key,
+                max_results=max_results,
+                search_depth=search_depth,
+                topic=topic,
+                include_answer=include_answer,
+                include_raw_content="markdown" if include_raw_content else False,
+                include_images=include_images,
+                time_range=time_range,
+                include_domains=include_domains or [],
+                exclude_domains=exclude_domains or []
+            )
+            return search_tool.invoke({"query": query})
+
+        results = RetryStrategy.execute_with_retry(
+            _do_search,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_search_advanced"
         )
 
-        results = search_tool.invoke({"query": query})
-        return results
+        return create_success_response(results, operation="advanced_search")
 
     except Exception as e:
-        logger.error(f"Tavily advanced search failed: {e}")
-        return {"error": f"Advanced search failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="advanced_search",
+            timeout_seconds=config.api.timeout
+        )
 
 
 @tool
@@ -146,6 +183,11 @@ def tavily_search_news(
     Optimized for news content with topic set to "news" and recent time filtering.
     Returns results from major news sources and publications.
 
+    Features:
+    - Automatic retry on transient errors
+    - Optimized for news sources
+    - Recent time range filtering
+
     Args:
         query: News search query
         max_results: Maximum number of news results (1-20)
@@ -154,34 +196,43 @@ def tavily_search_news(
     Returns:
         Dictionary containing news search results
     """
+    config = get_config()
+
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
+
     try:
-        config = get_config()
-
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
-
         max_results = max(1, min(20, max_results))
 
         logger.info(f"Executing Tavily news search: {query} (time_range={time_range})")
 
-        search_tool = TavilySearch(
-            tavily_api_key=config.api_key,
-            max_results=max_results,
-            search_depth="advanced",
-            topic="news",
-            include_answer=True,
-            time_range=time_range,
-            include_raw_content=False
+        def _do_search():
+            search_tool = TavilySearch(
+                tavily_api_key=config.api_key,
+                max_results=max_results,
+                search_depth="advanced",
+                topic="news",
+                include_answer=True,
+                time_range=time_range,
+                include_raw_content=False
+            )
+            return search_tool.invoke({"query": query})
+
+        results = RetryStrategy.execute_with_retry(
+            _do_search,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_search_news"
         )
 
-        results = search_tool.invoke({"query": query})
-        return results
+        return create_success_response(results, operation="news_search")
 
     except Exception as e:
-        logger.error(f"Tavily news search failed: {e}")
-        return {"error": f"News search failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="news_search",
+            timeout_seconds=config.api.timeout
+        )
 
 
 # ============================================================================
@@ -202,6 +253,11 @@ def tavily_extract_url(
     Retrieves parsed and cleaned content from web pages, removing ads,
     navigation, and other non-content elements.
 
+    Features:
+    - Automatic retry on transient errors
+    - Clean content extraction
+    - Multiple format support
+
     Args:
         url: URL to extract content from
         extract_depth: Extraction thoroughness - "basic" or "advanced"
@@ -211,29 +267,38 @@ def tavily_extract_url(
     Returns:
         Dictionary with extracted content including url, raw_content, and images
     """
+    config = get_config()
+
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
+
     try:
-        config = get_config()
-
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
-
         logger.info(f"Extracting content from URL: {url}")
 
-        extract_tool = TavilyExtract(
-            tavily_api_key=config.api_key,
-            extract_depth=extract_depth,
-            include_images=include_images,
-            format=format
+        def _do_extract():
+            extract_tool = TavilyExtract(
+                tavily_api_key=config.api_key,
+                extract_depth=extract_depth,
+                include_images=include_images,
+                format=format
+            )
+            return extract_tool.invoke({"urls": [url]})
+
+        result = RetryStrategy.execute_with_retry(
+            _do_extract,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_extract_url"
         )
 
-        result = extract_tool.invoke({"urls": [url]})
-        return result
+        return create_success_response(result, operation="extract")
 
     except Exception as e:
-        logger.error(f"Tavily URL extraction failed: {e}")
-        return {"error": f"URL extraction failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="extract",
+            timeout_seconds=config.api.timeout
+        )
 
 
 @tool
@@ -248,6 +313,11 @@ def tavily_extract_batch(
     Efficiently extracts content from multiple pages in a single request.
     Useful for processing multiple articles or pages at once.
 
+    Features:
+    - Automatic retry on transient errors
+    - Batch processing for efficiency
+    - Input validation
+
     Args:
         urls: List of URLs to extract content from
         extract_depth: Extraction thoroughness - "basic" or "advanced"
@@ -256,32 +326,45 @@ def tavily_extract_batch(
     Returns:
         Dictionary with results list containing extracted content and failed_results
     """
-    try:
-        config = get_config()
+    config = get_config()
 
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
 
-        if not urls or len(urls) == 0:
-            return {"error": "No URLs provided for extraction"}
-
-        logger.info(f"Batch extracting content from {len(urls)} URLs")
-
-        extract_tool = TavilyExtract(
-            tavily_api_key=config.api_key,
-            extract_depth=extract_depth,
-            include_images=False,
-            format=format
+    # Input validation
+    if not urls or len(urls) == 0:
+        return TavilyErrorHandler.handle_validation_error(
+            ValueError("No URLs provided for extraction"),
+            parameter="urls"
         )
 
-        result = extract_tool.invoke({"urls": urls})
-        return result
+    try:
+        logger.info(f"Batch extracting content from {len(urls)} URLs")
+
+        def _do_extract():
+            extract_tool = TavilyExtract(
+                tavily_api_key=config.api_key,
+                extract_depth=extract_depth,
+                include_images=False,
+                format=format
+            )
+            return extract_tool.invoke({"urls": urls})
+
+        result = RetryStrategy.execute_with_retry(
+            _do_extract,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_extract_batch"
+        )
+
+        return create_success_response(result, operation="batch_extract")
 
     except Exception as e:
-        logger.error(f"Tavily batch extraction failed: {e}")
-        return {"error": f"Batch extraction failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="batch_extract",
+            timeout_seconds=config.api.timeout
+        )
 
 
 # ============================================================================
@@ -302,6 +385,11 @@ def tavily_map_website(
     Creates a structured map of a website's URLs without extracting content.
     Useful for understanding site architecture and discovering pages.
 
+    Features:
+    - Automatic retry on transient errors
+    - Configurable depth and breadth limits
+    - Efficient URL discovery
+
     Args:
         url: Base URL to start mapping from
         max_depth: How many levels deep to crawl from the base URL
@@ -311,30 +399,39 @@ def tavily_map_website(
     Returns:
         Dictionary with base_url, results (list of discovered URLs), and response_time
     """
+    config = get_config()
+
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
+
     try:
-        config = get_config()
-
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
-
         logger.info(f"Mapping website structure: {url}")
 
-        map_tool = TavilyMap(
-            tavily_api_key=config.api_key,
-            max_depth=max_depth,
-            max_breadth=max_breadth,
-            limit=limit,
-            allow_external=False
+        def _do_map():
+            map_tool = TavilyMap(
+                tavily_api_key=config.api_key,
+                max_depth=max_depth,
+                max_breadth=max_breadth,
+                limit=limit,
+                allow_external=False
+            )
+            return map_tool.invoke({"url": url})
+
+        result = RetryStrategy.execute_with_retry(
+            _do_map,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_map_website"
         )
 
-        result = map_tool.invoke({"url": url})
-        return result
+        return create_success_response(result, operation="map")
 
     except Exception as e:
-        logger.error(f"Tavily website mapping failed: {e}")
-        return {"error": f"Website mapping failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="map",
+            timeout_seconds=config.api.timeout
+        )
 
 
 @tool
@@ -353,6 +450,12 @@ def tavily_map_with_filter(
     Allows filtering URLs by natural language instructions, categories,
     or regex path patterns for targeted site mapping.
 
+    Features:
+    - Automatic retry on transient errors
+    - Natural language filtering
+    - Regex path filtering
+    - Category-based filtering
+
     Args:
         url: Base URL to start mapping from
         instructions: Natural language instructions to guide URL selection
@@ -365,34 +468,43 @@ def tavily_map_with_filter(
     Returns:
         Dictionary with base_url, filtered results, and response_time
     """
+    config = get_config()
+
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
+
     try:
-        config = get_config()
-
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
-
         logger.info(f"Mapping website with filters: {url}")
 
-        map_tool = TavilyMap(
-            tavily_api_key=config.api_key,
-            max_depth=max_depth,
-            max_breadth=20,
-            limit=limit,
-            instructions=instructions,
-            categories=categories,
-            select_paths=select_paths or [],
-            exclude_paths=exclude_paths or [],
-            allow_external=False
+        def _do_map():
+            map_tool = TavilyMap(
+                tavily_api_key=config.api_key,
+                max_depth=max_depth,
+                max_breadth=20,
+                limit=limit,
+                instructions=instructions,
+                categories=categories,
+                select_paths=select_paths or [],
+                exclude_paths=exclude_paths or [],
+                allow_external=False
+            )
+            return map_tool.invoke({"url": url})
+
+        result = RetryStrategy.execute_with_retry(
+            _do_map,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_map_with_filter"
         )
 
-        result = map_tool.invoke({"url": url})
-        return result
+        return create_success_response(result, operation="filtered_map")
 
     except Exception as e:
-        logger.error(f"Tavily filtered mapping failed: {e}")
-        return {"error": f"Filtered mapping failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="filtered_map",
+            timeout_seconds=config.api.timeout
+        )
 
 
 # ============================================================================
@@ -413,6 +525,11 @@ def tavily_crawl_basic(
     Combines website mapping with content extraction. Discovers pages
     and extracts their content in a single operation.
 
+    Features:
+    - Automatic retry on transient errors
+    - Combined mapping and extraction
+    - Configurable depth and breadth
+
     Args:
         url: Base URL to start crawling from
         max_depth: How many levels deep to crawl from base URL
@@ -422,32 +539,41 @@ def tavily_crawl_basic(
     Returns:
         Dictionary with base_url, results (list of pages with extracted content), and response_time
     """
+    config = get_config()
+
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
+
     try:
-        config = get_config()
-
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
-
         logger.info(f"Crawling website: {url}")
 
-        crawl_tool = TavilyCrawl(
-            tavily_api_key=config.api_key,
-            max_depth=max_depth,
-            max_breadth=max_breadth,
-            limit=limit,
-            allow_external=False,
-            extract_depth=config.crawl.extract_depth,
-            format=config.crawl.format
+        def _do_crawl():
+            crawl_tool = TavilyCrawl(
+                tavily_api_key=config.api_key,
+                max_depth=max_depth,
+                max_breadth=max_breadth,
+                limit=limit,
+                allow_external=False,
+                extract_depth=config.crawl.extract_depth,
+                format=config.crawl.format
+            )
+            return crawl_tool.invoke({"url": url})
+
+        result = RetryStrategy.execute_with_retry(
+            _do_crawl,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_crawl_basic"
         )
 
-        result = crawl_tool.invoke({"url": url})
-        return result
+        return create_success_response(result, operation="crawl")
 
     except Exception as e:
-        logger.error(f"Tavily website crawl failed: {e}")
-        return {"error": f"Website crawl failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="crawl",
+            timeout_seconds=config.api.timeout
+        )
 
 
 @tool
@@ -465,6 +591,12 @@ def tavily_crawl_targeted(
     Allows precise control over which pages to crawl and extract using
     natural language instructions and category filtering.
 
+    Features:
+    - Automatic retry on transient errors
+    - Natural language guided crawling
+    - Category-based filtering
+    - Advanced content extraction
+
     Args:
         url: Base URL to start crawling from
         instructions: Natural language instructions to guide crawling (e.g., "Find all blog posts")
@@ -476,35 +608,44 @@ def tavily_crawl_targeted(
     Returns:
         Dictionary with base_url, filtered and extracted results, and response_time
     """
+    config = get_config()
+
+    if not config.is_available():
+        return TavilyErrorHandler.handle_configuration_error()
+
     try:
-        config = get_config()
-
-        if not config.is_available():
-            return {
-                "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable."
-            }
-
         logger.info(f"Targeted crawling website: {url} with instructions: {instructions}")
 
-        crawl_tool = TavilyCrawl(
-            tavily_api_key=config.api_key,
-            max_depth=max_depth,
-            max_breadth=20,
-            limit=limit,
-            instructions=instructions,
-            categories=categories,
-            allow_external=False,
-            include_images=include_images,
-            extract_depth="advanced",
-            format="markdown"
+        def _do_crawl():
+            crawl_tool = TavilyCrawl(
+                tavily_api_key=config.api_key,
+                max_depth=max_depth,
+                max_breadth=20,
+                limit=limit,
+                instructions=instructions,
+                categories=categories,
+                allow_external=False,
+                include_images=include_images,
+                extract_depth="advanced",
+                format="markdown"
+            )
+            return crawl_tool.invoke({"url": url})
+
+        result = RetryStrategy.execute_with_retry(
+            _do_crawl,
+            max_retries=config.api.max_retries,
+            initial_delay=config.api.retry_delay,
+            operation_name="tavily_crawl_targeted"
         )
 
-        result = crawl_tool.invoke({"url": url})
-        return result
+        return create_success_response(result, operation="targeted_crawl")
 
     except Exception as e:
-        logger.error(f"Tavily targeted crawl failed: {e}")
-        return {"error": f"Targeted crawl failed: {str(e)}"}
+        return TavilyErrorHandler.handle_error(
+            e,
+            operation="targeted_crawl",
+            timeout_seconds=config.api.timeout
+        )
 
 
 # ============================================================================

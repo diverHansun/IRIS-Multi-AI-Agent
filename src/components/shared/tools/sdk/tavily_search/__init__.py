@@ -27,6 +27,16 @@ from .config import (
     load_config_from_env
 )
 
+from .error_handler import (
+    TavilyErrorType,
+    TavilyErrorResponse,
+    TavilyErrorHandler,
+    RetryStrategy,
+    with_tavily_error_handling,
+    create_success_response,
+    is_error_response
+)
+
 from .tavily_search_tool import (
     # Search tools
     tavily_search_basic,
@@ -72,6 +82,14 @@ __all__ = [
     "get_config_summary",
     "load_config_from_json",
     "load_config_from_env",
+    # Error handling
+    "TavilyErrorType",
+    "TavilyErrorResponse",
+    "TavilyErrorHandler",
+    "RetryStrategy",
+    "with_tavily_error_handling",
+    "create_success_response",
+    "is_error_response",
     # Search tools
     "tavily_search_basic",
     "tavily_search_advanced",
