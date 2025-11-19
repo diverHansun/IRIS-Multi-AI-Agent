@@ -104,17 +104,36 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             setattr(agent, "memory_sync", agent_memory_sync)
     runtime_checkpointer = getattr(agent, "runtime_checkpointer", None)
 
-    # Use enhance_runtime_input to inject history into input (not checkpointer)
-    # This avoids channel_versions type conflict between storage and runtime
-    if agent_memory_sync:
-        logger.debug("Enhancing runtime input with historical messages")
+    # Check if MemorySaver already has checkpoint for this session
+    # MemorySaver is in-memory, so it only has checkpoints from current program run
+    has_checkpoint = False
+    if runtime_checkpointer:
+        try:
+            checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config)
+            has_checkpoint = checkpoint_tuple is not None
+            if has_checkpoint:
+                # Get message count from checkpoint
+                checkpoint_messages = checkpoint_tuple.checkpoint.get("channel_values", {}).get("messages", [])
+                logger.debug(f"MemorySaver has checkpoint with {len(checkpoint_messages)} messages")
+            else:
+                logger.debug("MemorySaver has no checkpoint for this session yet")
+        except Exception as exc:
+            logger.warning(f"Failed to check checkpoint existence: {exc}")
+
+    # Only inject history from storage if MemorySaver doesn't have checkpoint yet
+    # This prevents duplicate history: MemorySaver will automatically include its checkpoint
+    if agent_memory_sync and not has_checkpoint:
+        logger.info("First query in this session: loading history from storage into input")
         runtime_input = agent_memory_sync.enhance_runtime_input(
             session_ctx,
             query,
             max_history=10
         )
     else:
-        logger.debug("MemorySyncAdapter unavailable; using query without history")
+        if has_checkpoint:
+            logger.info("Continuing session: MemorySaver will provide history automatically")
+        else:
+            logger.debug("MemorySyncAdapter unavailable; using query without history")
         runtime_input = agent.create_runtime_input(query)
 
     ctx.console.print("[dim]Deep agent reasoning...[/]")
@@ -214,18 +233,27 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
     if agent_memory_sync:
         logger.info(f"[CONVERSATION] Starting persist_from_runtime for session {session_id}")
-        final_state = event_handler.last_agent_state
-        if final_state and isinstance(final_state, dict):
-            state_msg_count = len(final_state.get("messages", []))
-            logger.info(f"[CONVERSATION] Agent final state has {state_msg_count} messages")
-        else:
-            logger.warning(f"[CONVERSATION] Agent final state is None or not a dict: {type(final_state)}")
+        # Get the complete state from runtime checkpointer instead of event_handler
+        # event_handler.last_agent_state only contains the last node's output,
+        # not the complete conversation history
+        try:
+            checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config)
+            if checkpoint_tuple:
+                complete_state = dict(checkpoint_tuple.checkpoint.get("channel_values", {}))
+                state_messages = complete_state.get("messages", [])
+                logger.info(f"[CONVERSATION] Complete state from checkpoint has {len(state_messages)} messages")
+            else:
+                complete_state = None
+                logger.warning("[CONVERSATION] No checkpoint tuple found")
+        except Exception as exc:
+            logger.error(f"[CONVERSATION] Failed to get complete state from checkpoint: {exc}")
+            complete_state = None
 
         agent_memory_sync.persist_from_runtime(
             session_ctx,
             runtime_checkpointer,
             runtime_config,
-            event_handler.last_agent_state,
+            complete_state,
         )
         agent.update_session_checkpoint(session_ctx)
         logger.info(f"[CONVERSATION] Persistence completed for session {session_id}")

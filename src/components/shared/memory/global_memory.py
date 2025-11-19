@@ -114,9 +114,15 @@ class GlobalMemoryManager:
         self.max_messages = max_messages
         
         # Initialize storages for different modes
-        from .config import BASIC_LLM_STORAGE_DIR, DEEP_STORAGE_DIR
-        self.shared_storage = SessionStorage(BASIC_LLM_STORAGE_DIR)
-        self.deep_storage = SessionStorage(DEEP_STORAGE_DIR)
+        if storage_dir:
+            # Use provided storage_dir (for testing or custom configurations)
+            self.shared_storage = SessionStorage(storage_dir)
+            self.deep_storage = SessionStorage(storage_dir)
+        else:
+            # Use default directories from config
+            from .config import BASIC_LLM_STORAGE_DIR, DEEP_STORAGE_DIR
+            self.shared_storage = SessionStorage(BASIC_LLM_STORAGE_DIR)
+            self.deep_storage = SessionStorage(DEEP_STORAGE_DIR)
         
         # Default storage for backward compatibility
         self.storage = self.shared_storage if agent_mode in ["basic", "llm"] else self.deep_storage
@@ -126,9 +132,9 @@ class GlobalMemoryManager:
         # In-memory session cache
         self._session_histories: Dict[str, GlobalChatMessageHistory] = {}
 
+        storage_info = storage_dir if storage_dir else f"shared={self.shared_storage.storage_dir}, deep={self.deep_storage.storage_dir}"
         logger.info(
-            f"GlobalMemoryManager initialized: mode={agent_mode}, "
-            f"shared_storage={BASIC_LLM_STORAGE_DIR}, deep_storage={DEEP_STORAGE_DIR}"
+            f"GlobalMemoryManager initialized: mode={agent_mode}, storage={storage_info}"
         )
 
     def get_storage_by_mode(self, mode: str) -> SessionStorage:

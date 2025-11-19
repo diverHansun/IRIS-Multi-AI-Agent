@@ -58,24 +58,29 @@ class ModeCommand(BaseCommand):
             # Switch to deep mode memory system
             from src.components.shared.memory import GlobalMemoryManager, SessionManager, MemorySyncAdapter
 
+            import logging
+            logger = logging.getLogger(__name__)
+            
             # Store basic session_id for potential restoration
             ctx._basic_session_id = ctx.session_id
 
             # Create deep mode memory system
             deep_global_memory = GlobalMemoryManager(agent_mode="deep", max_messages=50)
-            deep_session_manager = SessionManager(deep_global_memory)
+            deep_session_manager = SessionManager(deep_global_memory, mode="deep")
             deep_memory_sync = MemorySyncAdapter(deep_global_memory, agent_mode="deep")
 
             # Switch to deep mode session
             # Try to find existing deep session or create new one
-            deep_sessions = deep_global_memory.list_sessions()
-            if deep_sessions:
+            recent_session = deep_session_manager.get_most_recent_session()
+            if recent_session:
                 # Use most recent deep session
-                ctx.session_id = deep_sessions[0]["session_id"]
+                ctx.session_id = recent_session["session_id"]
+                logger.info(f"Restored deep mode session: {ctx.session_id}")
                 ctx.console.print(f"[dim]Restored deep mode session: {ctx.session_id}[/]")
             else:
                 # Create new deep session
                 ctx.session_id = deep_session_manager.create_new_session()
+                logger.info(f"Created new deep mode session: {ctx.session_id}")
                 ctx.console.print(f"[dim]Created new deep mode session: {ctx.session_id}[/]")
 
             # Update context to use deep memory

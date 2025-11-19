@@ -226,13 +226,17 @@ class SessionStorage:
     
     def list_sessions(self) -> List[Dict[str, Any]]:
         """
-        List all sessions.
+        List all user sessions (excluding test sessions).
         
         Returns:
-            List of session info
+            List of session info, sorted by updated time (most recent first)
         """
+        # Filter out test sessions (only include sessions starting with "user_")
+        sessions = [
+            s for s in self.sessions_index.values()
+            if s.get("session_id", "").startswith("user_")
+        ]
         # Sort by updated time
-        sessions = list(self.sessions_index.values())
         sessions.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
         return sessions
     

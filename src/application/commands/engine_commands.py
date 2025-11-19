@@ -35,6 +35,10 @@ class SwitchEngineCommand(BaseCommand):
         # Update memory system mode when switching engines
         # LLM and basic agent modes share storage, deep mode is isolated
         if engine in ("llm", "agent"):
+            from src.components.shared.memory import GlobalMemoryManager, SessionManager, MemorySyncAdapter
+            import logging
+            logger = logging.getLogger(__name__)
+            
             # Determine agent_mode based on engine and agent config
             agent_config = ctx.get_engine_config("agent")
             agent_type = agent_config.get("agent_type", "basic")
@@ -43,20 +47,37 @@ class SwitchEngineCommand(BaseCommand):
                 # Use shared storage for LLM and basic agent
                 new_mode = "llm" if engine == "llm" else "basic"
                 
-                # Update existing memory manager and session manager modes
-                if hasattr(ctx, "global_memory") and ctx.global_memory:
-                    ctx.global_memory.agent_mode = new_mode
-                if hasattr(ctx, "session_manager") and ctx.session_manager:
-                    ctx.session_manager.mode = new_mode
-                if hasattr(ctx, "memory_sync") and ctx.memory_sync:
-                    ctx.memory_sync.agent_mode = new_mode
+                # Check if we need to create new memory manager (e.g., switching from deep mode)
+                current_mode = getattr(ctx.global_memory, "agent_mode", None) if hasattr(ctx, "global_memory") else None
+                
+                if current_mode == "deep" or current_mode != new_mode:
+                    # Create new memory manager for llm/basic mode
+                    logger.info(f"Switching from {current_mode} to {new_mode} mode: creating new memory manager")
+                    ctx.global_memory = GlobalMemoryManager(agent_mode=new_mode, max_messages=50)
+                    ctx.session_manager = SessionManager(ctx.global_memory, mode=new_mode)
+                    ctx.memory_sync = MemorySyncAdapter(ctx.global_memory, agent_mode=new_mode)
+                else:
+                    # Just update the mode
+                    logger.info(f"Updating memory manager mode to {new_mode}")
+                    if hasattr(ctx, "global_memory") and ctx.global_memory:
+                        ctx.global_memory.agent_mode = new_mode
+                    if hasattr(ctx, "session_manager") and ctx.session_manager:
+                        ctx.session_manager.mode = new_mode
+                    if hasattr(ctx, "memory_sync") and ctx.memory_sync:
+                        ctx.memory_sync.agent_mode = new_mode
                 
                 # Reload session from correct storage
                 if hasattr(ctx, "session_manager") and ctx.session_manager:
                     recent_session = ctx.session_manager.get_most_recent_session()
                     if recent_session:
                         ctx.session_id = recent_session["session_id"]
+                        logger.info(f"Loaded recent {new_mode} session: {ctx.session_id}")
                         ctx.console.print(f"[dim]Loaded recent {new_mode} session: {ctx.session_id}[/]")
+                    else:
+                        # No existing session, create new one
+                        ctx.session_id = ctx.session_manager.create_new_session()
+                        logger.info(f"Created new {new_mode} session: {ctx.session_id}")
+                        ctx.console.print(f"[dim]Created new {new_mode} session: {ctx.session_id}[/]")
         
         service = get_current_service(ctx)
         init_result = await service.initialize(ctx)

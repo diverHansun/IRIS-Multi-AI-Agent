@@ -121,6 +121,9 @@ class MemorySyncAdapter:
         Extracts messages from agent_state (primary) or runtime checkpoint (fallback),
         filters for Human/AI messages only, and saves to storage.
 
+        CRITICAL: This method must preserve all historical messages. The agent_state
+        should contain ALL messages (history + new), not just the current turn.
+
         Args:
             session_ctx: Session context
             runtime_checkpointer: Runtime checkpointer (MemorySaver for Deep mode)
@@ -135,8 +138,8 @@ class MemorySyncAdapter:
             state_messages = agent_state.get("messages") or []
             if isinstance(state_messages, list):
                 messages_to_persist = state_messages
-                logger.info(
-                    f"[PERSIST] Extracting {len(messages_to_persist)} raw messages from agent_state"
+                logger.debug(
+                    f"Extracting {len(messages_to_persist)} messages from agent_state"
                 )
 
         # Fallback path: Try runtime checkpoint if agent_state has no messages
@@ -162,27 +165,60 @@ class MemorySyncAdapter:
             if isinstance(m, (HumanMessage, AIMessage))
         ]
 
-        logger.info(
-            f"[PERSIST] After filtering: {len(filtered)} messages "
-            f"(from {len(flattened)} flattened messages)"
+        logger.debug(
+            f"Filtered {len(filtered)} Human/AI messages from {len(flattened)} total"
         )
 
         if not filtered:
             logger.warning(
-                f"[PERSIST] No Human/AI messages to persist for thread_id="
-                f"{config.get('configurable', {}).get('thread_id')}"
+                f"No Human/AI messages to persist for session {session_ctx.session_id}"
             )
             return
 
+        # Deduplicate messages by content and type
+        # This prevents duplicate messages when checkpoint contains history
+        deduplicated = self._deduplicate_messages(filtered)
+        if len(deduplicated) < len(filtered):
+            logger.info(
+                f"Removed {len(filtered) - len(deduplicated)} duplicate messages"
+            )
+
         try:
             # Save directly to storage (JSON)
-            self.storage.save_session(session_ctx.session_id, filtered)
-            logger.info(
-                f"Successfully persisted {len(filtered)} messages "
-                f"for session {session_ctx.session_id}"
+            # This REPLACES the entire session, so deduplicated must contain ALL messages
+            self.storage.save_session(session_ctx.session_id, deduplicated)
+            logger.debug(
+                f"Persisted {len(deduplicated)} messages for session {session_ctx.session_id}"
             )
         except Exception as exc:
             logger.error(f"Failed to persist messages to storage: {exc}")
+
+    @staticmethod
+    def _deduplicate_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
+        """
+        Remove duplicate messages while preserving order.
+        
+        Two messages are considered duplicates if they have:
+        - Same type (HumanMessage, AIMessage)
+        - Same content
+        
+        This is necessary because the checkpoint may contain history that was
+        injected via enhance_runtime_input, leading to duplicates.
+        """
+        seen = set()
+        deduplicated = []
+        
+        for msg in messages:
+            # Create a unique key based on message type and content
+            msg_type = type(msg).__name__
+            msg_content = msg.content if hasattr(msg, 'content') else str(msg)
+            key = (msg_type, msg_content)
+            
+            if key not in seen:
+                seen.add(key)
+                deduplicated.append(msg)
+        
+        return deduplicated
 
     @staticmethod
     def _flatten_messages(entries: Any) -> List[BaseMessage]:
