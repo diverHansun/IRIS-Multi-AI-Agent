@@ -4,7 +4,12 @@ Conversation handling utilities for the agent engine basic mode.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
+
+from src.components.shared.memory.session_context import SessionContext
+
+logger = logging.getLogger(__name__)
 
 
 def _get_agent_config(ctx) -> Dict[str, Any]:
@@ -23,9 +28,28 @@ async def handle_agent_query(ctx, query: str) -> str:
     with ctx.console.status("[dim]Agent reasoning...[/]"):
         result = await agent.ainvoke(query, session_id=ctx.session_id)
 
+    # Persist conversation to storage if memory sync is available
+    if hasattr(ctx, 'memory_sync') and ctx.memory_sync:
+        try:
+            session_ctx = SessionContext(
+                session_id=ctx.session_id,
+                agent_type=config.get("agent_type", "basic"),
+                provider=config.get("provider", "unknown"),
+                function_type="agent",
+            )
+            ctx.memory_sync.persist_from_runtime(
+                session_ctx,
+                agent.checkpointer if hasattr(agent, 'checkpointer') else None,
+                None,
+                result,
+            )
+            logger.debug(f"Persisted Basic mode conversation for session {ctx.session_id}")
+        except Exception as e:
+            logger.warning(f"Failed to persist Basic mode conversation: {e}")
+
     if result.get("success"):
         answer = result.get("output", "No response generated.")
-        ctx.console.print(f"[bold blue]Agent >[/] {answer}")
+        ctx.console.print(f"[bold blue]BasicAgent >[/] {answer}")
         tool_calls = result.get("tool_calls", 0)
         if tool_calls:
             tool_names = result.get("tool_names") or []

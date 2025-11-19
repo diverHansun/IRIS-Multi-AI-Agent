@@ -11,9 +11,10 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
+from langgraph.checkpoint.memory import MemorySaver
+
 from src.agents.basicagents.config import AgentConfig
 from src.agents.basicagents.instances.base_agent import BaseAgent
-from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class ZhipuFCallAgent(BaseAgent):
         llm: BaseChatModel,
         graph: CompiledStateGraph,
         tools: List[BaseTool],
-        checkpointer: Optional[UnifiedCheckpointer],
+        checkpointer: Optional[MemorySaver],
         config: AgentConfig,
     ):
         """
@@ -45,7 +46,7 @@ class ZhipuFCallAgent(BaseAgent):
             llm: Initialized ChatZhipuAI instance
             graph: Compiled state graph
             tools: List of tools
-            checkpointer: Unified checkpointer (None if memory disabled)
+            checkpointer: Memory checkpointer for runtime state (None if memory disabled)
             config: Agent configuration
         """
         # Validate model supports function calling

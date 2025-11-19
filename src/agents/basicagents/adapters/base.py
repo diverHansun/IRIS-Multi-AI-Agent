@@ -25,7 +25,7 @@ from src.agents.basicagents.exceptions import (
     GraphCreationError,
     AgentCreationError,
 )
-from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
+from langgraph.checkpoint.memory import MemorySaver
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class AgentAdapter(ABC):
     def __init__(
         self,
         config: AgentConfig,
-        shared_checkpointer: Optional[UnifiedCheckpointer] = None,
+        shared_checkpointer: Optional[Any] = None,
     ):
         """
         Initialize agent adapter with resolved configuration.
@@ -162,7 +162,7 @@ class AgentAdapter(ABC):
         except Exception as e:
             raise ToolLoadingError(f"Failed to load tools: {e}") from e
 
-    def create_checkpointer(self) -> Optional[UnifiedCheckpointer]:
+    def create_checkpointer(self) -> Optional[MemorySaver]:
         """
         Create checkpointer if memory is enabled.
 
@@ -170,23 +170,17 @@ class AgentAdapter(ABC):
         Uses self.config.agent_params for configuration.
 
         Returns:
-            UnifiedCheckpointer instance if memory enabled, None otherwise
+            MemorySaver instance if memory enabled, None otherwise
         """
         if not self.config.agent_params.get("memory_enabled", True):
             logger.info("Memory disabled, skipping checkpointer creation")
             return None
 
-        if self._shared_checkpointer is not None:
-            logger.info("Using shared unified checkpointer from memory sync")
-            return self._shared_checkpointer
+        # Use MemorySaver for runtime state management
+        # Persistence is handled by MemorySyncAdapter
+        checkpointer = MemorySaver()
 
-        # Create unified checkpointer with independent GlobalMemoryManager
-        checkpointer = UnifiedCheckpointer(
-            storage_dir="data/sessions",
-            max_messages=50,
-        )
-
-        logger.info("Checkpointer created")
+        logger.info("Checkpointer created (MemorySaver)")
         return checkpointer
 
     @abstractmethod
@@ -194,7 +188,7 @@ class AgentAdapter(ABC):
         self,
         llm: BaseChatModel,
         tools: List[BaseTool],
-        checkpointer: Optional[UnifiedCheckpointer],
+        checkpointer: Optional[MemorySaver],
     ) -> CompiledStateGraph:
         """
         Create agent graph.
@@ -221,7 +215,7 @@ class AgentAdapter(ABC):
         llm: BaseChatModel,
         graph: CompiledStateGraph,
         tools: List[BaseTool],
-        checkpointer: Optional[UnifiedCheckpointer],
+        checkpointer: Optional[MemorySaver],
     ):
         """
         Instantiate agent with all components.

@@ -24,7 +24,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.basicagents.config import AgentConfig
 from src.agents.basicagents.exceptions import AgentExecutionError
-from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
+from langgraph.checkpoint.memory import MemorySaver
 from src.components.shared.memory.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ class BaseAgent(ABC):
         llm: BaseChatModel,
         graph: CompiledStateGraph,
         tools: List[BaseTool],
-        checkpointer: Optional[UnifiedCheckpointer],
+        checkpointer: Optional[MemorySaver],
         config: AgentConfig,
     ):
         """
@@ -70,7 +70,7 @@ class BaseAgent(ABC):
             llm: Initialized chat model instance
             graph: Compiled state graph (ready to execute)
             tools: List of initialized tools
-            checkpointer: Unified checkpointer (None if memory disabled)
+            checkpointer: MemorySaver checkpointer (None if memory disabled)
             config: Agent configuration object
         """
         self.provider = provider

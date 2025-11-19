@@ -77,6 +77,9 @@ class AppState:
     mcp_manager: Any = None
     hitl_manager: Any = None
 
+    # Session restoration for mode switching
+    _basic_session_id: Optional[str] = None
+
     def get_engine_config(self, engine: str | None = None) -> Dict[str, Any]:
         key = engine or self.current_engine
         if key not in self.engine_configs:

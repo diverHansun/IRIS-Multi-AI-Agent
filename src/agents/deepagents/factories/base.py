@@ -12,7 +12,7 @@ from src.agents.deepagents.managers.subagent_manager import SubAgentManager
 from src.components.deepagents.runtime import create_deep_agent_runtime
 from src.components.deepagents.runtime_middlewares.subagents import SubAgent
 from src.components.shared.tools.unified_manager import UnifiedToolManager
-from src.components.shared.memory import MemorySyncAdapter, UnifiedCheckpointer
+from src.components.shared.memory import MemorySyncAdapter
 
 logger = logging.getLogger(__name__)
 

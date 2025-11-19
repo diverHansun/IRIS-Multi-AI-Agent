@@ -55,6 +55,34 @@ class ModeCommand(BaseCommand):
                         config["provider"] = first_provider
                         config["model"] = first_model
 
+            # Switch to deep mode memory system
+            from src.components.shared.memory import GlobalMemoryManager, SessionManager, MemorySyncAdapter
+
+            # Store basic session_id for potential restoration
+            ctx._basic_session_id = ctx.session_id
+
+            # Create deep mode memory system
+            deep_global_memory = GlobalMemoryManager(agent_mode="deep", max_messages=50)
+            deep_session_manager = SessionManager(deep_global_memory)
+            deep_memory_sync = MemorySyncAdapter(deep_global_memory, agent_mode="deep")
+
+            # Switch to deep mode session
+            # Try to find existing deep session or create new one
+            deep_sessions = deep_global_memory.list_sessions()
+            if deep_sessions:
+                # Use most recent deep session
+                ctx.session_id = deep_sessions[0]["session_id"]
+                ctx.console.print(f"[dim]Restored deep mode session: {ctx.session_id}[/]")
+            else:
+                # Create new deep session
+                ctx.session_id = deep_session_manager.create_new_session()
+                ctx.console.print(f"[dim]Created new deep mode session: {ctx.session_id}[/]")
+
+            # Update context to use deep memory
+            ctx.global_memory = deep_global_memory
+            ctx.session_manager = deep_session_manager
+            ctx.memory_sync = deep_memory_sync
+
             # Initialize default deep agent immediately for better UX
             from src.application.services.agent.deep.agent_lifecycle import create_default_deep_agent
 
@@ -76,6 +104,33 @@ class ModeCommand(BaseCommand):
                 return CommandResult.success(
                     "Switched to deep agent mode. Agent will be initialized on first use."
                 )
+
+        # Switch back to basic/llm mode memory system
+        from src.components.shared.memory import GlobalMemoryManager, SessionManager, MemorySyncAdapter
+
+        # Restore basic mode memory system
+        basic_global_memory = GlobalMemoryManager(agent_mode="basic", max_messages=50)
+        basic_session_manager = SessionManager(basic_global_memory)
+        basic_memory_sync = MemorySyncAdapter(basic_global_memory, agent_mode="basic")
+
+        # Restore basic session_id if available, otherwise use most recent
+        if hasattr(ctx, "_basic_session_id") and ctx._basic_session_id:
+            ctx.session_id = ctx._basic_session_id
+            ctx.console.print(f"[dim]Restored basic mode session: {ctx.session_id}[/]")
+        else:
+            # Try to find existing basic session or create new one
+            basic_sessions = basic_global_memory.list_sessions()
+            if basic_sessions:
+                ctx.session_id = basic_sessions[0]["session_id"]
+                ctx.console.print(f"[dim]Restored basic mode session: {ctx.session_id}[/]")
+            else:
+                ctx.session_id = basic_session_manager.create_new_session()
+                ctx.console.print(f"[dim]Created new basic mode session: {ctx.session_id}[/]")
+
+        # Update context to use basic memory
+        ctx.global_memory = basic_global_memory
+        ctx.session_manager = basic_session_manager
+        ctx.memory_sync = basic_memory_sync
 
         # Clean up deep mode specific configurations
         config.pop("function_type", None)

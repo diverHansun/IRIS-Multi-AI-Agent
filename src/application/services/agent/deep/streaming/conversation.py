@@ -90,7 +90,6 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     hitl_manager._file_tracker = file_tracker
 
     session_id = ctx.session_id or "default"
-    runtime_input = agent.create_runtime_input(query)
     runtime_config = agent.create_runtime_config(session_id)
     max_execution_time = safety_opts.get("max_execution_time")
     deadline = time.perf_counter() + max_execution_time if isinstance(max_execution_time, (int, float)) else None
@@ -104,17 +103,38 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         if agent_memory_sync is not None:
             setattr(agent, "memory_sync", agent_memory_sync)
     runtime_checkpointer = getattr(agent, "runtime_checkpointer", None)
+
+    # Use enhance_runtime_input to inject history into input (not checkpointer)
+    # This avoids channel_versions type conflict between storage and runtime
     if agent_memory_sync:
-        runtime_config = agent_memory_sync.load_into_runtime(
+        logger.debug("Enhancing runtime input with historical messages")
+        runtime_input = agent_memory_sync.enhance_runtime_input(
             session_ctx,
-            runtime_checkpointer,
-            runtime_config,
+            query,
+            max_history=10
         )
-        agent.update_session_checkpoint(session_ctx)
     else:
-        logger.debug("MemorySyncAdapter unavailable; runtime history not preloaded.")
+        logger.debug("MemorySyncAdapter unavailable; using query without history")
+        runtime_input = agent.create_runtime_input(query)
 
     ctx.console.print("[dim]Deep agent reasoning...[/]")
+
+    # Debug: Check MemorySaver state before astream
+    print(f"\n[DEBUG streaming] Before agent.runtime.astream()")
+    print(f"[DEBUG streaming] runtime_config: {runtime_config}")
+    if runtime_checkpointer and hasattr(runtime_checkpointer, 'storage'):
+        thread_id = runtime_config.get("configurable", {}).get("thread_id")
+        checkpoint_ns = runtime_config.get("configurable", {}).get("checkpoint_ns", "")
+        if thread_id and thread_id in runtime_checkpointer.storage:
+            if checkpoint_ns in runtime_checkpointer.storage[thread_id]:
+                existing_keys = list(runtime_checkpointer.storage[thread_id][checkpoint_ns].keys())
+                print(f"[DEBUG streaming] MemorySaver has {len(existing_keys)} checkpoints")
+                print(f"[DEBUG streaming] Checkpoint IDs: {existing_keys}")
+                print(f"[DEBUG streaming] ID types: {[type(k).__name__ for k in existing_keys]}")
+            else:
+                print(f"[DEBUG streaming] No checkpoints for checkpoint_ns='{checkpoint_ns}'")
+        else:
+            print(f"[DEBUG streaming] No checkpoints for thread_id={thread_id}")
 
     pending_input: Any = runtime_input
     timed_out = False
@@ -125,6 +145,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             captured_interrupts: Optional[Tuple[Interrupt, ...]] = None
 
             try:
+                print(f"[DEBUG streaming] Calling agent.runtime.astream()...")
                 async for event in agent.runtime.astream(
                     pending_input,
                     config=runtime_config,
@@ -145,6 +166,12 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 ctx.console.print(f"[bold red]Recursion limit exceeded:[/] {escape(str(exc))}")
                 return ""
             except Exception as exc:
+                import traceback
+                print(f"\n[DEBUG streaming] Exception during agent.runtime.astream():")
+                print(f"[DEBUG streaming] Exception type: {type(exc).__name__}")
+                print(f"[DEBUG streaming] Exception message: {exc}")
+                print(f"[DEBUG streaming] Full traceback:")
+                print(traceback.format_exc())
                 ctx.console.print(f"[bold red]Unexpected error in agent streaming:[/] {escape(str(exc))}")
                 return ""
 
@@ -186,6 +213,14 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         return ""
 
     if agent_memory_sync:
+        logger.info(f"[CONVERSATION] Starting persist_from_runtime for session {session_id}")
+        final_state = event_handler.last_agent_state
+        if final_state and isinstance(final_state, dict):
+            state_msg_count = len(final_state.get("messages", []))
+            logger.info(f"[CONVERSATION] Agent final state has {state_msg_count} messages")
+        else:
+            logger.warning(f"[CONVERSATION] Agent final state is None or not a dict: {type(final_state)}")
+
         agent_memory_sync.persist_from_runtime(
             session_ctx,
             runtime_checkpointer,
@@ -193,6 +228,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             event_handler.last_agent_state,
         )
         agent.update_session_checkpoint(session_ctx)
+        logger.info(f"[CONVERSATION] Persistence completed for session {session_id}")
     else:
         logger.debug("MemorySyncAdapter unavailable; skipping persistence sync.")
 

@@ -1,7 +1,7 @@
 """
-会话存储管理器
+Session Storage Manager
 
-提供会话的持久化存储和恢复功能
+Provides persistent storage and retrieval of session data.
 """
 
 import os
@@ -16,43 +16,43 @@ logger = logging.getLogger(__name__)
 
 
 class SessionStorage:
-    """会话存储管理器"""
+    """Session storage manager."""
     
     def __init__(self, storage_dir: str = "data/sessions"):
         """
-        初始化会话存储管理器
+        Initialize session storage manager.
         
         Args:
-            storage_dir: 存储目录路径
+            storage_dir: Storage directory path
         """
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.sessions_index_file = self.storage_dir / "sessions_index.json"
         
-        # 加载会话索引
+        # Load session index
         self.sessions_index = self._load_sessions_index()
     
     def _load_sessions_index(self) -> Dict[str, Dict[str, Any]]:
-        """加载会话索引"""
+        """Load session index."""
         try:
             if self.sessions_index_file.exists():
                 with open(self.sessions_index_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
         except Exception as e:
-            logger.error(f"加载会话索引失败: {e}")
+            logger.error(f"Failed to load session index: {e}")
         
         return {}
     
     def _save_sessions_index(self):
-        """保存会话索引"""
+        """Save session index."""
         try:
             with open(self.sessions_index_file, 'w', encoding='utf-8') as f:
                 json.dump(self.sessions_index, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.error(f"保存会话索引失败: {e}")
+            logger.error(f"Failed to save session index: {e}")
     
     def _message_to_dict(self, message: BaseMessage) -> Dict[str, Any]:
-        """将消息对象转换为字典"""
+        """Convert message object to dictionary."""
         return {
             "type": message.__class__.__name__,
             "content": message.content,
@@ -82,18 +82,18 @@ class SessionStorage:
     
     def save_session(self, session_id: str, messages: List[BaseMessage], metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
-        保存会话数据
+        Save session data.
         
         Args:
-            session_id: 会话ID
-            messages: 消息列表
-            metadata: 会话元数据
+            session_id: Session ID
+            messages: Message list
+            metadata: Session metadata
             
         Returns:
-            保存是否成功
+            True if successful
         """
         try:
-            # 准备会话数据
+            # Prepare session data
             session_data = {
                 "session_id": session_id,
                 "messages": [self._message_to_dict(msg) for msg in messages],
@@ -103,16 +103,16 @@ class SessionStorage:
                 "metadata": metadata or {}
             }
             
-            # 如果会话已存在，保留创建时间
+            # If session exists, keep creation time
             if session_id in self.sessions_index:
                 session_data["created_at"] = self.sessions_index[session_id]["created_at"]
             
-            # 保存会话文件
+            # Save session file
             session_file = self.storage_dir / f"{session_id}.json"
             with open(session_file, 'w', encoding='utf-8') as f:
                 json.dump(session_data, f, ensure_ascii=False, indent=2)
             
-            # 更新索引
+            # Update index
             self.sessions_index[session_id] = {
                 "session_id": session_id,
                 "message_count": len(messages),
@@ -122,25 +122,25 @@ class SessionStorage:
             }
             
             self._save_sessions_index()
-            logger.info(f"会话保存成功: {session_id}")
+            logger.info(f"Session saved successfully: {session_id}")
             return True
             
         except Exception as e:
-            logger.error(f"保存会话失败 {session_id}: {e}")
+            logger.error(f"Failed to save session {session_id}: {e}")
             return False
     
     def initialize_empty_session(self, session_id: str) -> bool:
         """
-        初始化空会话文件
+        Initialize empty session file.
         
         Args:
-            session_id: 会话ID
+            session_id: Session ID
             
         Returns:
-            初始化是否成功
+            True if successful
         """
         try:
-            # 创建空会话数据
+            # Create empty session data
             session_data = {
                 "session_id": session_id,
                 "messages": [],
@@ -150,12 +150,12 @@ class SessionStorage:
                 "metadata": {}
             }
             
-            # 保存空会话文件
+            # Save empty session file
             session_file = self.storage_dir / f"{session_id}.json"
             with open(session_file, 'w', encoding='utf-8') as f:
                 json.dump(session_data, f, ensure_ascii=False, indent=2)
             
-            # 更新索引
+            # Update index
             self.sessions_index[session_id] = {
                 "session_id": session_id,
                 "message_count": 0,
@@ -165,37 +165,37 @@ class SessionStorage:
             }
             
             self._save_sessions_index()
-            logger.debug(f"空会话初始化成功: {session_id}")
+            logger.debug(f"Empty session initialized: {session_id}")
             return True
             
         except Exception as e:
-            logger.error(f"初始化空会话失败 {session_id}: {e}")
+            logger.error(f"Failed to initialize empty session {session_id}: {e}")
             return False
     
     def load_session(self, session_id: str) -> Optional[List[BaseMessage]]:
         """
-        加载会话数据
+        Load session data.
         
         Args:
-            session_id: 会话ID
+            session_id: Session ID
             
         Returns:
-            消息列表，如果会话不存在返回None
+            Message list, or None if session does not exist
         """
         try:
             session_file = self.storage_dir / f"{session_id}.json"
             
             if not session_file.exists():
-                # 对于新会话，这是正常情况，不需要警告
-                logger.debug(f"会话文件不存在，将创建新会话: {session_id}")
+                # Normal for new sessions
+                logger.debug(f"Session file not found, will create new session: {session_id}")
                 return None
             
             with open(session_file, 'r', encoding='utf-8') as f:
                 session_data = json.load(f)
             
-            # 如果会话在索引中不存在，自动添加到索引（恢复机制）
+            # Auto-recover index if missing
             if session_id not in self.sessions_index:
-                logger.info(f"发现孤立会话文件，正在恢复会话索引: {session_id}")
+                logger.info(f"Found orphaned session file, recovering index: {session_id}")
                 self.sessions_index[session_id] = {
                     "session_id": session_id,
                     "message_count": session_data.get("message_count", len(session_data.get("messages", []))),
@@ -205,98 +205,98 @@ class SessionStorage:
                 }
                 self._save_sessions_index()
             
-            # 转换消息数据
+            # Convert messages
             messages = []
             for msg_dict in session_data.get("messages", []):
                 try:
                     messages.append(self._dict_to_message(msg_dict))
                 except Exception as e:
-                    logger.warning(f"转换消息失败: {e}")
+                    logger.warning(f"Failed to convert message: {e}")
                     continue
             
             if len(messages) > 0:
-                logger.info(f"会话加载成功: {session_id}, {len(messages)} 条消息")
+                logger.info(f"Session loaded: {session_id}, {len(messages)} messages")
             else:
-                logger.debug(f"空会话加载成功: {session_id}")
+                logger.debug(f"Empty session loaded: {session_id}")
             return messages
             
         except Exception as e:
-            logger.error(f"加载会话失败 {session_id}: {e}")
+            logger.error(f"Failed to load session {session_id}: {e}")
             return None
     
     def list_sessions(self) -> List[Dict[str, Any]]:
         """
-        列出所有会话
+        List all sessions.
         
         Returns:
-            会话信息列表
+            List of session info
         """
-        # 按更新时间排序
+        # Sort by updated time
         sessions = list(self.sessions_index.values())
         sessions.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
         return sessions
     
     def delete_session(self, session_id: str) -> bool:
         """
-        删除会话
+        Delete session.
         
         Args:
-            session_id: 会话ID
+            session_id: Session ID
             
         Returns:
-            删除是否成功
+            True if successful
         """
         try:
-            # 删除会话文件
+            # Delete session file
             session_file = self.storage_dir / f"{session_id}.json"
             if session_file.exists():
                 session_file.unlink()
             
-            # 从索引中移除
+            # Remove from index
             if session_id in self.sessions_index:
                 del self.sessions_index[session_id]
                 self._save_sessions_index()
             
-            logger.info(f"会话删除成功: {session_id}")
+            logger.info(f"Session deleted: {session_id}")
             return True
             
         except Exception as e:
-            logger.error(f"删除会话失败 {session_id}: {e}")
+            logger.error(f"Failed to delete session {session_id}: {e}")
             return False
     
     def session_exists(self, session_id: str) -> bool:
         """
-        检查会话是否存在
+        Check if session exists.
         
         Args:
-            session_id: 会话ID
+            session_id: Session ID
             
         Returns:
-            会话是否存在
+            True if exists
         """
         return session_id in self.sessions_index
     
     def get_session_info(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
-        获取会话信息
+        Get session information.
         
         Args:
-            session_id: 会话ID
+            session_id: Session ID
             
         Returns:
-            会话信息字典
+            Session info dictionary
         """
         return self.sessions_index.get(session_id)
     
     def cleanup_old_sessions(self, days: int = 30) -> int:
         """
-        清理过期会话（可选功能）
+        Cleanup old sessions.
         
         Args:
-            days: 保留天数
+            days: Retention days
             
         Returns:
-            清理的会话数量
+            Number of deleted sessions
         """
         try:
             from datetime import timedelta
@@ -311,38 +311,38 @@ class SessionStorage:
                 except Exception:
                     continue
             
-            # 删除过期会话
+            # Delete old sessions
             deleted_count = 0
             for session_id in sessions_to_delete:
                 if self.delete_session(session_id):
                     deleted_count += 1
             
-            logger.info(f"清理了 {deleted_count} 个过期会话")
+            logger.info(f"Cleaned up {deleted_count} old sessions")
             return deleted_count
             
         except Exception as e:
-            logger.error(f"清理过期会话失败: {e}")
+            logger.error(f"Failed to cleanup old sessions: {e}")
             return 0
     
     def check_session_consistency(self) -> Dict[str, List[str]]:
         """
-        检查会话索引和文件系统的一致性
+        Check consistency between index and file system.
         
         Returns:
-            包含孤立索引条目和孤立文件的字典
+            Dictionary containing orphaned index entries and files
         """
         try:
-            # 获取所有会话文件
+            # Get all session files
             session_files = list(self.storage_dir.glob("*.json"))
             session_file_ids = {f.stem for f in session_files if f.name != "sessions_index.json"}
             
-            # 获取索引中的会话ID
+            # Get indexed session IDs
             indexed_session_ids = set(self.sessions_index.keys())
             
-            # 找出孤立的索引条目（索引中有但文件系统中没有）
+            # Find orphaned index entries
             orphaned_index_entries = list(indexed_session_ids - session_file_ids)
             
-            # 找出孤立的文件（文件系统中有但索引中没有）
+            # Find orphaned files
             orphaned_files = list(session_file_ids - indexed_session_ids)
             
             return {
@@ -350,7 +350,7 @@ class SessionStorage:
                 "orphaned_files": orphaned_files
             }
         except Exception as e:
-            logger.error(f"检查会话一致性失败: {e}")
+            logger.error(f"Failed to check session consistency: {e}")
             return {
                 "orphaned_index_entries": [],
                 "orphaned_files": []
@@ -358,10 +358,10 @@ class SessionStorage:
     
     def cleanup_orphaned_sessions(self) -> Dict[str, int]:
         """
-        清理孤立会话文件和索引条目
+        Cleanup orphaned session files and index entries.
         
         Returns:
-            清理统计信息
+            Cleanup statistics
         """
         try:
             consistency = self.check_session_consistency()
@@ -370,27 +370,27 @@ class SessionStorage:
                 "orphaned_files": 0
             }
             
-            # 清理孤立的索引条目
+            # Cleanup orphaned index entries
             for session_id in consistency["orphaned_index_entries"]:
                 if session_id in self.sessions_index:
                     del self.sessions_index[session_id]
                     cleaned_count["orphaned_index_entries"] += 1
             
-            # 清理孤立的会话文件
+            # Cleanup orphaned files
             for session_id in consistency["orphaned_files"]:
                 session_file = self.storage_dir / f"{session_id}.json"
                 if session_file.exists():
                     session_file.unlink()
                     cleaned_count["orphaned_files"] += 1
             
-            # 如果有任何清理操作，保存索引
+            # Save index if changes made
             if sum(cleaned_count.values()) > 0:
                 self._save_sessions_index()
-                logger.info(f"清理了 {cleaned_count['orphaned_index_entries']} 个孤立索引条目和 {cleaned_count['orphaned_files']} 个孤立文件")
+                logger.info(f"Cleaned up {cleaned_count['orphaned_index_entries']} orphaned index entries and {cleaned_count['orphaned_files']} orphaned files")
             
             return cleaned_count
         except Exception as e:
-            logger.error(f"清理孤立会话失败: {e}")
+            logger.error(f"Failed to cleanup orphaned sessions: {e}")
             return {
                 "orphaned_index_entries": 0,
                 "orphaned_files": 0

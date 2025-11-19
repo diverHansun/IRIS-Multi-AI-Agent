@@ -14,13 +14,14 @@ import logging
 import warnings
 from typing import Any, Dict, List, Optional
 
+from langgraph.checkpoint.memory import MemorySaver
+
 from src.agents.basicagents.config import AgentConfig
 from src.agents.basicagents.exceptions import (
     ProviderNotFoundError,
     AgentCreationError,
 )
 from src.core.providers import basicagents_registry
-from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class AgentManager:
         provider: str,
         model: Optional[str] = None,
         *,
-        shared_checkpointer: Optional[UnifiedCheckpointer] = None,
+        shared_checkpointer: Optional[MemorySaver] = None,
         **user_params: Any,
     ):
         """
@@ -163,7 +164,7 @@ class AgentManager:
         provider: str,
         config: AgentConfig,
         *,
-        shared_checkpointer: Optional[UnifiedCheckpointer] = None,
+        shared_checkpointer: Optional[MemorySaver] = None,
     ):
         """
         Create appropriate Adapter for provider.
@@ -171,6 +172,7 @@ class AgentManager:
         Args:
             provider: Provider name
             config: Resolved AgentConfig
+            shared_checkpointer: Optional shared MemorySaver for runtime state
 
         Returns:
             Adapter instance

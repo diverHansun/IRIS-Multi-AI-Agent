@@ -69,10 +69,17 @@ async def shutdown(waiter: Optional[asyncio.Task] = None) -> None:
 
 
 def _initialize_memory(ctx: AppState) -> None:
+    """
+    Initialize memory system with basic/llm mode by default.
+
+    Deep mode will create its own isolated memory manager during agent initialization.
+    Following SRP: CLI manages basic/llm memory, deep agent manages deep memory.
+    """
     ctx.console.print("[yellow]Initializing memory system...[/]")
-    ctx.global_memory = GlobalMemoryManager(storage_dir="data/sessions", max_messages=50)
+    # Initialize for basic/llm modes (shared storage)
+    ctx.global_memory = GlobalMemoryManager(agent_mode="basic", max_messages=50)
     ctx.session_manager = SessionManager(ctx.global_memory)
-    ctx.memory_sync = MemorySyncAdapter(ctx.global_memory)
+    ctx.memory_sync = MemorySyncAdapter(ctx.global_memory, agent_mode="basic")
     ctx.session_id = ctx.session_manager.prompt_for_session_choice()
     ctx.console.print(f"[dim]Current Session ID: {ctx.session_id}[/]")
     ctx.hitl_manager = SessionHITLManager()

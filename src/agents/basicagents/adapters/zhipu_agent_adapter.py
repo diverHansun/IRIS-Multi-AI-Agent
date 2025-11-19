@@ -13,10 +13,11 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph
 
+from langgraph.checkpoint.memory import MemorySaver
+
 from src.agents.basicagents.adapters.base import AgentAdapter
 from src.agents.basicagents.config import AgentConfig
 from src.agents.basicagents.exceptions import LLMCreationError, GraphCreationError
-from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,14 @@ class ZhipuAgentAdapter(AgentAdapter):
     def __init__(
         self,
         config: AgentConfig,
-        shared_checkpointer: Optional[UnifiedCheckpointer] = None,
+        shared_checkpointer: Optional[MemorySaver] = None,
     ):
         """
         Initialize Zhipu agent adapter.
 
         Args:
             config: Fully resolved AgentConfig instance
+            shared_checkpointer: Optional shared MemorySaver for runtime state
         """
         super().__init__(config, shared_checkpointer=shared_checkpointer)
 
@@ -94,7 +96,7 @@ class ZhipuAgentAdapter(AgentAdapter):
         self,
         llm: BaseChatModel,
         tools: List[BaseTool],
-        checkpointer: Optional[UnifiedCheckpointer],
+        checkpointer: Optional[MemorySaver],
     ) -> CompiledStateGraph:
         """
         Create agent graph for Zhipu models.
@@ -105,7 +107,7 @@ class ZhipuAgentAdapter(AgentAdapter):
         Args:
             llm: ChatZhipuAI instance
             tools: List of tools
-            checkpointer: UnifiedCheckpointer instance or None
+            checkpointer: MemorySaver instance or None
 
         Returns:
             Compiled state graph
@@ -153,7 +155,7 @@ class ZhipuAgentAdapter(AgentAdapter):
         llm: BaseChatModel,
         graph: CompiledStateGraph,
         tools: List[BaseTool],
-        checkpointer: Optional[UnifiedCheckpointer],
+        checkpointer: Optional[MemorySaver],
     ):
         """
         Instantiate Zhipu agent.
@@ -166,7 +168,7 @@ class ZhipuAgentAdapter(AgentAdapter):
             llm: ChatZhipuAI instance
             graph: Compiled state graph
             tools: List of tools
-            checkpointer: UnifiedCheckpointer instance or None
+            checkpointer: MemorySaver instance or None
 
         Returns:
             ZhipuAgent or ZhipuFCallAgent instance

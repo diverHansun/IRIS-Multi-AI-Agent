@@ -10,7 +10,6 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from src.agents.deepagents.adapters.base import BaseDeepAgentAdapter
 from src.components.shared.memory.global_memory import GlobalMemoryManager
-from src.components.shared.memory.unified_checkpointer import UnifiedCheckpointer
 from src.components.shared.memory.memory_sync import MemorySyncAdapter
 from src.components.shared.memory.session_context import SessionContext
 
@@ -23,7 +22,7 @@ class BaseDeepAgent:
 
     Implements dual checkpointer architecture:
     - MemorySaver for runtime state restoration (HITL support)
-    - UnifiedCheckpointer for long-term conversation persistence
+    - SessionStorage (via MemorySyncAdapter) for long-term conversation persistence
 
     This design follows SOLID principles:
     - SRP: Separates runtime execution state from persistent storage
@@ -53,27 +52,9 @@ class BaseDeepAgent:
         # Uses MemorySaver to preserve complete execution state including ToolMessage and __interrupt__
         self.runtime_checkpointer = MemorySaver()
 
-        # Storage checkpointer for long-term conversation persistence
-        self.storage_checkpointer = None
-        if isinstance(global_memory_manager, UnifiedCheckpointer):
-            self.storage_checkpointer = global_memory_manager
-        elif isinstance(global_memory_manager, GlobalMemoryManager):
-            try:
-                storage_dir = getattr(global_memory_manager.storage, "storage_dir", "data/sessions")
-                max_messages = getattr(global_memory_manager, "max_messages", 50)
-                self.storage_checkpointer = UnifiedCheckpointer(
-                    storage_dir=str(storage_dir),
-                    max_messages=max_messages,
-                )
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning("Failed to create storage checkpointer: %s", exc)
-        elif global_memory_manager is not None:
-            # Accept custom checkpointer implementations for compatibility.
-            self.storage_checkpointer = global_memory_manager
-
         if self.memory_sync is None and isinstance(global_memory_manager, GlobalMemoryManager):
             try:
-                self.memory_sync = MemorySyncAdapter(global_memory_manager)
+                self.memory_sync = MemorySyncAdapter(global_memory_manager, agent_mode="deep")
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("Failed to initialize MemorySyncAdapter automatically: %s", exc)
 
@@ -115,9 +96,34 @@ class BaseDeepAgent:
         else:
             config = base_config
 
+        # Debug: Check MemorySaver storage before ainvoke
+        print(f"\n[DEBUG BaseDeepAgent.invoke] Before runtime.ainvoke for session_id={session_id}")
+        print(f"[DEBUG BaseDeepAgent.invoke] Config: {config}")
+        if hasattr(self.runtime_checkpointer, 'storage'):
+            thread_id = config.get("configurable", {}).get("thread_id")
+            checkpoint_ns = config.get("configurable", {}).get("checkpoint_ns", "")
+            if thread_id and thread_id in self.runtime_checkpointer.storage:
+                if checkpoint_ns in self.runtime_checkpointer.storage[thread_id]:
+                    existing_keys = list(self.runtime_checkpointer.storage[thread_id][checkpoint_ns].keys())
+                    print(f"[DEBUG BaseDeepAgent.invoke] MemorySaver has {len(existing_keys)} checkpoints")
+                    print(f"[DEBUG BaseDeepAgent.invoke] Checkpoint IDs: {existing_keys}")
+                    print(f"[DEBUG BaseDeepAgent.invoke] ID types: {[type(k).__name__ for k in existing_keys]}")
+                else:
+                    print(f"[DEBUG BaseDeepAgent.invoke] No checkpoints for checkpoint_ns='{checkpoint_ns}'")
+            else:
+                print(f"[DEBUG BaseDeepAgent.invoke] No checkpoints for thread_id={thread_id}")
+
         try:
+            print(f"[DEBUG BaseDeepAgent.invoke] Calling runtime.ainvoke()...")
             result = await self.runtime.ainvoke(payload, config=config)
+            print(f"[DEBUG BaseDeepAgent.invoke] runtime.ainvoke() succeeded")
         except Exception as exc:  # pylint: disable=broad-except
+            import traceback
+            print(f"\n[DEBUG BaseDeepAgent.invoke] ERROR during runtime.ainvoke():")
+            print(f"[DEBUG BaseDeepAgent.invoke] Exception type: {type(exc).__name__}")
+            print(f"[DEBUG BaseDeepAgent.invoke] Exception message: {exc}")
+            print(f"[DEBUG BaseDeepAgent.invoke] Full traceback:")
+            print(traceback.format_exc())
             logger.error("Deep agent invocation failed: %s", exc, exc_info=True)
             return self._build_error_response(exc, session_id)
 
@@ -155,9 +161,6 @@ class BaseDeepAgent:
             tool_names = tool_stats.get("tool_names", tool_names)
             subagent_calls = tool_stats.get("subagent_calls", subagent_calls)
 
-        if self.enable_memory and self.global_memory_manager and output_text:
-            self._record_conversation(session_id, query, output_text)
-
         return {
             "success": True,
             "output": output_text,
@@ -192,10 +195,16 @@ class BaseDeepAgent:
         return {"messages": [HumanMessage(content=query)]}
 
     def _build_runtime_config(self, session_id: str) -> Dict[str, Any]:
+        """
+        Build runtime configuration for LangGraph execution.
+
+        Note: checkpoint_ns is set to empty string for LangGraph MemorySaver compatibility.
+        All modes share history using session_id (thread_id) only for cross-provider persistence.
+        """
         return {
             "configurable": {
                 "thread_id": session_id,
-                "checkpoint_ns": self.get_checkpoint_namespace(),
+                "checkpoint_ns": "",  # Required by MemorySaver, use empty string for shared history
             }
         }
 
@@ -298,9 +307,6 @@ class BaseDeepAgent:
         messages = runtime_result.get("messages", [])
         output_text, tool_calls, tool_names, subagent_calls = self._analyse_messages(messages)
 
-        if self.enable_memory and self.global_memory_manager and output_text:
-            self._record_conversation(session_id, query, output_text)
-
         return {
             "success": True,
             "output": output_text,
@@ -399,23 +405,22 @@ class BaseDeepAgent:
         return BaseDeepAgent._message_content_to_text(getattr(message, "content", ""))
 
     def _record_conversation(self, session_id: str, query: str, output: str) -> None:
-        """Store the conversation turn in the global memory manager."""
-        if not self.enable_memory or not self.global_memory_manager:
-            return
+        """
+        DEPRECATED: This method is no longer used and will be removed in a future version.
 
-        add_conversation = getattr(self.global_memory_manager, "add_conversation", None)
-        if callable(add_conversation):
-            try:
-                add_conversation(session_id, query, output, current_llm_info=None)
-            except Exception as exc:
-                logger.warning("Failed to record conversation: %s", exc)
+        Memory persistence is now handled exclusively by MemorySyncAdapter.persist_from_runtime()
+        to avoid duplicate writes and maintain single responsibility principle (SRP).
 
-        save_session = getattr(self.global_memory_manager, "save_session", None)
-        if callable(save_session):
-            try:
-                save_session(session_id)
-            except Exception as exc:
-                logger.warning("Failed to save session: %s", exc)
+        The conversation history is automatically persisted through:
+        - conversation.py: persist_from_runtime() after streaming completes
+        - memory_sync.py: MemorySyncAdapter syncs runtime to storage checkpointer
+
+        This method is kept for backward compatibility only.
+        """
+        logger.warning(
+            "_record_conversation() is deprecated and will be removed. "
+            "Use MemorySyncAdapter.persist_from_runtime() instead."
+        )
 
     @staticmethod
     def _message_content_to_text(content: Any) -> str:
