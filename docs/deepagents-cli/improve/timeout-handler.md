@@ -598,12 +598,209 @@ except TimeoutError as exc:
 
 ---
 
-### Phase 3: 后续计划
+### Phase 3: SubAgent 超时处理 (已完成 ✓)
 
-1. **集成测试**: 端到端测试 `max_execution_time` 超时场景
-2. **SubAgent 超时处理**: 扩展到子代理超时恢复（Phase 4）
-3. **性能优化**: 持久化性能监控与优化
-4. **文档完善**: 更新用户文档和 API 文档
+**时间**: 2025-11-20
+
+**目标**: 扩展超时处理到 SubAgent,确保 SubAgent 超时时 MainAgent 状态能正确持久化。
+
+#### 3.1 架构设计
+
+**核心挑战**:
+- SubAgent 无 checkpointer (设计为无状态)
+- SubAgent 超时不应中断 MainAgent
+- SubAgent 的 `task` 工具无法直接访问 MainAgent 的持久化上下文
+
+**解决方案**:
+1. **共享持久化 helper**: 提取到 `src/components/shared/persistence/helpers.py`
+2. **上下文注入**: conversation.py 将持久化上下文注入到 `runtime_input`
+3. **上下文排除**: SubAgent 不接收持久化上下文 (通过 `_EXCLUDED_STATE_KEYS`)
+4. **异常捕获**: SubAgent task 工具捕获超时,持久化 MainAgent,返回错误消息
+
+#### 3.2 核心实现
+
+##### 3.2.1 共享持久化 Helper (DRY 原则)
+
+**新文件**: `src/components/shared/persistence/helpers.py`
+
+**目的**: 消除 MainAgent 和 SubAgent 之间的代码重复
+
+```python
+async def persist_conversation_state(
+    session_ctx: "SessionContext",
+    runtime_checkpointer,
+    runtime_config: Dict[str, Any],
+    agent_memory_sync: Optional["MemorySyncAdapter"],
+    reason: str = "normal",
+    ctx=None
+) -> bool:
+    """
+    Unified persistence helper for MainAgent and SubAgent handlers.
+
+    - Extracts state from runtime checkpointer
+    - Automatically filters SystemMessage/ToolMessage
+    - Saves to persistent storage (data/sessions/*.json)
+    """
+```
+
+**调用者**:
+- `conversation.py`: MainAgent 超时处理
+- `subagents/middleware.py`: SubAgent 超时处理
+
+##### 3.2.2 上下文注入机制
+
+**文件**: `src/application/services/agent/deep/streaming/conversation.py`
+
+**实现**: 将持久化上下文注入到 `runtime_input`
+
+```python
+# Inject persistence context into state for SubAgent access
+if isinstance(runtime_input, dict):
+    runtime_input["_session_ctx"] = session_ctx
+    runtime_input["_memory_sync"] = agent_memory_sync
+    runtime_input["_runtime_checkpointer"] = runtime_checkpointer
+    runtime_input["_runtime_config"] = runtime_config
+```
+
+**设计考虑**:
+- 使用 `_` 前缀表明内部使用
+- 通过 `runtime.state` 传递,避免修改构造函数
+- SubAgent 通过 `_EXCLUDED_STATE_KEYS` 自动过滤
+
+##### 3.2.3 SubAgent 超时处理
+
+**文件**: `src/components/deepagents/runtime_middlewares/subagents/middleware.py`
+
+**关键变更**:
+
+**1. 排除持久化上下文**:
+```python
+_EXCLUDED_STATE_KEYS = (
+    "messages",
+    "todos",
+    "_session_ctx",           # 不传递给 SubAgent
+    "_memory_sync",
+    "_runtime_checkpointer",
+    "_runtime_config",
+)
+```
+
+**2. SubAgent 持久化 helper**:
+```python
+async def _persist_main_agent_if_available(
+    runtime: ToolRuntime,
+    reason: str
+) -> bool:
+    """从 runtime.state 提取上下文并调用共享 helper"""
+    # 提取上下文
+    session_ctx = runtime.state.get("_session_ctx")
+    memory_sync = runtime.state.get("_memory_sync")
+    runtime_checkpointer = runtime.state.get("_runtime_checkpointer")
+    runtime_config = runtime.state.get("_runtime_config")
+
+    if not all([session_ctx, memory_sync, runtime_checkpointer, runtime_config]):
+        return False  # 优雅降级
+
+    # 调用共享 helper
+    return await persist_conversation_state(...)
+```
+
+**3. 异常处理更新**:
+```python
+# task 工具内部
+except TimeoutError as exc:
+    # step_timeout: 持久化 + 返回错误消息
+    await _persist_main_agent_if_available(
+        runtime, reason=f"subagent_{subagent_type}_step_timeout"
+    )
+    return "[TIMEOUT] SubAgent step execution timed out..."
+
+except ExecutionTimeoutError as exc:
+    # max_execution_time: 持久化 + 返回详细错误
+    await _persist_main_agent_if_available(
+        runtime, reason=f"subagent_{subagent_type}_max_execution_timeout"
+    )
+    return f"[TIMEOUT] SubAgent max execution time exceeded..."
+```
+
+#### 3.3 测试验证
+
+**测试文件**: `test_phase3_subagent_timeout.py`
+
+**测试覆盖**:
+1. 共享持久化 helper 签名正确 ✓
+2. SubAgent 持久化 helper 存在 ✓
+3. 持久化上下文被正确排除 ✓
+4. SubAgent 导入 ExecutionTimeoutError ✓
+5. conversation.py 使用共享 helper ✓
+6. Mock 超时持久化流程 ✓
+
+**测试结果**: 6/6 测试通过
+
+#### 3.4 设计原则应用
+
+| 原则 | 应用体现 |
+|------|---------|
+| **SOLID-SRP** | 共享 helper 单一职责：持久化状态 |
+| **DRY** | MainAgent + SubAgent 共用同一 helper |
+| **KISS** | 通过 runtime.state 传递上下文,无需复杂架构 |
+| **YAGNI** | 不保存 SubAgent 中间状态 (无 checkpointer) |
+| **Fail-safe** | SubAgent 超时不中断 MainAgent,优雅降级 |
+
+#### 3.5 数据流图
+
+```
+[MainAgent] conversation.py
+    |
+    | 1. 注入上下文到 runtime_input
+    |    (_session_ctx, _memory_sync, ...)
+    |
+    v
+[MainAgent] runtime.state
+    |
+    | 2. 调用 SubAgent (task 工具)
+    |
+    v
+[SubAgent] task 函数
+    |
+    | 3. 提取上下文 (runtime.state.get(...))
+    | 4. 执行 SubAgent (可能超时)
+    |
+    v
+[SubAgent] 超时异常
+    |
+    | 5. _persist_main_agent_if_available()
+    |    -> persist_conversation_state()
+    |    -> 持久化 MainAgent 状态
+    |
+    v
+[SubAgent] 返回错误消息给 MainAgent
+    |
+    v
+[MainAgent] 接收错误,继续运行或重试
+```
+
+#### 3.6 对比总结
+
+| 维度 | Phase 2 (MainAgent) | Phase 3 (SubAgent) ✓ |
+|------|--------------------|-----------------------|
+| **持久化范围** | MainAgent 状态 | MainAgent 状态 (不保存 SubAgent) |
+| **异常传播** | 抛出到 conversation.py | 捕获并返回错误消息 |
+| **上下文访问** | 直接访问 | 通过 runtime.state 提取 |
+| **用户体验** | 中断,需"继续" | MainAgent 继续运行 |
+| **代码复用** | 独立实现 | ✓ 共享 helper |
+
+---
+
+### Phase 4: 后续计划
+
+1. **集成测试**: 端到端测试所有超时场景
+   - MainAgent step_timeout
+   - MainAgent max_execution_time
+   - SubAgent step_timeout
+   - SubAgent max_execution_time
+2. **性能优化**: 持久化性能监控与优化
+3. **文档完善**: 更新用户文档和 API 文档
 
 ---
 
@@ -611,21 +808,24 @@ except TimeoutError as exc:
 
 **完成时间**: 2025-11-20
 
-**修改文件**: 6 个核心文件
-**测试文件**: 3 个测试套件（15 个单元测试，全部通过）
+**修改文件**: 9 个核心文件
+**测试文件**: 4 个测试套件（21 个单元测试，全部通过）
 
 **核心成果**:
-1. ✓ 消息机制从内容匹配升级到类型过滤
-2. ✓ 超时处理从 jump_to 迁移到异常抛出
-3. ✓ 统一持久化逻辑，消除重复代码
-4. ✓ Checkpoint 保持干净，历史记录可靠
+1. ✓ 消息机制从内容匹配升级到类型过滤 (Phase 1)
+2. ✓ 超时处理从 jump_to 迁移到异常抛出 (Phase 2)
+3. ✓ 统一持久化逻辑，消除重复代码 (Phase 2)
+4. ✓ Checkpoint 保持干净，历史记录可靠 (Phase 2)
+5. ✓ SubAgent 超时自动持久化 MainAgent 状态 (Phase 3)
+6. ✓ 共享持久化 helper,代码复用 (Phase 3)
 
 **架构改进**:
 - 更清晰的职责分离（SRP）
 - 更少的代码重复（DRY）
 - 更简单的实现（KISS）
 - 更统一的异常处理
+- 更好的容错能力（Fail-safe）
 
-**下一步**: 集成测试 + SubAgent 超时处理
+**下一步**: 集成测试 + 性能优化
 
 

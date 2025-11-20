@@ -19,6 +19,7 @@ from ..hitl.session_manager import SessionHITLManager
 from ..hitl.file_ops import FileOpTracker
 from src.components.shared.memory.memory_sync import MemorySyncAdapter
 from src.components.shared.memory.session_context import SessionContext
+from src.components.shared.persistence import persist_conversation_state
 
 logger = logging.getLogger(__name__)
 
@@ -32,17 +33,10 @@ async def _persist_conversation_state(
     reason: str = "normal"
 ) -> bool:
     """
-    Unified persistence helper to save conversation state.
+    Wrapper for shared persist_conversation_state helper.
 
-    DRY Principle: Centralized persistence logic to avoid duplication across
-    different exception handlers.
-
-    SRP Principle: Single responsibility - persist conversation state to storage.
-
-    This function:
-    1. Extracts state from runtime checkpointer (MemorySaver)
-    2. Calls persist_from_runtime which automatically filters SystemMessage/ToolMessage
-    3. Saves only HumanMessage and AIMessage to persistent storage (data/sessions/*.json)
+    This wrapper maintains backward compatibility with existing calls
+    while delegating to the shared helper in src.components.shared.persistence.
 
     Args:
         ctx: CLI context for console output
@@ -55,43 +49,14 @@ async def _persist_conversation_state(
     Returns:
         True if persistence succeeded, False otherwise
     """
-    if not agent_memory_sync:
-        logger.warning(f"Cannot persist ({reason}): agent_memory_sync is None")
-        ctx.console.print(f"[yellow]Warning: Memory sync not available[/]")
-        return False
-
-    try:
-        # Extract state from runtime checkpoint
-        checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config)
-        if checkpoint_tuple:
-            # Get channel values (contains messages and other state)
-            complete_state = checkpoint_tuple.checkpoint.get("channel_values")
-
-            # Persist to storage (automatically filters to Human/AI messages only)
-            # This calls MemorySyncAdapter.persist_from_runtime() which:
-            # - Flattens messages from checkpoint structure
-            # - Filters out SystemMessage, ToolMessage (system notifications)
-            # - Deduplicates messages
-            # - Saves to SessionStorage (data/sessions/{session_id}.json)
-            agent_memory_sync.persist_from_runtime(
-                session_ctx,
-                runtime_checkpointer,
-                runtime_config,
-                complete_state,
-            )
-
-            logger.info(f"Conversation persisted successfully ({reason})")
-            ctx.console.print(f"[dim]Conversation saved ({reason}).[/]")
-            return True
-        else:
-            logger.warning(f"No checkpoint available to persist ({reason})")
-            ctx.console.print(f"[yellow]No checkpoint to save ({reason})[/]")
-            return False
-
-    except Exception as exc:
-        logger.error(f"Failed to persist conversation ({reason}): {exc}", exc_info=True)
-        ctx.console.print(f"[yellow]Warning: Could not save conversation ({reason})[/]")
-        return False
+    return await persist_conversation_state(
+        session_ctx=session_ctx,
+        runtime_checkpointer=runtime_checkpointer,
+        runtime_config=runtime_config,
+        agent_memory_sync=agent_memory_sync,
+        reason=reason,
+        ctx=ctx
+    )
 
 
 def _get_agent_config(ctx) -> Dict[str, Any]:
@@ -227,6 +192,15 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 print(f"[DEBUG streaming] No checkpoints for checkpoint_ns='{checkpoint_ns}'")
         else:
             print(f"[DEBUG streaming] No checkpoints for thread_id={thread_id}")
+
+    # Inject persistence context into state for SubAgent access
+    # SubAgent task tool can extract these from runtime.state to call persist_conversation_state
+    # Note: These keys are prefixed with _ to indicate internal use
+    if isinstance(runtime_input, dict):
+        runtime_input["_session_ctx"] = session_ctx
+        runtime_input["_memory_sync"] = agent_memory_sync
+        runtime_input["_runtime_checkpointer"] = runtime_checkpointer
+        runtime_input["_runtime_config"] = runtime_config
 
     pending_input: Any = runtime_input
     timed_out = False

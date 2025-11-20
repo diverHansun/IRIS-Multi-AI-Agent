@@ -15,12 +15,13 @@
         },
         "runtime_config": {
           "recursion_limit": 300,
-          "step_timeout": 120,
+          "step_timeout": 300,
           "stream_mode": "updates"
         },
         "middleware_config": {
           "filesystem": "default",
-          "subagents": "default"
+          "subagents": "default",
+          "shell": "default"
         },
         "display_config": {
           "streaming_enabled": true,
@@ -31,12 +32,10 @@
           "show_elapsed_time": true
         },
         "safety_config": {
-          "max_execution_time": 360,
+          "max_execution_time": 900,
           "hitl_config": {
             "dangerous_tools": [
-              "execute_shell",
-              "rm",
-              "sudo",
+              "shell",
               "write_real_file",
               "edit_real_file"
             ],
@@ -49,7 +48,7 @@
                 "allow_auto_approve": false,
                 "warning_message": "Editing host files modifies source code or configuration."
               },
-              "execute_shell": {
+              "shell": {
                 "allow_auto_approve": false,
                 "warning_message": "Shell commands can change or destroy host data."
               }
@@ -81,12 +80,13 @@
         },
         "runtime_config": {
           "recursion_limit": 300,
-          "step_timeout": 120,
+          "step_timeout": 300,
           "stream_mode": "updates"
         },
         "middleware_config": {
           "filesystem": "default",
-          "subagents": "default"
+          "subagents": "default",
+          "shell": "default"
         },
         "display_config": {
           "streaming_enabled": true,
@@ -97,13 +97,11 @@
           "show_elapsed_time": true
         },
         "safety_config": {
-          "max_execution_time": 360,
+          "max_execution_time": 900,
           "hitl_config": {
             "dangerous_tools": [
               "delete_file",
-              "execute_shell",
-              "rm",
-              "sudo",
+              "shell",
               "write_real_file",
               "edit_real_file"
             ],
@@ -120,7 +118,7 @@
                 "allow_auto_approve": false,
                 "warning_message": "Editing host files modifies source code or configuration."
               },
-              "execute_shell": {
+              "shell": {
                 "allow_auto_approve": false,
                 "warning_message": "Shell commands can change or destroy host data."
               }
@@ -152,12 +150,13 @@
         },
         "runtime_config": {
           "recursion_limit": 300,
-          "step_timeout": 120,
+          "step_timeout": 300,
           "stream_mode": "updates"
         },
         "middleware_config": {
           "filesystem": "default",
-          "subagents": "default"
+          "subagents": "default",
+          "shell": "default"
         },
         "display_config": {
           "streaming_enabled": true,
@@ -168,13 +167,11 @@
           "show_elapsed_time": true
         },
         "safety_config": {
-          "max_execution_time": 360,
+          "max_execution_time": 900,
           "hitl_config": {
             "dangerous_tools": [
               "delete_file",
-              "execute_shell",
-              "rm",
-              "sudo",
+              "shell",
               "write_real_file",
               "edit_real_file"
             ],
@@ -191,7 +188,7 @@
                 "allow_auto_approve": false,
                 "warning_message": "Editing host files modifies source code or configuration."
               },
-              "execute_shell": {
+              "shell": {
                 "allow_auto_approve": false,
                 "warning_message": "Shell commands can change or destroy host data."
               }

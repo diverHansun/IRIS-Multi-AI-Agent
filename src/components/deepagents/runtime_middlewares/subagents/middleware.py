@@ -22,12 +22,22 @@ from langgraph.types import Command
 
 from .types import SubAgent, CompiledSubAgent
 from ..virtual_filesystem.types import FilesystemState
+from ..timeout import ExecutionTimeoutError
+from src.components.shared.persistence import persist_conversation_state
 
 logger = logging.getLogger(__name__)
 
 # State keys that should be excluded when passing state to subagents
 # Following official DeepAgents implementation pattern
-_EXCLUDED_STATE_KEYS = ("messages", "todos")
+# Also exclude internal persistence context (injected by conversation.py)
+_EXCLUDED_STATE_KEYS = (
+    "messages",
+    "todos",
+    "_session_ctx",           # Internal: session context for persistence
+    "_memory_sync",           # Internal: memory sync adapter for persistence
+    "_runtime_checkpointer",  # Internal: runtime checkpointer reference
+    "_runtime_config",        # Internal: runtime config reference
+)
 
 
 def _prepare_subagent_state(
@@ -66,6 +76,51 @@ def _prepare_subagent_state(
     )
 
     return subagent_state
+
+
+async def _persist_main_agent_if_available(
+    runtime: ToolRuntime,
+    reason: str
+) -> bool:
+    """
+    Persist MainAgent state when SubAgent times out.
+
+    Retrieves persistence context from runtime.state (injected by conversation.py)
+    and calls the unified persist_conversation_state helper.
+
+    Args:
+        runtime: Tool runtime context containing state with persistence context
+        reason: Reason for persistence (for logging)
+
+    Returns:
+        True if persistence succeeded, False otherwise
+
+    Design principles:
+        - KISS: Simple extraction and delegation pattern
+        - SRP: Single responsibility - extract context and delegate
+        - DRY: Reuses shared persist_conversation_state helper
+    """
+    # Extract persistence context from runtime.state
+    session_ctx = runtime.state.get("_session_ctx")
+    memory_sync = runtime.state.get("_memory_sync")
+    runtime_checkpointer = runtime.state.get("_runtime_checkpointer")
+    runtime_config = runtime.state.get("_runtime_config")
+
+    if not all([session_ctx, memory_sync, runtime_checkpointer, runtime_config]):
+        logger.debug(
+            f"[SubAgent] Persistence context not available in runtime.state, skipping persistence ({reason})"
+        )
+        return False
+
+    # Call shared persistence helper (no ctx for console output in SubAgent context)
+    return await persist_conversation_state(
+        session_ctx=session_ctx,
+        runtime_checkpointer=runtime_checkpointer,
+        runtime_config=runtime_config,
+        agent_memory_sync=memory_sync,
+        reason=reason,
+        ctx=None  # No console output in SubAgent context
+    )
 
 
 def _return_state_update(
@@ -388,9 +443,18 @@ class SubAgentMiddleware(AgentMiddleware):
                 return _return_state_update(result, runtime.tool_call_id)
 
             except TimeoutError as exc:
-                # SubAgent step timeout - provide actionable feedback
+                # SubAgent step timeout - persist MainAgent state before returning error
+                logger.warning(f"[SubAgent] '{subagent_type}' step timeout: {exc}")
+
+                # Persist MainAgent state to prevent data loss
+                await _persist_main_agent_if_available(
+                    runtime,
+                    reason=f"subagent_{subagent_type}_step_timeout"
+                )
+
+                # Return actionable feedback to MainAgent
                 error_msg = (
-                    f"[TIMEOUT] SubAgent '{subagent_type}' execution timed out.\n\n"
+                    f"[TIMEOUT] SubAgent '{subagent_type}' step execution timed out.\n\n"
                     f"Possible causes:\n"
                     f"- Complex task requiring more time\n"
                     f"- Slow API response\n"
@@ -400,9 +464,34 @@ class SubAgentMiddleware(AgentMiddleware):
                     f"- Retry the operation\n"
                     f"- Use a different approach"
                 )
-                logger.warning(f"[SubAgent] '{subagent_type}' timed out: {exc}")
                 return error_msg
+
+            except ExecutionTimeoutError as exc:
+                # SubAgent max_execution_time exceeded - persist MainAgent state
+                logger.warning(
+                    f"[SubAgent] '{subagent_type}' max_execution_time exceeded: "
+                    f"{exc.elapsed_time:.1f}s / {exc.max_execution_time:.0f}s"
+                )
+
+                # Persist MainAgent state to prevent data loss
+                await _persist_main_agent_if_available(
+                    runtime,
+                    reason=f"subagent_{subagent_type}_max_execution_timeout"
+                )
+
+                # Return detailed timeout info to MainAgent
+                error_msg = (
+                    f"[TIMEOUT] SubAgent '{subagent_type}' maximum execution time "
+                    f"({exc.max_execution_time:.0f}s) exceeded after {exc.elapsed_time:.1f}s.\n\n"
+                    f"The subagent took too long to complete the task. Consider:\n"
+                    f"- Simplifying the task description\n"
+                    f"- Breaking into multiple smaller tasks\n"
+                    f"- Using a different subagent type"
+                )
+                return error_msg
+
             except Exception as exc:
+                # Generic exception - log and return error
                 error_msg = f"SubAgent execution failed: {exc}"
                 logger.error(f"[SubAgent] '{subagent_type}' failed: {exc}", exc_info=True)
                 return error_msg

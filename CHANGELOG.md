@@ -1,8 +1,28 @@
-# 更新日志
+# 更新日志🎉
 
 本文档记录了项目的所有版本更新历史。
 
-## v4.2.0 (2025-11-03) 🎉
+## v4.3.0 (2025-11-20)
+
+- **Deep Agent超时处理优化**: 完善超时异常处理和会话持久化机制
+  - 消息机制升级: 从内容匹配迁移到类型检测,使用SystemMessage/ToolMessage实现系统通知
+  - 统一持久化架构: 提取共享persistence helper,消除MainAgent和SubAgent代码重复
+  - ExecutionTimeoutMiddleware重构: 从jump_to模式改为异常抛出,保持checkpoint干净
+  - SubAgent超时恢复: 实现SubAgent超时时自动持久化MainAgent状态,防止数据丢失
+  - 上下文注入机制: 通过runtime.state传递持久化上下文,避免架构复杂化
+- **异常处理统一**:
+  - step_timeout和max_execution_time采用统一异常处理流程
+  - 超时后自动持久化会话状态,用户可继续对话
+  - SystemMessage通知机制,Agent感知超时情况
+  - SubAgent超时不中断MainAgent,优雅降级处理
+- **架构改进**:
+  - 新增shared persistence模块,实现代码复用(DRY原则)
+  - MessageFilter从正则匹配升级为类型检测(KISS原则)
+  - 状态排除机制,防止内部上下文泄露到SubAgent
+  - 更好的容错能力和错误提示
+- **测试覆盖**: 21个单元测试全部通过,覆盖所有超时场景
+
+## v4.2.0 (2025-11-03) 
 
 - **Deep Agent模式**: 基于LangGraph的多Agent协作架构
   - 分层设计: Manager协调流程、Factory创建实例、Adapter处理配置、Instance封装逻辑
