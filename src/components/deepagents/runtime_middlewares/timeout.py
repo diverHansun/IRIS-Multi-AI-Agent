@@ -13,7 +13,6 @@ from langchain.agents.middleware.types import (
     AgentMiddleware,
     AgentState,
     PrivateStateAttr,
-    hook_config,
 )
 
 if TYPE_CHECKING:
@@ -112,19 +111,25 @@ class ExecutionTimeoutMiddleware(AgentMiddleware[ExecutionTimeoutState, Any]):
         """
         return {"execution_start_time": time.time()}
 
-    @hook_config(can_jump_to=["end"])
     def before_model(
         self, state: ExecutionTimeoutState, runtime: Runtime  # noqa: ARG002
     ) -> dict[str, Any] | None:
         """Check if execution time limit has been exceeded before each model call.
+
+        IMPORTANT: This method now raises ExecutionTimeoutError instead of using
+        jump_to="end". This keeps the checkpoint clean (no timeout AIMessage added).
+
+        Design Decision (方案B):
+        - Previous: jump_to="end" + AIMessage → pollutes checkpoint
+        - Current: raise ExecutionTimeoutError → clean checkpoint
+        - Benefits: Unified exception handling, clean state, better logging
 
         Args:
             state: The current agent state containing start time.
             runtime: The langgraph runtime.
 
         Returns:
-            If time limit is exceeded, returns a Command to jump to the end
-            with a timeout message. Otherwise returns None.
+            None if time limit not exceeded.
 
         Raises:
             ExecutionTimeoutError: If execution time limit is exceeded.
@@ -139,18 +144,12 @@ class ExecutionTimeoutMiddleware(AgentMiddleware[ExecutionTimeoutState, Any]):
 
         # Check if time limit has been exceeded
         if elapsed_time >= self.max_execution_time:
-            # Create a message indicating the timeout
-            timeout_message = (
-                f"Agent execution timed out after {elapsed_time:.2f} seconds. "
-                f"Maximum allowed execution time is {self.max_execution_time:.2f} seconds."
-            )
-            timeout_ai_message = AIMessage(content=timeout_message)
-
-            return {"jump_to": "end", "messages": [timeout_ai_message]}
+            # 方案B: Raise exception instead of jump_to
+            # This allows conversation.py to handle it consistently with step_timeout
+            raise ExecutionTimeoutError(elapsed_time, self.max_execution_time)
 
         return None
 
-    @hook_config(can_jump_to=["end"])
     async def abefore_model(
         self, state: ExecutionTimeoutState, runtime: Runtime  # noqa: ARG002
     ) -> dict[str, Any] | None:
@@ -161,8 +160,10 @@ class ExecutionTimeoutMiddleware(AgentMiddleware[ExecutionTimeoutState, Any]):
             runtime: The langgraph runtime.
 
         Returns:
-            If time limit is exceeded, returns a Command to jump to the end
-            with a timeout message. Otherwise returns None.
+            None if time limit not exceeded.
+
+        Raises:
+            ExecutionTimeoutError: If execution time limit is exceeded.
         """
-        # Reuse sync implementation
+        # Reuse sync implementation (now raises exception)
         return self.before_model(state, runtime)

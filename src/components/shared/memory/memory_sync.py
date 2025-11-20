@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 from .global_memory import GlobalMemoryManager
 from .session_context import SessionContext
@@ -158,15 +158,19 @@ class MemorySyncAdapter:
 
         # Flatten messages
         flattened = self._flatten_messages(messages_to_persist)
-        
+
         # Filter: Only keep HumanMessage and AIMessage
+        # KISS + SRP: Simple type-based filtering, excluding system notifications
+        # This ensures SystemMessage and ToolMessage are never persisted
         filtered = [
-            m for m in flattened 
+            m for m in flattened
             if isinstance(m, (HumanMessage, AIMessage))
+            # Automatically excludes: SystemMessage, ToolMessage, and other non-conversational types
         ]
 
         logger.debug(
-            f"Filtered {len(filtered)} Human/AI messages from {len(flattened)} total"
+            f"Filtered {len(filtered)} Human/AI messages from {len(flattened)} total "
+            f"(excluded {len(flattened) - len(filtered)} system/tool messages)"
         )
 
         if not filtered:

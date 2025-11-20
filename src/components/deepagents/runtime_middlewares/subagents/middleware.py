@@ -387,6 +387,21 @@ class SubAgentMiddleware(AgentMiddleware):
                 # Return Command with state updates (SRP: delegate to helper function)
                 return _return_state_update(result, runtime.tool_call_id)
 
+            except TimeoutError as exc:
+                # SubAgent step timeout - provide actionable feedback
+                error_msg = (
+                    f"[TIMEOUT] SubAgent '{subagent_type}' execution timed out.\n\n"
+                    f"Possible causes:\n"
+                    f"- Complex task requiring more time\n"
+                    f"- Slow API response\n"
+                    f"- Network issues\n\n"
+                    f"Suggestions:\n"
+                    f"- Break the task into smaller steps\n"
+                    f"- Retry the operation\n"
+                    f"- Use a different approach"
+                )
+                logger.warning(f"[SubAgent] '{subagent_type}' timed out: {exc}")
+                return error_msg
             except Exception as exc:
                 error_msg = f"SubAgent execution failed: {exc}"
                 logger.error(f"[SubAgent] '{subagent_type}' failed: {exc}", exc_info=True)

@@ -12,13 +12,86 @@ from rich.markup import escape
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command, Interrupt
 
-
+from src.components.deepagents.runtime_middlewares.timeout import ExecutionTimeoutError
 from .event_handler import DeepAgentEventHandler
 from ..hitl.handler import handle_hitl_interrupt, HITLDecisionError
 from ..hitl.session_manager import SessionHITLManager
 from ..hitl.file_ops import FileOpTracker
+from src.components.shared.memory.memory_sync import MemorySyncAdapter
+from src.components.shared.memory.session_context import SessionContext
 
 logger = logging.getLogger(__name__)
+
+
+async def _persist_conversation_state(
+    ctx,
+    session_ctx: SessionContext,
+    runtime_checkpointer,
+    runtime_config: Dict[str, Any],
+    agent_memory_sync: Optional[MemorySyncAdapter],
+    reason: str = "normal"
+) -> bool:
+    """
+    Unified persistence helper to save conversation state.
+
+    DRY Principle: Centralized persistence logic to avoid duplication across
+    different exception handlers.
+
+    SRP Principle: Single responsibility - persist conversation state to storage.
+
+    This function:
+    1. Extracts state from runtime checkpointer (MemorySaver)
+    2. Calls persist_from_runtime which automatically filters SystemMessage/ToolMessage
+    3. Saves only HumanMessage and AIMessage to persistent storage (data/sessions/*.json)
+
+    Args:
+        ctx: CLI context for console output
+        session_ctx: Session context containing session_id
+        runtime_checkpointer: Runtime checkpointer (MemorySaver)
+        runtime_config: Runtime configuration with thread_id
+        agent_memory_sync: Memory sync adapter (handles filtering and persistence)
+        reason: Reason for persistence (for logging/debugging)
+
+    Returns:
+        True if persistence succeeded, False otherwise
+    """
+    if not agent_memory_sync:
+        logger.warning(f"Cannot persist ({reason}): agent_memory_sync is None")
+        ctx.console.print(f"[yellow]Warning: Memory sync not available[/]")
+        return False
+
+    try:
+        # Extract state from runtime checkpoint
+        checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config)
+        if checkpoint_tuple:
+            # Get channel values (contains messages and other state)
+            complete_state = checkpoint_tuple.checkpoint.get("channel_values")
+
+            # Persist to storage (automatically filters to Human/AI messages only)
+            # This calls MemorySyncAdapter.persist_from_runtime() which:
+            # - Flattens messages from checkpoint structure
+            # - Filters out SystemMessage, ToolMessage (system notifications)
+            # - Deduplicates messages
+            # - Saves to SessionStorage (data/sessions/{session_id}.json)
+            agent_memory_sync.persist_from_runtime(
+                session_ctx,
+                runtime_checkpointer,
+                runtime_config,
+                complete_state,
+            )
+
+            logger.info(f"Conversation persisted successfully ({reason})")
+            ctx.console.print(f"[dim]Conversation saved ({reason}).[/]")
+            return True
+        else:
+            logger.warning(f"No checkpoint available to persist ({reason})")
+            ctx.console.print(f"[yellow]No checkpoint to save ({reason})[/]")
+            return False
+
+    except Exception as exc:
+        logger.error(f"Failed to persist conversation ({reason}): {exc}", exc_info=True)
+        ctx.console.print(f"[yellow]Warning: Could not save conversation ({reason})[/]")
+        return False
 
 
 def _get_agent_config(ctx) -> Dict[str, Any]:
@@ -184,6 +257,96 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             except GraphRecursionError as exc:
                 ctx.console.print(f"[bold red]Recursion limit exceeded:[/] {escape(str(exc))}")
                 return ""
+            except TimeoutError as exc:
+                # Step timeout - persist state and notify agent
+                logger.warning(f"Step timeout occurred in Deep Agent: {exc}")
+
+                ctx.console.print(
+                    f"[yellow]TIMEOUT: The agent took longer than expected for this step.[/]"
+                )
+
+                # Special case: Early timeout before any checkpoint exists
+                # Need to manually save user query to prevent data loss
+                checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config) if runtime_checkpointer else None
+                if not checkpoint_tuple and agent_memory_sync:
+                    logger.warning("No checkpoint found - manually saving user query")
+                    from langchain_core.messages import HumanMessage
+
+                    storage = agent_memory_sync.storage
+                    existing_messages = storage.load_session(session_ctx.session_id) or []
+                    existing_messages.append(HumanMessage(content=query))
+                    storage.save_session(session_ctx.session_id, existing_messages)
+                    logger.info(f"Manually saved user query (total messages: {len(existing_messages)})")
+                else:
+                    # Use unified persistence helper (DRY principle)
+                    await _persist_conversation_state(
+                        ctx, session_ctx, runtime_checkpointer,
+                        runtime_config, agent_memory_sync,
+                        reason="step_timeout"
+                    )
+
+                # Notify agent using SystemMessage (won't be persisted)
+                ctx.console.print(f"[dim]Informing agent about timeout...[/]")
+                try:
+                    from langchain_core.messages import SystemMessage
+                    await agent.runtime.aupdate_state(
+                        runtime_config,
+                        values={
+                            "messages": [
+                                SystemMessage(
+                                    content="SYSTEM NOTIFICATION: The previous operation timed out. "
+                                    "Your work has been saved. You can continue or ask for clarification."
+                                )
+                            ]
+                        },
+                    )
+                    ctx.console.print(f"[dim]Agent notified. You can continue the conversation.[/]")
+                    logger.info("Agent notified about step timeout via SystemMessage")
+                except Exception as update_exc:
+                    logger.error(f"Failed to update agent state: {update_exc}")
+                    ctx.console.print(f"[yellow]Warning: Could not notify agent[/]")
+
+                return "[Timeout occurred - please retry or rephrase your request]"
+
+            except ExecutionTimeoutError as exc:
+                # Max execution time exceeded (方案B: middleware raises exception)
+                logger.warning(f"Max execution time exceeded: {exc}")
+
+                ctx.console.print(
+                    f"[yellow]EXECUTION TIMEOUT: Agent exceeded maximum execution time "
+                    f"({exc.elapsed_time:.1f}s / {exc.max_execution_time:.1f}s)[/]"
+                )
+
+                # Persist clean checkpoint (no timeout AIMessage污染)
+                await _persist_conversation_state(
+                    ctx, session_ctx, runtime_checkpointer,
+                    runtime_config, agent_memory_sync,
+                    reason="max_execution_time"
+                )
+
+                # Notify agent using SystemMessage
+                ctx.console.print(f"[dim]Informing agent about execution timeout...[/]")
+                try:
+                    from langchain_core.messages import SystemMessage
+                    await agent.runtime.aupdate_state(
+                        runtime_config,
+                        values={
+                            "messages": [
+                                SystemMessage(
+                                    content=f"SYSTEM NOTIFICATION: Maximum execution time exceeded "
+                                    f"({exc.max_execution_time:.0f}s). Conversation state saved. "
+                                    f"Please continue with a simpler task or ask for help."
+                                )
+                            ]
+                        },
+                    )
+                    ctx.console.print(f"[dim]Agent notified. Conversation saved.[/]")
+                    logger.info("Agent notified about max_execution_time via SystemMessage")
+                except Exception as update_exc:
+                    logger.error(f"Failed to update agent state: {update_exc}")
+                    ctx.console.print(f"[yellow]Warning: Could not notify agent[/]")
+
+                return "[Execution time limit exceeded - conversation saved]"
             except Exception as exc:
                 import traceback
                 print(f"\n[DEBUG streaming] Exception during agent.runtime.astream():")
@@ -231,34 +394,17 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         ctx.console.print("[bold red]Deep agent execution timed out.[/]")
         return ""
 
-    if agent_memory_sync:
-        logger.info(f"[CONVERSATION] Starting persist_from_runtime for session {session_id}")
-        # Get the complete state from runtime checkpointer instead of event_handler
-        # event_handler.last_agent_state only contains the last node's output,
-        # not the complete conversation history
-        try:
-            checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config)
-            if checkpoint_tuple:
-                complete_state = dict(checkpoint_tuple.checkpoint.get("channel_values", {}))
-                state_messages = complete_state.get("messages", [])
-                logger.info(f"[CONVERSATION] Complete state from checkpoint has {len(state_messages)} messages")
-            else:
-                complete_state = None
-                logger.warning("[CONVERSATION] No checkpoint tuple found")
-        except Exception as exc:
-            logger.error(f"[CONVERSATION] Failed to get complete state from checkpoint: {exc}")
-            complete_state = None
+    # Normal completion - persist using unified helper (DRY principle)
+    await _persist_conversation_state(
+        ctx, session_ctx, runtime_checkpointer,
+        runtime_config, agent_memory_sync,
+        reason="normal"
+    )
 
-        agent_memory_sync.persist_from_runtime(
-            session_ctx,
-            runtime_checkpointer,
-            runtime_config,
-            complete_state,
-        )
+    # Update session checkpoint metadata
+    if agent_memory_sync:
         agent.update_session_checkpoint(session_ctx)
         logger.info(f"[CONVERSATION] Persistence completed for session {session_id}")
-    else:
-        logger.debug("MemorySyncAdapter unavailable; skipping persistence sync.")
 
     final_state = event_handler.last_agent_state
     if not final_state:

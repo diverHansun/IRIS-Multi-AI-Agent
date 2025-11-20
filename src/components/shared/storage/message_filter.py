@@ -2,11 +2,16 @@
 Message Filter
 
 Filters system commands and retains only real user conversations and AI responses.
+
+Design Principles Applied:
+- KISS: Use message types instead of content pattern matching for system notifications
+- SRP: Single responsibility - filter messages based on clear type criteria
+- DRY: Centralized filtering logic without duplication
 """
 
 import re
 from typing import List, Dict, Any, Tuple
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 
 class MessageFilter:
@@ -88,28 +93,78 @@ class MessageFilter:
         
         return True
     
+    def is_system_notification(self, message: BaseMessage) -> bool:
+        """
+        Check if message is a system notification.
+
+        KISS Principle: Check message type directly instead of content pattern matching.
+        This is more reliable and simpler than parsing square brackets.
+
+        Args:
+            message: Message object to check
+
+        Returns:
+            True if it is a system notification (SystemMessage or ToolMessage)
+        """
+        # System notifications are represented by SystemMessage or ToolMessage
+        # KISS: Type checking is simpler and more reliable than content matching
+        return isinstance(message, (SystemMessage, ToolMessage))
+
+    def is_system_notification_legacy(self, content: str) -> bool:
+        """
+        DEPRECATED: Legacy method for backward compatibility.
+        Check if message content is a system notification (in square brackets).
+
+        This method is kept for backward compatibility with existing code
+        that may still pass string content instead of message objects.
+        New code should use is_system_notification() with BaseMessage objects.
+
+        Args:
+            content: Message content string
+
+        Returns:
+            True if content matches legacy system notification pattern
+        """
+        content = content.strip()
+        # Legacy pattern: [Something happened...]
+        return content.startswith('[') and content.endswith(']')
+    
     def filter_message_history(self, messages: List[BaseMessage]) -> List[BaseMessage]:
         """
-        Filter message history, removing system command related conversations.
-        
+        Filter message history, removing system notifications and command-related conversations.
+
+        KISS Principle: Use simple type-based filtering instead of complex content parsing.
+        SRP Principle: This method has single responsibility - filter non-conversational messages.
+
+        Filtering Rules:
+        1. Remove SystemMessage and ToolMessage (system notifications)
+        2. Remove HumanMessage that are system commands
+        3. Keep HumanMessage and AIMessage pairs for real conversations
+
         Args:
             messages: Message history list
-            
+
         Returns:
-            Filtered message list
+            Filtered message list containing only HumanMessage and AIMessage
         """
         filtered_messages = []
         i = 0
-        
+
         while i < len(messages):
             message = messages[i]
-            
-            # If it is a user message, check if it is a system command
+
+            # KISS: Skip system notifications by type checking (simpler than content matching)
+            if self.is_system_notification(message):
+                i += 1
+                continue
+
+            # Handle user messages
             if isinstance(message, HumanMessage):
+                # Skip system commands (identified by content)
                 if not self.is_system_command(message.content):
                     # Keep user message
                     filtered_messages.append(message)
-                    
+
                     # If the next one is an AI reply, keep it too
                     if i + 1 < len(messages) and isinstance(messages[i + 1], AIMessage):
                         filtered_messages.append(messages[i + 1])
@@ -118,12 +173,13 @@ class MessageFilter:
                     # System command, skip user message and corresponding AI reply
                     if i + 1 < len(messages) and isinstance(messages[i + 1], AIMessage):
                         i += 1  # Skip AI reply
+
             elif isinstance(message, AIMessage):
-                # Standalone AI message (should not happen theoretically)
+                # Standalone AI message (should not happen theoretically, but keep it)
                 filtered_messages.append(message)
-            
+
             i += 1
-        
+
         return filtered_messages
     
     def get_conversation_summary(self, messages: List[BaseMessage], max_length: int = 200) -> str:

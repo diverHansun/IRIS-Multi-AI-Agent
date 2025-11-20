@@ -2,6 +2,11 @@
 Session Storage Manager
 
 Provides persistent storage and retrieval of session data.
+
+Design Principles Applied:
+- YAGNI: Only persist HumanMessage and AIMessage (real conversations)
+- SRP: Single responsibility - manage session file I/O
+- KISS: Simple JSON serialization without complex transformations
 """
 
 import os
@@ -10,7 +15,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pathlib import Path
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +68,13 @@ class SessionStorage:
         """
         Convert dictionary to message object.
 
-        Note: ToolMessage types in old session data are intentionally
+        YAGNI Principle: Only deserialize conversational message types (Human/AI).
+        SystemMessage and ToolMessage should never be persisted in the first place,
+        but we handle them gracefully for backward compatibility.
+
+        Note: ToolMessage and SystemMessage types in old session data are intentionally
         converted to HumanMessage for backward compatibility.
-        New sessions should not contain ToolMessage in persisted data.
+        New sessions should only contain HumanMessage and AIMessage.
         """
         msg_type = msg_dict.get("type", "HumanMessage")
         content = msg_dict.get("content", "")
@@ -74,10 +83,23 @@ class SessionStorage:
             return HumanMessage(content=content)
         elif msg_type == "AIMessage":
             return AIMessage(content=content)
+        elif msg_type == "SystemMessage":
+            # SystemMessage should not be persisted, but handle gracefully
+            logger.warning(
+                f"Found SystemMessage in persisted data (should not happen). "
+                f"Converting to HumanMessage for compatibility."
+            )
+            return HumanMessage(content=content)
+        elif msg_type == "ToolMessage":
+            # ToolMessage should not be persisted, but handle gracefully
+            logger.warning(
+                f"Found ToolMessage in persisted data (should not happen). "
+                f"Converting to HumanMessage for compatibility."
+            )
+            return HumanMessage(content=content)
         else:
-            # Legacy data may contain ToolMessage or other types
-            # Convert to HumanMessage for backward compatibility
-            logger.debug(f"Converting legacy message type '{msg_type}' to HumanMessage")
+            # Unknown message type - convert to HumanMessage for backward compatibility
+            logger.debug(f"Converting unknown message type '{msg_type}' to HumanMessage")
             return HumanMessage(content=content)
     
     def save_session(self, session_id: str, messages: List[BaseMessage], metadata: Optional[Dict[str, Any]] = None) -> bool:
