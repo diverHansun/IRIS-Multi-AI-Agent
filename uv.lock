@@ -219,6 +219,15 @@ wheels = [
 ]
 
 [[package]]
+name = "backports-asyncio-runner"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8e/ff/70dca7d7cb1cbc0edb2c6cc0c38b65cba36cccc491eca64cabd5fe7f8670/backports_asyncio_runner-1.2.0.tar.gz", hash = "sha256:a5aa7b2b7d8f8bfcaa2b57313f70792df84e32a2a746f585213373f900b42162", size = 69893, upload-time = "2025-07-02T02:27:15.685Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/59/76ab57e3fe74484f48a53f8e337171b4a2349e506eabe136d7e01d059086/backports_asyncio_runner-1.2.0-py3-none-any.whl", hash = "sha256:0da0a936a8aeb554eccb426dc55af3ba63bcdc69fa1a600b5bb305413a4477b5", size = 12313, upload-time = "2025-07-02T02:27:14.263Z" },
+]
+
+[[package]]
 name = "beautifulsoup4"
 version = "4.13.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1374,16 +1383,16 @@ wheels = [
 
 [[package]]
 name = "langchain-mcp-adapters"
-version = "0.1.11"
+version = "0.1.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
     { name = "mcp" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ac/4e/b84af2e379edfb51db78edcfc6eab7dca798f2ce9d74b73e29f5f207685c/langchain_mcp_adapters-0.1.11.tar.gz", hash = "sha256:a217c49086b162344749f7f99a148fc12482e2da8e0260b2e35fc93afb31b38d", size = 23061, upload-time = "2025-10-03T14:53:13.98Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/65/39658ca230a30267b393dcc733912de4235bc861b8df8e6d5d9921d287de/langchain_mcp_adapters-0.1.13.tar.gz", hash = "sha256:7ea50997b0599a5337a17fa33d37300b5ec009ecbf9ff915c914a68e2640af26", size = 29472, upload-time = "2025-11-13T14:32:28.107Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/cc/5f9b23cce308b2c30246e31712bf1a53ae49d97bab8b3d9bc9cfe364f82c/langchain_mcp_adapters-0.1.11-py3-none-any.whl", hash = "sha256:7b35921e9487bcb3ea3d94bf10341316ac897e2997e8a16032ae514834a9685d", size = 15751, upload-time = "2025-10-03T14:53:12.358Z" },
+    { url = "https://files.pythonhosted.org/packages/98/03/3013857f3cd6358799338b8140423b2da048b0860c87507803d52f7753d3/langchain_mcp_adapters-0.1.13-py3-none-any.whl", hash = "sha256:2aae0f13321e7d40d676aa7b4a9325d16b4395bbe1f5fde690f85d3cc2ad4b02", size = 20670, upload-time = "2025-11-13T14:32:26.944Z" },
 ]
 
 [[package]]
@@ -1442,7 +1451,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "1.0.2"
+version = "1.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
@@ -1452,9 +1461,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/25/18e6e056ee1a8af64fcab441b4a3f2e158399935b08f148c7718fc42ecdb/langgraph-1.0.2.tar.gz", hash = "sha256:dae1af08d6025cb1fcaed68f502c01af7d634d9044787c853a46c791cfc52f67", size = 482660, upload-time = "2025-10-29T18:38:28.374Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/55/70f2d11d33b0310d3e48d8e049825b4a34a1c822d48f6448ae548d2cd0f8/langgraph-1.0.3.tar.gz", hash = "sha256:873a6aae6be054ef52a05c463be363a46da9711405b1b14454d595f543b68335", size = 483302, upload-time = "2025-11-10T17:41:45.425Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d7/b1/9f4912e13d4ed691f2685c8a4b764b5a9237a30cca0c5782bc213d9f0a9a/langgraph-1.0.2-py3-none-any.whl", hash = "sha256:b3d56b8c01de857b5fb1da107e8eab6e30512a377685eeedb4f76456724c9729", size = 156751, upload-time = "2025-10-29T18:38:26.577Z" },
+    { url = "https://files.pythonhosted.org/packages/84/a3/fdf6ecd0e44cb02d20afe7d0fb64c748a749f4b2e011bf9a785a32642367/langgraph-1.0.3-py3-none-any.whl", hash = "sha256:4a75146f09bd0d127a724876f4244f460c4c66353a993641bd641ed710cd010f", size = 156845, upload-time = "2025-11-10T17:41:43.868Z" },
 ]
 
 [[package]]
@@ -1946,6 +1955,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyfiglet" },
     { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "python-dotenv" },
     { name = "pytz" },
     { name = "pyyaml" },
@@ -1971,12 +1981,12 @@ requires-dist = [
     { name = "langchain-anthropic", specifier = "==1.0.0" },
     { name = "langchain-community", specifier = "==1.0.0a1" },
     { name = "langchain-core", specifier = "==1.0.4" },
-    { name = "langchain-mcp-adapters", specifier = "==0.1.11" },
+    { name = "langchain-mcp-adapters", specifier = "==0.1.13" },
     { name = "langchain-ollama", specifier = "==1.0.0" },
     { name = "langchain-openai", specifier = "==1.0.2" },
     { name = "langchain-tavily", specifier = "==0.2.13" },
     { name = "langchain-text-splitters", specifier = "==1.0.0" },
-    { name = "langgraph", specifier = "==1.0.2" },
+    { name = "langgraph", specifier = "==1.0.3" },
     { name = "mcp", specifier = "==1.13.1" },
     { name = "numpy", specifier = "==2.2.6" },
     { name = "ollama", specifier = "==0.6.0" },
@@ -1985,6 +1995,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "==2.10.1" },
     { name = "pyfiglet", specifier = "==1.0.4" },
     { name = "pytest", specifier = ">=9.0.0" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "python-dotenv", specifier = "==1.1.1" },
     { name = "pytz", specifier = "==2025.2" },
     { name = "pyyaml", specifier = "==6.0.2" },
@@ -2748,6 +2759,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/da/1d/eb34f286b164c5e431a810a38697409cca1112cee04b287bb56ac486730b/pytest-9.0.0.tar.gz", hash = "sha256:8f44522eafe4137b0f35c9ce3072931a788a21ee40a2ed279e817d3cc16ed21e", size = 1562764, upload-time = "2025-11-08T17:25:33.34Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/72/99/cafef234114a3b6d9f3aaed0723b437c40c57bdb7b3e4c3a575bc4890052/pytest-9.0.0-py3-none-any.whl", hash = "sha256:e5ccdf10b0bac554970ee88fc1a4ad0ee5d221f8ef22321f9b7e4584e19d7f96", size = 373364, upload-time = "2025-11-08T17:25:31.811Z" },
+]
+
+[[package]]
+name = "pytest-asyncio"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backports-asyncio-runner", marker = "python_full_version < '3.11'" },
+    { name = "pytest" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/90/2c/8af215c0f776415f3590cac4f9086ccefd6fd463befeae41cd4d3f193e5a/pytest_asyncio-1.3.0.tar.gz", hash = "sha256:d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5", size = 50087, upload-time = "2025-11-10T16:07:47.256Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/35/f8b19922b6a25bc0880171a2f1a003eaeb93657475193ab516fd87cac9da/pytest_asyncio-1.3.0-py3-none-any.whl", hash = "sha256:611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5", size = 15075, upload-time = "2025-11-10T16:07:45.537Z" },
 ]
 
 [[package]]
