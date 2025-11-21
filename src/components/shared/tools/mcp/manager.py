@@ -1,15 +1,131 @@
 import asyncio
 import json
+import logging
 import os
 from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 
 from .config_loader import load_config, find_config_path
 from .errors import MCPInitializationError, MCPNotAvailableError
 from .tool_adapter import apply_naming_and_filter, schema_summary
 from .types import ServerConfig
+
+logger = logging.getLogger(__name__)
+
+
+def _wrap_mcp_tool_with_error_handling(tool: BaseTool) -> BaseTool:
+    """
+    Wrap MCP tool with error handling to prevent conversation interruption.
+
+    This wrapper catches exceptions from MCP tool execution (network errors,
+    timeouts, server crashes) and returns error messages instead of raising
+    exceptions, allowing Deep Agent conversations to continue gracefully.
+
+    Design Principles:
+        - KISS: Simple wrapper pattern, no complex error recovery logic
+        - SRP: Single responsibility - convert exceptions to error messages
+        - DRY: Unified error handling for all MCP tools
+
+    Args:
+        tool: Original MCP tool to wrap
+
+    Returns:
+        Wrapped tool that returns error messages instead of raising exceptions
+
+    Error Handling:
+        - asyncio.TimeoutError: MCP server response timeout
+        - ConnectionError: Network connection failures
+        - OSError: Process/socket errors (stdio transport)
+        - Exception: All other unexpected errors
+
+    Example Error Message:
+        "[MCP ERROR] Tool 'firecrawl_map' failed: ConnectionError: Network unreachable.
+        The tool may be temporarily unavailable. Please try again or use an alternative."
+    """
+    original_coroutine = tool.coroutine
+
+    async def safe_ainvoke(**kwargs):
+        """
+        Safe async invocation wrapper with comprehensive error handling.
+
+        Returns error message string on failure instead of raising exception.
+        """
+        try:
+            if original_coroutine:
+                return await original_coroutine(**kwargs)
+            else:
+                # Fallback to sync func if no coroutine (should not happen for MCP)
+                logger.warning(
+                    f"MCP tool '{tool.name}' has no coroutine, falling back to sync execution"
+                )
+                if tool.func:
+                    # Run sync function in thread pool
+                    return await asyncio.to_thread(tool.func, **kwargs)
+                else:
+                    raise RuntimeError(f"Tool {tool.name} has no callable implementation")
+
+        except asyncio.TimeoutError as exc:
+            # MCP server response timeout
+            error_msg = (
+                f"[MCP TIMEOUT] Tool '{tool.name}' execution timed out.\n"
+                f"The MCP server may be slow or unresponsive.\n"
+                f"Suggestions:\n"
+                f"- Try again with a simpler request\n"
+                f"- Check MCP server status\n"
+                f"- Use an alternative tool if available"
+            )
+            logger.warning(f"MCP tool timeout: {tool.name}", exc_info=True)
+            return error_msg
+
+        except (ConnectionError, OSError) as exc:
+            # Network connection failures or process errors
+            error_msg = (
+                f"[MCP CONNECTION ERROR] Tool '{tool.name}' connection failed.\n"
+                f"Error details: {exc.__class__.__name__}: {exc}\n"
+                f"Possible causes:\n"
+                f"- Network connectivity issues\n"
+                f"- MCP server not running or crashed\n"
+                f"- Firewall blocking connection\n"
+                f"Suggestions:\n"
+                f"- Check your network connection\n"
+                f"- Verify MCP server configuration in config/tools/mcp/mcp.toml\n"
+                f"- Try restarting the application"
+            )
+            logger.warning(
+                f"MCP tool connection error: {tool.name} - {exc.__class__.__name__}: {exc}",
+                exc_info=True
+            )
+            return error_msg
+
+        except Exception as exc:
+            # All other unexpected errors
+            error_msg = (
+                f"[MCP ERROR] Tool '{tool.name}' execution failed.\n"
+                f"Error type: {exc.__class__.__name__}\n"
+                f"Error details: {exc}\n"
+                f"The tool may be temporarily unavailable.\n"
+                f"Suggestions:\n"
+                f"- Try again later\n"
+                f"- Use an alternative tool\n"
+                f"- Check application logs for details"
+            )
+            logger.warning(
+                f"MCP tool execution error: {tool.name} - {exc.__class__.__name__}: {exc}",
+                exc_info=True
+            )
+            return error_msg
+
+    # Create wrapped tool preserving original metadata
+    # KISS principle: Use StructuredTool.from_function for simple wrapping
+    return StructuredTool.from_function(
+        name=tool.name,
+        func=None,  # No sync version for MCP tools
+        coroutine=safe_ainvoke,
+        description=tool.description,
+        args_schema=tool.args_schema,
+    )
 
 
 def _timedelta_to_milliseconds(value: Optional[timedelta]) -> Optional[int]:
@@ -225,7 +341,12 @@ class GlobalMCPManager:
                     default_prefix=cfg.default_prefix,
                 )
 
-                cls._tools = tools
+                # Wrap all MCP tools with error handling to prevent conversation interruption
+                # DRY principle: unified error handling for all MCP tools
+                # This prevents network errors from interrupting Deep Agent conversations
+                wrapped_tools = [_wrap_mcp_tool_with_error_handling(t) for t in tools]
+
+                cls._tools = wrapped_tools
 
                 # mark all configured servers as connected (per-server health is not exposed)
                 for s in cls._status.get("servers", []):
