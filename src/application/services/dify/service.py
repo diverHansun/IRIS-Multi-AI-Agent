@@ -24,6 +24,7 @@ from src.application.services.base import BaseEngineService
 from src.application.services.dify.client import DifyClient, DifyClientError
 from src.application.services.dify.streaming import DifyStreaming
 from src.application.services.dify.upload import handle_upload_command
+from src.application.cli.theme import COLORS
 
 logger = logging.getLogger(__name__)
 
@@ -127,14 +128,16 @@ class _DifyRuntime:
         for field in required:
             if not config.get(field):
                 self.console.print(
-                    f"[red]Config validation failed: missing '{field}'.[/]"
+                    f"Config validation failed: missing '{field}'.",
+                    style=COLORS["error"],
                 )
                 return False
 
         api_key = config["api_key"]
         if not (api_key.startswith("app-") or api_key.startswith("sk-")):
             self.console.print(
-                "[red]Invalid API key format. Should start with 'app-' or 'sk-'.[/]"
+                "Invalid API key format. Should start with 'app-' or 'sk-'.",
+                style=COLORS["error"],
             )
             return False
 
@@ -183,8 +186,8 @@ class _DifyRuntime:
                 # Display file usage info on first attempt
                 if attempt == 0 and files_count > 0:
                     self.console.print(
-                        f"[dim]Using {files_count} file(s). "
-                        f"Files cleared after this request.[/]"
+                        f"Using {files_count} file(s). Files cleared after this request.",
+                        style=COLORS["text_dim"],
                     )
 
                 # Process stream
@@ -205,10 +208,10 @@ class _DifyRuntime:
 
                 if attempt < retry_attempts - 1:
                     self.console.print(
-                        f"[yellow]Attempt {attempt + 1}/{retry_attempts} failed: "
-                        f"{type(exc).__name__}[/]"
+                        f"Attempt {attempt + 1}/{retry_attempts} failed: {type(exc).__name__}",
+                        style=COLORS["warning"],
                     )
-                    self.console.print(f"[yellow]Retrying in {retry_delay}s...[/]")
+                    self.console.print(f"Retrying in {retry_delay}s...", style=COLORS["warning"])
                     await asyncio.sleep(retry_delay)
                 else:
                     # All attempts failed
@@ -220,7 +223,7 @@ class _DifyRuntime:
                             "\nNote: Uploaded files were cleared. "
                             "Please re-upload if needed."
                         )
-                    self.console.print(f"[red]{error_msg}[/]")
+                    self.console.print(error_msg, style=COLORS["error"])
                     return {"type": "error", "message": error_msg}
 
             except DifyClientError as exc:
@@ -288,24 +291,35 @@ class _DifyRuntime:
             if count == 1:
                 name = uploaded_files[0].get("filename", "unknown")
                 self.console.print(
-                    f"[dim]Queued file: {name}. It will be used in the next conversation.[/]"
+                    f"Queued file: {name}. It will be used in the next conversation.",
+                    style=COLORS["text_dim"],
                 )
             else:
                 self.console.print(
-                    f"[dim]Queued {count} files. They will be used in the next conversation.[/]"
+                    f"Queued {count} files. They will be used in the next conversation.",
+                    style=COLORS["text_dim"],
                 )
 
-            self.console.print(f"[blue]Pending files: {len(self.uploaded_files)}[/]")
+            self.console.print(
+                f"Pending files: {len(self.uploaded_files)}",
+                style=COLORS["info"],
+            )
 
         return result
 
     async def list_files(self) -> None:
         if not self.uploaded_files:
-            self.console.print("[dim]No files are queued for the next conversation.[/]")
+            self.console.print(
+                "No files are queued for the next conversation.",
+                style=COLORS["text_dim"],
+            )
             return
 
         total_size = 0
-        self.console.print(f"[blue]{len(self.uploaded_files)} queued file(s):[/]")
+        self.console.print(
+            f"{len(self.uploaded_files)} queued file(s):",
+            style=COLORS["info"],
+        )
         for index, info in enumerate(self.uploaded_files, start=1):
             size = info.get("_size", 0)
             total_size += size
@@ -313,37 +327,45 @@ class _DifyRuntime:
             file_type = info.get("type", "unknown")
             filename = info.get("_filename", "unknown")
             file_id = info.get("upload_file_id", "unknown")
-            type_color = "cyan" if file_type == "image" else "yellow"
+            type_color = COLORS["info"] if file_type == "image" else COLORS["warning"]
             self.console.print(
                 f"  [{index}] [{type_color}]{file_type:<8}[/{type_color}] {filename} ({size_str})"
             )
-            self.console.print(f"      [dim]ID: {file_id}[/]")
+            self.console.print(f"      ID: {file_id}", style=COLORS["text_dim"])
 
-        self.console.print(f"[dim]Total size: {self._format_size(total_size)}[/]")
         self.console.print(
-            "[dim]Files are consumed on the next conversation automatically.[/]"
+            f"Total size: {self._format_size(total_size)}",
+            style=COLORS["text_dim"],
+        )
+        self.console.print(
+            "Files are consumed on the next conversation automatically.",
+            style=COLORS["text_dim"],
         )
 
     async def remove_file(self, index: int) -> Dict[str, Any]:
         if not self.uploaded_files:
-            self.console.print("[yellow]No files to remove.[/]")
+            self.console.print("No files to remove.", style=COLORS["warning"])
             return {"removed": 0, "failed": 0}
 
         if index < 1 or index > len(self.uploaded_files):
             self.console.print(
-                f"[red]Invalid index {index}. Valid range: 1-{len(self.uploaded_files)}.[/]"
+                f"Invalid index {index}. Valid range: 1-{len(self.uploaded_files)}.",
+                style=COLORS["error"],
             )
             return {"removed": 0, "failed": 1}
 
         removed = self.uploaded_files.pop(index - 1)
         filename = removed.get("_filename", "unknown")
-        self.console.print(f"[green]Removed file: {filename}[/]")
-        self.console.print(f"[dim]{len(self.uploaded_files)} file(s) remain queued.[/]")
+        self.console.print(f"Removed file: {filename}", style=COLORS["success"])
+        self.console.print(
+            f"{len(self.uploaded_files)} file(s) remain queued.",
+            style=COLORS["text_dim"],
+        )
         return {"removed": 1, "failed": 0}
 
     async def remove_files_by_indices(self, indices: List[int]) -> Dict[str, Any]:
         if not self.uploaded_files:
-            self.console.print("[yellow]No files to remove.[/]")
+            self.console.print("No files to remove.", style=COLORS["warning"])
             return {"removed": 0, "failed": 0}
 
         removed = 0
@@ -352,26 +374,32 @@ class _DifyRuntime:
             if 1 <= index <= len(self.uploaded_files):
                 file_info = self.uploaded_files.pop(index - 1)
                 self.console.print(
-                    f"[green]Removed: {file_info.get('_filename', 'unknown')}[/]"
+                    f"Removed: {file_info.get('_filename', 'unknown')}",
+                    style=COLORS["success"],
                 )
                 removed += 1
             else:
-                self.console.print(f"[yellow]Skipped invalid index: {index}[/]")
+                self.console.print(
+                    f"Skipped invalid index: {index}", style=COLORS["warning"]
+                )
                 failed += 1
 
         self.console.print(
-            f"[dim]Removed {removed} file(s); {len(self.uploaded_files)} remain queued.[/]"
+            f"Removed {removed} file(s); {len(self.uploaded_files)} remain queued.",
+            style=COLORS["text_dim"],
         )
         return {"removed": removed, "failed": failed}
 
     async def clear_files(self) -> None:
         if not self.uploaded_files:
-            self.console.print("[dim]File queue is already empty.[/]")
+            self.console.print("File queue is already empty.", style=COLORS["text_dim"])
             return
 
         count = len(self.uploaded_files)
         self.uploaded_files.clear()
-        self.console.print(f"[yellow]Cleared {count} queued file(s).[/]")
+        self.console.print(
+            f"Cleared {count} queued file(s).", style=COLORS["warning"]
+        )
 
     async def reset_conversation(self) -> None:
         self.conversation_id = None
@@ -451,13 +479,13 @@ class DifyService(BaseEngineService):
         if not runtime.initialized:
             init_result = await runtime.initialize()
             if init_result["type"] == "error":
-                ctx.console.print(f"[red]{init_result['message']}[/]")
+                ctx.console.print(init_result["message"], style=COLORS["error"])
                 return ""
         result = await runtime.handle_query(
             query, user_id=ctx.session_id or "default_user"
         )
         if result["type"] == "error":
-            ctx.console.print(f"[red]{result['message']}[/]")
+            ctx.console.print(result["message"], style=COLORS["error"])
         return ""
 
     async def switch_model(

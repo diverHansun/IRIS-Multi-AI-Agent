@@ -10,8 +10,10 @@ from __future__ import annotations
 import pyfiglet
 from rich.console import Console
 
-PRIMARY_COLOUR = "#C2FF62"  # Jasmine light green
-SECONDARY_COLOUR = "#50B4FF"  # Sci-fi blue
+from src.application.cli.theme import BRAND_COLORS
+
+PRIMARY_COLOUR = BRAND_COLORS["jasmine"]
+SECONDARY_COLOUR = BRAND_COLORS["scifi_blue"]
 
 
 def _get_console(console: Console | None) -> Console:
@@ -36,4 +38,3 @@ def display_logo_intro(console: Console | None = None) -> None:
     figlet = pyfiglet.Figlet(font="slant")
     intro_art = figlet.renderText("Muti  AI  Agent").rstrip()
     target_console.print(intro_art, style=SECONDARY_COLOUR)
-

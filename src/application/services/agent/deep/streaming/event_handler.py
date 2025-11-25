@@ -9,6 +9,8 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from rich.markup import escape
 
+from src.application.cli.theme import COLORS
+
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 try:
@@ -152,7 +154,7 @@ class DeepAgentEventHandler:
             if tool_content:
                 self._stop_spinner()
                 self.console.print()
-                self.console.print(tool_content, style="red", markup=False)
+                self.console.print(tool_content, style=COLORS["error"], markup=False)
                 self.console.print()
             return
 
@@ -186,7 +188,7 @@ class DeepAgentEventHandler:
                 self._flush_text_buffer(final=True)
                 self._stop_spinner()
                 self.console.print()
-                self.console.print(tool_content, style="red", markup=False)
+                self.console.print(tool_content, style=COLORS["error"], markup=False)
                 self.console.print()
 
     def _process_ai_message_content_blocks(self, message: BaseMessage) -> None:
@@ -348,7 +350,11 @@ class DeepAgentEventHandler:
             self._has_responded = True
 
         display_str = self._format_tool_display(tool_name, tool_args)
-        self.console.print(f"  Tool: {escape(display_str)}", style="dim cyan", markup=False)
+        self.console.print(
+            f"  Tool: {escape(display_str)}",
+            style=f"dim {COLORS['tool']}",
+            markup=False,
+        )
 
         self._start_spinner()
 
@@ -389,10 +395,13 @@ class DeepAgentEventHandler:
         self._stop_spinner()
 
         if not self._has_responded:
-            self.console.print("Agent:", style="bold blue", markup=False)
+            self.console.print("Agent:", style=f"bold {COLORS['agent']}", markup=False)
             self._has_responded = True
 
-        self.console.print(escape(self._pending_text.rstrip()), style="white")
+        self.console.print(
+            escape(self._pending_text.rstrip()),
+            style=COLORS["text_primary"],
+        )
         self._pending_text = ""
 
     def _start_spinner(self) -> None:

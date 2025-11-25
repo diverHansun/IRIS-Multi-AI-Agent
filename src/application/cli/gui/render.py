@@ -9,6 +9,15 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from src.application.cli.theme import (
+    ALIGNMENT,
+    COLORS,
+    INDENT,
+    PANEL_DEFAULTS,
+    PANEL_STYLES,
+    TABLE_COLUMN_STYLES,
+)
+
 GLOBAL_COMMANDS = [
     ("/switch <engine>", "Switch execution engine (llm | agent | agentflow | dify)"),
     ("/help", "Show contextual help"),
@@ -73,7 +82,7 @@ DIFY_CONVERSATION_COMMANDS = [
 def _format_command_section(title: str, commands: Sequence[tuple[str, str]]) -> str:
     lines = [title, "-" * len(title)]
     for syntax, description in commands:
-        lines.append(f"{syntax:<28} {description}")
+        lines.append(f"{INDENT['small']}{syntax:<{ALIGNMENT['command']}} {description}")
     return "\n".join(lines)
 
 
@@ -103,7 +112,14 @@ def print_welcome(console: Console) -> None:
     ]
 
     body = summary + "\n\n" + "\n\n".join(sections)
-    console.print(Panel(body, title="Welcome", border_style="cyan"))
+    console.print(
+        Panel(
+            body,
+            title="[bold]Welcome[/bold]",
+            border_style=PANEL_STYLES["primary"],
+            **PANEL_DEFAULTS,
+        )
+    )
 
 
 def print_help(console: Console, dify_mode: bool = False) -> None:
@@ -130,7 +146,14 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
         ).strip()
 
         body = "\n\n".join(dify_sections) + f"\n\n{tips}"
-        console.print(Panel(body, title="Dify Mode Help", border_style="green"))
+        console.print(
+            Panel(
+                body,
+                title="[bold]Dify Mode Help[/bold]",
+                border_style=PANEL_STYLES["success"],
+                **PANEL_DEFAULTS,
+            )
+        )
         return
 
     sections = [
@@ -156,7 +179,14 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
     ).strip()
 
     body = "\n\n".join(sections) + f"\n\n{examples}"
-    console.print(Panel(body, title="Help", border_style="green"))
+    console.print(
+        Panel(
+            body,
+            title="[bold]Help[/bold]",
+            border_style=PANEL_STYLES["success"],
+            **PANEL_DEFAULTS,
+        )
+    )
 
 
 def render_info(
@@ -206,7 +236,12 @@ def render_info(
         lines.append(f"Queued Files: {files_count}")
 
     console.print(
-        Panel("\n".join(lines), title="System Information", border_style="blue")
+        Panel(
+            "\n".join(lines),
+            title="[bold]System Information[/bold]",
+            border_style=PANEL_STYLES["info"],
+            **PANEL_DEFAULTS,
+        )
     )
 
 
@@ -216,9 +251,9 @@ def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
     """
 
     if "error" in catalog:
-        console.print(f"[red]{catalog['error']}[/]")
+        console.print(catalog["error"], style=COLORS["error"])
         if "message" in catalog:
-            console.print(f"[yellow]{catalog['message']}[/]")
+            console.print(catalog["message"], style=COLORS["warning"])
         return
 
     lines: list[str] = ["Available LLM Providers:\n"]
@@ -251,7 +286,14 @@ def render_llms(console: Console, catalog: Mapping[str, Any]) -> None:
             f"Startup Default LLM: {default_cfg.get('provider', 'N/A')} / {default_cfg.get('model', 'N/A')}"
         )
 
-    console.print(Panel("\n".join(lines), title="LLM Catalog", border_style="magenta"))
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="[bold]LLM Catalog[/bold]",
+            border_style=PANEL_STYLES["primary"],
+            **PANEL_DEFAULTS,
+        )
+    )
 
 
 def render_sessions(
@@ -264,11 +306,11 @@ def render_sessions(
     """
 
     table = Table(title="Sessions")
-    table.add_column("Active", style="cyan", justify="center", width=8)
-    table.add_column("Session ID", style="green", no_wrap=True)
-    table.add_column("Messages", style="magenta", justify="right", width=10)
-    table.add_column("Created At", style="yellow", no_wrap=True)
-    table.add_column("Updated At", style="yellow", no_wrap=True)
+    table.add_column("Active", style=TABLE_COLUMN_STYLES["status"], justify="center", width=8)
+    table.add_column("Session ID", style=TABLE_COLUMN_STYLES["id"], no_wrap=True)
+    table.add_column("Messages", style=TABLE_COLUMN_STYLES["count"], justify="right", width=10)
+    table.add_column("Created At", style=TABLE_COLUMN_STYLES["time"], no_wrap=True)
+    table.add_column("Updated At", style=TABLE_COLUMN_STYLES["time"], no_wrap=True)
 
     for session in sessions:
         session_id = session.get("session_id", session.get("id", ""))
@@ -300,7 +342,7 @@ def render_mcp_status(
         return
 
     if not status:
-        console.print("[yellow]No MCP status information available.[/]")
+        console.print("No MCP status information available.", style=COLORS["warning"])
         return
 
     lines = [
@@ -317,7 +359,14 @@ def render_mcp_status(
     if status.get("last_error"):
         lines.append(f"Last Error: {status['last_error']}")
 
-    console.print(Panel("\n".join(lines), title="MCP Status", border_style="magenta"))
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="[bold]MCP Status[/bold]",
+            border_style=PANEL_STYLES["primary"],
+            **PANEL_DEFAULTS,
+        )
+    )
 
 
 def render_mcp_tools(
@@ -340,7 +389,7 @@ def render_mcp_tools(
 
     tool_list = list(tools)
     if not tool_list:
-        console.print("[yellow]No MCP tools available.[/]")
+        console.print("No MCP tools available.", style=COLORS["warning"])
         return
 
     lines = [f"Total {len(tool_list)} MCP tool(s):"]
@@ -350,7 +399,14 @@ def render_mcp_tools(
     if len(tool_list) > 100:
         lines.append(f"... {len(tool_list) - 100} more tool(s) not shown")
 
-    console.print(Panel("\n".join(lines), title="MCP Tools", border_style="magenta"))
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="[bold]MCP Tools[/bold]",
+            border_style=PANEL_STYLES["primary"],
+            **PANEL_DEFAULTS,
+        )
+    )
 
 
 def render_connector_status(
@@ -365,7 +421,7 @@ def render_connector_status(
         return
 
     if not status:
-        console.print("[yellow]No connector status information available.[/]")
+        console.print("No connector status information available.", style=COLORS["warning"])
         return
 
     lines = [
@@ -378,7 +434,12 @@ def render_connector_status(
         lines.append(f"Schema Error: {status['schema_error']}")
 
     console.print(
-        Panel("\n".join(lines), title="Connector Status", border_style="cyan")
+        Panel(
+            "\n".join(lines),
+            title="[bold]Connector Status[/bold]",
+            border_style=PANEL_STYLES["primary"],
+            **PANEL_DEFAULTS,
+        )
     )
 
 
@@ -398,7 +459,7 @@ def render_connector_tools(
         return
 
     if not tools:
-        console.print("[yellow]No connector tools registered.[/]")
+        console.print("No connector tools registered.", style=COLORS["warning"])
         return
 
     lines = [f"Total {len(tools)} connector tool(s):"]
@@ -407,7 +468,14 @@ def render_connector_tools(
     if len(tools) > 100:
         lines.append(f"... {len(tools) - 100} more tool(s) not shown")
 
-    console.print(Panel("\n".join(lines), title="Connector Tools", border_style="cyan"))
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="[bold]Connector Tools[/bold]",
+            border_style=PANEL_STYLES["primary"],
+            **PANEL_DEFAULTS,
+        )
+    )
 
 
 def render_tools_summary(console: Console, payload: Mapping[str, Any]) -> None:
@@ -438,7 +506,14 @@ def render_tools_summary(console: Console, payload: Mapping[str, Any]) -> None:
         if warning:
             lines.append(f"  ! {warning}")
 
-    console.print(Panel("\n".join(lines), title="Tool Summary", border_style="blue"))
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title="[bold]Tool Summary[/bold]",
+            border_style=PANEL_STYLES["info"],
+            **PANEL_DEFAULTS,
+        )
+    )
 
 
 def render_tools_list(console: Console, payload: Mapping[str, Any]) -> None:
@@ -451,7 +526,14 @@ def render_tools_list(console: Console, payload: Mapping[str, Any]) -> None:
     total = payload.get("total", len(tools))
 
     if not tools:
-        console.print(Panel("No tools available.", title="Tool List", border_style="blue"))
+        console.print(
+            Panel(
+                "No tools available.",
+                title="[bold]Tool List[/bold]",
+                border_style=PANEL_STYLES["info"],
+                **PANEL_DEFAULTS,
+            )
+        )
     else:
         table = Table(title=f"Tool List ({total})", show_lines=False)
         table.add_column("Tool Name", justify="left")
@@ -468,4 +550,4 @@ def render_tools_list(console: Console, payload: Mapping[str, Any]) -> None:
         console.print(table)
 
     for warning in warnings:
-        console.print(f"[yellow]{warning}[/]")
+        console.print(warning, style=COLORS["warning"])

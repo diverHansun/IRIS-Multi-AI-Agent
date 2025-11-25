@@ -8,6 +8,8 @@ from typing import Iterable, Sequence
 
 from rich.console import Console
 
+from src.application.cli.theme import COLORS
+
 
 def prompt_confirm(console: Console, message: str, default: bool = False) -> bool:
     """
@@ -32,12 +34,12 @@ def prompt_select(console: Console, options: Sequence[str], title: str = "") -> 
     while True:
         choice = console.input("Enter number: ").strip()
         if not choice.isdigit():
-            console.print("[red]Invalid input, please enter a number[/]")
+            console.print("Invalid input, please enter a number", style=COLORS["error"])
             continue
         idx = int(choice) - 1
         if 0 <= idx < len(options):
             return options[idx]
-        console.print("[red]Selection out of range, try again[/]")
+        console.print("Selection out of range, try again", style=COLORS["error"])
 
 
 def parse_indices(value: str) -> list[int]:
@@ -49,4 +51,3 @@ def parse_indices(value: str) -> list[int]:
         if token.isdigit():
             indices.append(int(token) - 1)
     return indices
-

@@ -29,6 +29,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 from langchain_core.callbacks import AsyncCallbackHandler, BaseCallbackHandler
 from src.core.providers.utils import OllamaClient
+from src.application.cli.theme import COLORS, PANEL_DEFAULTS
 
 # 导入配置
 try:
@@ -148,12 +149,12 @@ class StreamingDisplay:
         """创建显示面板"""
         # 添加光标效果
         display_content = self.content + "▊"
-        
+
         return Panel(
-            Text(display_content, style="green"),
-            title=f"[bold cyan]{self.title}[/]",
-            border_style="cyan",
-            padding=(1, 2)
+            Text(display_content, style=COLORS["agent"]),
+            title=f"[bold]{self.title}[/bold]",
+            border_style=COLORS["info"],
+            **PANEL_DEFAULTS,
         )
     
     def get_content(self) -> str:
@@ -516,11 +517,14 @@ class StreamingManager:
                 
                 # 显示最终结果和性能指标 - 安全处理Unicode
                 try:
-                    console.print(Panel(
-                        full_response,
-                        title=f"[bold green]{display_title} (完成)[/]",
-                        border_style="green"
-                    ))
+                    console.print(
+                        Panel(
+                            full_response,
+                            title=f"[bold]{display_title} (完成)[/bold]",
+                            border_style=COLORS["success"],
+                            **PANEL_DEFAULTS,
+                        )
+                    )
                 except UnicodeEncodeError:
                     # 如果有Unicode问题，使用简化显示
                     print(f"\n=== {display_title} (完成) ===")
@@ -535,10 +539,11 @@ class StreamingManager:
                 if chunk_count > 0:
                     try:
                         console.print(
-                            f"[dim]⚡ 性能: {elapsed:.2f}s | "
+                            f"性能: {elapsed:.2f}s | "
                             f"{len(full_response)} 字符 | "
                             f"{chars_per_second:.1f} 字符/秒 | "
-                            f"{chunk_count} 数据块[/]"
+                            f"{chunk_count} 数据块",
+                            style=COLORS["text_dim"],
                         )
                     except UnicodeEncodeError:
                         # 安全的性能显示
@@ -610,7 +615,7 @@ async def stream_llm_response(
 
 async def demo_streaming():
     """流式输出演示"""
-    console.print("[bold blue]流式输出演示[/]")
+    console.print("[bold]流式输出演示[/bold]", style=COLORS["info"])
     
     # 模拟流式输出
     demo_text = "这是一个流式输出的演示。我们可以看到文字逐字出现，就像真实的AI对话一样。这种效果可以大大提升用户体验，让用户感觉到AI正在实时思考和回应。"
@@ -625,7 +630,7 @@ async def demo_streaming():
             
     finally:
         display.stop()
-        console.print("[green]演示完成！[/]")
+        console.print("[bold]演示完成！[/bold]", style=COLORS["success"])
 
 if __name__ == "__main__":
     # 运行演示

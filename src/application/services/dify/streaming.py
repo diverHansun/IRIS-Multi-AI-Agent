@@ -12,6 +12,7 @@ from rich.status import Status
 from rich.panel import Panel
 import logging
 
+from src.application.cli.theme import COLORS
 logger = logging.getLogger(__name__)
 
 
@@ -238,7 +239,8 @@ class DifyStreaming:
                 if chunk_count > max_chunks:
                     logger.warning(f"Stream chunk count exceeded limit: {max_chunks}")
                     self.console.print(
-                        f"\n[yellow]Warning: Response too long, truncated[/yellow]"
+                        "\nWarning: Response too long, truncated",
+                        style=COLORS["warning"],
                     )
                     break
 
@@ -270,7 +272,8 @@ class DifyStreaming:
                                 f"Response too long: {total_content_length} chars"
                             )
                             self.console.print(
-                                f"\n[yellow]Warning: Response exceeded limit ({self.max_content_length} chars), truncated[/yellow]"
+                                f"\nWarning: Response exceeded limit ({self.max_content_length} chars), truncated",
+                                style=COLORS["warning"],
                             )
                             break
 
@@ -308,7 +311,8 @@ class DifyStreaming:
                     if tool:
                         # Minimal agent display: [Agent Step N] tool_name ✓
                         self.console.print(
-                            f"\n[yellow][Agent Step {position}] {tool} ✓[/yellow]"
+                            f"\n[Agent Step {position}] {tool} ✓",
+                            style=COLORS["info"],
                         )
 
                 elif data_type == "message_end":
@@ -355,7 +359,7 @@ class DifyStreaming:
                         error_msg = f"{error_msg}: {detail_msg}"
 
                     logger.error("Dify error event: %s", parsed_data)
-                    self.console.print(f"\n[red]Error: {error_msg}[/red]")
+                    self.console.print(f"\nError: {error_msg}", style=COLORS["error"])
                     return None
 
                 elif data_type == "file":
@@ -365,7 +369,7 @@ class DifyStreaming:
                         first_content_received = True
 
                     filename = parsed_data.get("filename", "Unknown file")
-                    self.console.print(f"\n[blue]File: {filename}[/blue]")
+                    self.console.print(f"\nFile: {filename}", style=COLORS["info"])
 
             # Ensure the status indicator stops cleanly
             if show_typing and not first_content_received:
@@ -374,7 +378,7 @@ class DifyStreaming:
             # Flush any remaining buffered content
             if display_buffer:
                 buffered_content = "".join(display_buffer)
-                self.console.print(buffered_content, end="", style="bright_white")
+                self.console.print(buffered_content, end="", style=COLORS["text_primary"])
 
             # Persist buffered content for summary statistics
             if content_buffer:
@@ -385,20 +389,23 @@ class DifyStreaming:
                 if stats:
                     try:
                         self.console.print(
-                            f"[dim]Response complete | "
+                            f"Response complete | "
                             f"{stats['elapsed_time']:.2f}s | "
                             f"{stats['total_chars']} chars | "
                             f"{stats['chars_per_second']:.1f} chars/s | "
-                            f"{stats['total_chunks']} chunks[/dim]"
+                            f"{stats['total_chunks']} chunks",
+                            style=COLORS["text_dim"],
                         )
                     except Exception as stats_e:
                         logger.debug(f"Failed to display performance stats: {stats_e}")
                         self.console.print(
-                            f"[dim]Response complete ({len(content_buffer)} fragments)[/dim]"
+                            f"Response complete ({len(content_buffer)} fragments)",
+                            style=COLORS["text_dim"],
                         )
                 else:
                     self.console.print(
-                        f"[dim]Response complete ({len(content_buffer)} fragments)[/dim]"
+                        f"Response complete ({len(content_buffer)} fragments)",
+                        style=COLORS["text_dim"],
                     )
 
             # Persist current conversation information
@@ -419,25 +426,30 @@ class DifyStreaming:
             error_msg = str(e)
 
             self.console.print(
-                f"\n[red]Streaming error ({error_type}): {error_msg}[/red]"
+                f"\nStreaming error ({error_type}): {error_msg}",
+                style=COLORS["error"],
             )
 
             # Suggest potential remediation steps
             if "ConnectionError" in error_type or "TimeoutError" in error_type:
                 self.console.print(
-                    "[yellow]Suggestion: Check network connection or Dify service status[/yellow]"
+                    "Suggestion: Check network connection or Dify service status",
+                    style=COLORS["warning"],
                 )
             elif "JSONDecodeError" in error_type:
                 self.console.print(
-                    "[yellow]Suggestion: Dify API response format error, check configuration[/yellow]"
+                    "Suggestion: Dify API response format error, check configuration",
+                    style=COLORS["warning"],
                 )
             elif "KeyError" in error_type:
                 self.console.print(
-                    "[yellow]Suggestion: Dify API response field missing, may be version incompatible[/yellow]"
+                    "Suggestion: Dify API response field missing, may be version incompatible",
+                    style=COLORS["warning"],
                 )
             else:
                 self.console.print(
-                    "[yellow]Suggestion: Check Dify configuration and network connection[/yellow]"
+                    "Suggestion: Check Dify configuration and network connection",
+                    style=COLORS["warning"],
                 )
 
             logger.error(f"Streaming error: {error_type} - {error_msg}", exc_info=True)
@@ -458,13 +470,14 @@ class DifyStreaming:
         """
         if "usage" in metadata:
             usage = metadata["usage"]
-            self.console.print(f"\n[dim]Token usage: {usage}[/dim]")
+            self.console.print(f"\nToken usage: {usage}", style=COLORS["text_dim"])
 
         if "retriever_resources" in metadata:
             resources = metadata["retriever_resources"]
             if resources:
                 self.console.print(
-                    f"\n[dim]Referenced resources: {len(resources)} items[/dim]"
+                    f"\nReferenced resources: {len(resources)} items",
+                    style=COLORS["text_dim"],
                 )
 
     def _display_final_metadata(self, metadata: Dict[str, Any]):
@@ -477,16 +490,17 @@ class DifyStreaming:
         # Keep current display format
         if "usage" in metadata:
             usage = metadata["usage"]
-            self.console.print(f"\n[dim]Token usage: {usage}[/dim]")
+            self.console.print(f"\nToken usage: {usage}", style=COLORS["text_dim"])
 
         if "retriever_resources" in metadata:
             resources = metadata["retriever_resources"]
             if resources:
                 self.console.print(
-                    f"\n[dim]Referenced resources: {len(resources)} items[/dim]"
+                    f"\nReferenced resources: {len(resources)} items",
+                    style=COLORS["text_dim"],
                 )
 
-    async def display_simple_message(self, message: str, style: str = "bright_white"):
+    async def display_simple_message(self, message: str, style: str = COLORS["text_primary"]):
         """
         Display simple message.
 
@@ -503,7 +517,7 @@ class DifyStreaming:
         Args:
             error: Error message
         """
-        self.console.print(f"[red]Error: {error}[/red]")
+        self.console.print(f"Error: {error}", style=COLORS["error"])
 
     async def display_success(self, message: str):
         """
@@ -512,7 +526,7 @@ class DifyStreaming:
         Args:
             message: Success message
         """
-        self.console.print(f"[green]{message}[/green]")
+        self.console.print(message, style=COLORS["success"])
 
     async def display_info(self, message: str):
         """
@@ -521,7 +535,7 @@ class DifyStreaming:
         Args:
             message: Information content
         """
-        self.console.print(f"[blue]{message}[/blue]")
+        self.console.print(message, style=COLORS["info"])
 
     def get_current_conversation_id(self) -> Optional[str]:
         """

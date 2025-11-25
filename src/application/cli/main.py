@@ -23,6 +23,7 @@ from src.application.cli.gui import formatter as gui_formatter
 from src.application.cli.gui import render as gui_render
 from src.application.cli.gui import logo as gui_logo
 from rich.markup import escape
+from src.application.cli.theme import COLORS
 
 from src.application.cli.state import AppState
 from src.components.deepagents.runtime_middlewares.timeout import ExecutionTimeoutError
@@ -75,13 +76,13 @@ def _initialize_memory(ctx: AppState) -> None:
     Deep mode will create its own isolated memory manager during agent initialization.
     Following SRP: CLI manages basic/llm memory, deep agent manages deep memory.
     """
-    ctx.console.print("[yellow]Initializing memory system...[/]")
+    ctx.console.print("Initializing memory system...", style=COLORS["warning"])
     # Initialize for basic/llm modes (shared storage)
     ctx.global_memory = GlobalMemoryManager(agent_mode="basic", max_messages=50)
     ctx.session_manager = SessionManager(ctx.global_memory)
     ctx.memory_sync = MemorySyncAdapter(ctx.global_memory, agent_mode="basic")
     ctx.session_id = ctx.session_manager.prompt_for_session_choice()
-    ctx.console.print(f"[dim]Current Session ID: {ctx.session_id}[/]")
+    ctx.console.print(f"Current Session ID: {ctx.session_id}", style=COLORS["text_dim"])
     ctx.hitl_manager = SessionHITLManager()
 
 
@@ -105,15 +106,16 @@ async def _cli_loop(ctx: AppState) -> None:
                 break
 
         except KeyboardInterrupt:
-            ctx.console.print("\n[yellow]Interrupted. Cleaning up...[/]")
-            ctx.console.print("Goodbye!")
+            ctx.console.print("\nInterrupted. Cleaning up...", style=COLORS["warning"])
+            ctx.console.print("Goodbye!", style=COLORS["info"])
             break
         except ExecutionTimeoutError as exc:
             # Catch timeout errors that might propagate to the main loop
             ctx.console.print(
-                f"[bold yellow]Execution Timeout:[/bold yellow]\n"
-                f"[yellow]Operation exceeded maximum allowed time ({exc.max_execution_time:.2f}s).[/]\n"
-                f"[dim]Please try again with a simpler task or contact support if the issue persists.[/]"
+                "[bold]Execution Timeout:[/bold]\n"
+                f"Operation exceeded maximum allowed time ({exc.max_execution_time:.2f}s).\n"
+                "Please try again with a simpler task or contact support if the issue persists.",
+                style=COLORS["warning"],
             )
             logger.error(
                 "Unhandled execution timeout in main loop: %.2fs / %.2fs",
@@ -121,7 +123,7 @@ async def _cli_loop(ctx: AppState) -> None:
                 exc.max_execution_time,
             )
         except Exception as exc:  # pragma: no cover - runtime safeguard
-            ctx.console.print(f"[bold red]Error:[/] {escape(str(exc))}")
+            ctx.console.print(f"[bold]Error:[/bold] {escape(str(exc))}", style=COLORS["error"])
 
 
 async def _handle_conversation(ctx: AppState, query: str) -> None:
@@ -131,10 +133,11 @@ async def _handle_conversation(ctx: AppState, query: str) -> None:
     except ExecutionTimeoutError as exc:
         # Handle execution timeout specifically with detailed message
         ctx.console.print(
-            f"[bold yellow]Execution Timeout:[/bold yellow]\n"
-            f"[yellow]The agent execution exceeded the maximum allowed time.[/]\n"
-            f"[dim]Elapsed: {exc.elapsed_time:.2f}s / Max: {exc.max_execution_time:.2f}s[/]\n"
-            f"[dim]Consider breaking down your task into smaller parts or adjusting the timeout limit.[/]"
+            "[bold]Execution Timeout:[/bold]\n"
+            "The agent execution exceeded the maximum allowed time.\n"
+            f"Elapsed: {exc.elapsed_time:.2f}s / Max: {exc.max_execution_time:.2f}s\n"
+            "Consider breaking down your task into smaller parts or adjusting the timeout limit.",
+            style=COLORS["warning"],
         )
         logger.warning(
             "Agent execution timed out: %.2fs / %.2fs",
@@ -142,7 +145,7 @@ async def _handle_conversation(ctx: AppState, query: str) -> None:
             exc.max_execution_time,
         )
     except Exception as exc:
-        ctx.console.print(f"[bold red]Conversation error: {exc}")
+        ctx.console.print(f"[bold]Conversation error:[/bold] {exc}", style=COLORS["error"])
 
 
 def _handle_command_result(ctx: AppState, command_name: str, result) -> bool:
@@ -151,7 +154,7 @@ def _handle_command_result(ctx: AppState, command_name: str, result) -> bool:
         return True
 
     if result.type == "error":
-        ctx.console.print(f"[red]{result.message}[/]")
+        ctx.console.print(result.message, style=COLORS["error"])
         if result.payload:
             _render_payload(ctx, result.payload)
         return False
@@ -160,12 +163,12 @@ def _handle_command_result(ctx: AppState, command_name: str, result) -> bool:
         if result.payload:
             _render_payload(ctx, result.payload)
         if result.message:
-            ctx.console.print(f"[green]{result.message}[/]")
+            ctx.console.print(result.message, style=COLORS["success"])
         return False
 
     if result.type == "info":
         if result.message:
-            ctx.console.print(f"[cyan]{result.message}[/]")
+            ctx.console.print(result.message, style=COLORS["info"])
         if result.payload:
             _render_payload(ctx, result.payload)
         return False
@@ -220,18 +223,27 @@ def _build_prompt(ctx: AppState) -> str:
         agent_type = config.get("agent_type", "basic")
         streaming = bool(config.get("streaming", True))
         stream_indicator = "[S]" if streaming else ""
-        return f"\n[bold cyan]{engine}:{agent_type.upper()}{stream_indicator}[/] > "
+        return (
+            f"\n[{COLORS['info']}][bold]{engine}:{agent_type.upper()}{stream_indicator}"
+            f"[/bold][/{COLORS['info']}] > "
+        )
     if engine == "llm":
         config = ctx.get_engine_config("llm")
         streaming = bool(config.get("streaming", True))
         stream_indicator = "[S]" if streaming else ""
-        return f"\n[bold cyan]{engine}:LLM{stream_indicator}[/] > "
-    return f"\n[bold cyan]{engine}[/] > "
+        return (
+            f"\n[{COLORS['info']}][bold]{engine}:LLM{stream_indicator}"
+            f"[/bold][/{COLORS['info']}] > "
+        )
+    return f"\n[{COLORS['info']}][bold]{engine}[/bold][/{COLORS['info']}] > "
 
 
 def _handle_service_result(ctx: AppState, result: dict) -> bool:
     if result["type"] == "error":
-        ctx.console.print(f"[bold red]{result.get('message', 'Service initialization failed.')}[/]")
+        ctx.console.print(
+            f"[bold]{result.get('message', 'Service initialization failed.')}[/bold]",
+            style=COLORS["error"],
+        )
         return False
     payload = result.get("payload", {})
     if payload:
