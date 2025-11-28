@@ -176,23 +176,6 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
     ctx.console.print("[dim]Deep agent reasoning...[/]")
 
-    # Debug: Check MemorySaver state before astream
-    print(f"\n[DEBUG streaming] Before agent.runtime.astream()")
-    print(f"[DEBUG streaming] runtime_config: {runtime_config}")
-    if runtime_checkpointer and hasattr(runtime_checkpointer, 'storage'):
-        thread_id = runtime_config.get("configurable", {}).get("thread_id")
-        checkpoint_ns = runtime_config.get("configurable", {}).get("checkpoint_ns", "")
-        if thread_id and thread_id in runtime_checkpointer.storage:
-            if checkpoint_ns in runtime_checkpointer.storage[thread_id]:
-                existing_keys = list(runtime_checkpointer.storage[thread_id][checkpoint_ns].keys())
-                print(f"[DEBUG streaming] MemorySaver has {len(existing_keys)} checkpoints")
-                print(f"[DEBUG streaming] Checkpoint IDs: {existing_keys}")
-                print(f"[DEBUG streaming] ID types: {[type(k).__name__ for k in existing_keys]}")
-            else:
-                print(f"[DEBUG streaming] No checkpoints for checkpoint_ns='{checkpoint_ns}'")
-        else:
-            print(f"[DEBUG streaming] No checkpoints for thread_id={thread_id}")
-
     # Inject persistence context into state for SubAgent access
     # SubAgent task tool can extract these from runtime.state to call persist_conversation_state
     # Note: These keys are prefixed with _ to indicate internal use
@@ -211,7 +194,6 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             captured_interrupts: Optional[Tuple[Interrupt, ...]] = None
 
             try:
-                print(f"[DEBUG streaming] Calling agent.runtime.astream()...")
                 async for event in agent.runtime.astream(
                     pending_input,
                     config=runtime_config,
@@ -322,12 +304,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
                 return "[Execution time limit exceeded - conversation saved]"
             except Exception as exc:
-                import traceback
-                print(f"\n[DEBUG streaming] Exception during agent.runtime.astream():")
-                print(f"[DEBUG streaming] Exception type: {type(exc).__name__}")
-                print(f"[DEBUG streaming] Exception message: {exc}")
-                print(f"[DEBUG streaming] Full traceback:")
-                print(traceback.format_exc())
+                logger.error(f"Unexpected error in agent streaming: {exc}", exc_info=True)
                 ctx.console.print(f"[bold red]Unexpected error in agent streaming:[/] {escape(str(exc))}")
                 return ""
 
