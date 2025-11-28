@@ -20,6 +20,7 @@ from ..hitl.file_ops import FileOpTracker
 from src.components.shared.memory.memory_sync import MemorySyncAdapter
 from src.components.shared.memory.session_context import SessionContext
 from src.components.shared.persistence import persist_conversation_state
+from src.application.cli.theme import COLORS
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,10 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                     if deadline is not None and time.perf_counter() > deadline:
                         timed_out = True
                         break
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                # User interrupted streaming - re-raise to trigger outer exception handler
+                logger.info("Deep agent streaming interrupted by user")
+                raise
             except GraphRecursionError as exc:
                 ctx.console.print(f"[bold red]Recursion limit exceeded:[/] {escape(str(exc))}")
                 return ""
@@ -337,8 +342,47 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             else:
                 # No interrupts - normal completion
                 break
-    except KeyboardInterrupt:
-        ctx.console.print("\n[yellow]Execution interrupted by user.[/]")
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        ctx.console.print(
+            "\nExecution interrupted by user.",
+            style=COLORS["warning"],
+        )
+
+        try:
+            await _persist_conversation_state(
+                ctx,
+                session_ctx,
+                runtime_checkpointer,
+                runtime_config,
+                agent_memory_sync,
+                reason="user_interrupt",
+            )
+        except Exception as exc:
+            logger.warning("Failed to persist conversation on interrupt: %s", exc)
+
+        ctx.console.print("Updating agent state...", style=COLORS["text_dim"])
+        try:
+            from langchain_core.messages import SystemMessage
+
+            await agent.runtime.aupdate_state(
+                runtime_config,
+                values={
+                    "messages": [
+                        SystemMessage(
+                            content="[User interrupted the previous request with Ctrl+C]"
+                        )
+                    ]
+                },
+            )
+            ctx.console.print("Ready for next command.", style=COLORS["text_dim"])
+            logger.info("Agent notified about user interrupt via SystemMessage")
+        except Exception as update_exc:
+            logger.error("Failed to update agent state: %s", update_exc)
+            ctx.console.print(
+                "Warning: Could not notify agent",
+                style=COLORS["warning"],
+            )
+
         return ""
 
     if timed_out:

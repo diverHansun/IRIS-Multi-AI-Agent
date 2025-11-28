@@ -214,15 +214,15 @@ class ZhipuStreamingLLM(StreamingLLM):
     """
 
     async def stream_generate(
-        self, 
-        prompt: str, 
+        self,
+        prompt: str,
         on_token: Optional[Callable[[str], None]] = None
     ) -> AsyncGenerator[str, None]:
         """实现智谱AI的流式生成"""
         try:
             # 创建流式回调处理器
             callback_handler = StreamingCallbackHandler(on_token)
-            
+
             # 使用流式接口
             async for chunk in self.llm.astream(
                 [HumanMessage(content=prompt)],
@@ -230,7 +230,9 @@ class ZhipuStreamingLLM(StreamingLLM):
             ):
                 if hasattr(chunk, 'content') and chunk.content:
                     yield chunk.content
-                    
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            # 允许中断传播，确保生成器正确清理
+            return
         except Exception as e:
             logger.error(f"智谱AI流式生成失败: {e}")
             yield f"流式生成错误: {str(e)}"
@@ -259,7 +261,9 @@ class OpenAIStreamingLLM(StreamingLLM):
             ):
                 if hasattr(chunk, 'content') and chunk.content:
                     yield chunk.content
-                    
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            # 允许中断传播，确保生成器正确清理
+            return
         except Exception as e:
             logger.error(f"OpenAI流式生成失败: {e}")
             yield f"流式生成错误: {str(e)}"
@@ -304,6 +308,9 @@ class OllamaStreamingLLM(StreamingLLM):
                 
                 logger.info(f"[DEBUG] 流式生成完成，共 {chunk_count} 个chunks")
                 
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                # 允许中断传播，确保生成器正确清理
+                return
             except Exception as astream_e:
                 logger.error(f"[DEBUG] astream调用异常: {type(astream_e).__name__}: {astream_e}")
                 
@@ -358,7 +365,10 @@ class OllamaStreamingLLM(StreamingLLM):
                         logger.error(f"[DEBUG] Fallback也失败: {fallback_e}")
                 
                 raise astream_e
-                    
+
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            # 允许中断传播，确保生成器正确清理
+            return
         except Exception as e:
             logger.error(f"[DEBUG] Ollama流式生成异常: {type(e).__name__}: {e}")
             if hasattr(e, 'status_code'):
@@ -476,6 +486,7 @@ class StreamingManager:
         full_response = ""
         start_time = time.time()
         chunk_count = 0
+        interrupted = False
         
         # 初始化显示器
         display = None
@@ -488,14 +499,57 @@ class StreamingManager:
             async for chunk in streaming_llm.stream_generate(prompt):
                 full_response += chunk
                 chunk_count += 1
-                
+
                 # 更新显示
                 if display:
                     display.update(chunk)
-                
+
                 # 小延迟以提供更好的视觉效果
                 await asyncio.sleep(settings.streaming_delay_ms / 1000.0)
-                
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            interrupted = True
+            logger.info("Streaming interrupted by user after %s characters", len(full_response))
+
+            if display:
+                display.stop()
+
+            console.print(
+                "\nResponse interrupted by user",
+                style=COLORS["warning"],
+            )
+
+            if full_response:
+                try:
+                    console.print(
+                        Panel(
+                            full_response,
+                            title=f"[bold]{display_title} (Interrupted)[/bold]",
+                            border_style=COLORS["warning"],
+                            **PANEL_DEFAULTS,
+                        )
+                    )
+                except UnicodeEncodeError:
+                    print(f"\n=== {display_title} (Interrupted) ===")
+                    try:
+                        safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
+                        print(safe_response)
+                    except Exception:
+                        print("[Response contains special characters, cannot display completely]")
+                    print("=" * 50)
+            else:
+                console.print(
+                    "No content received before interruption",
+                    style=COLORS["text_dim"],
+                )
+
+            return {
+                "response": full_response,
+                "elapsed_time": time.time() - start_time,
+                "chunk_count": chunk_count,
+                "characters": len(full_response),
+                "success": True,
+                "interrupted": True,
+            }
         except Exception as e:
             error_msg = f"流式聊天失败: {str(e)}"
             logger.error(error_msg)
@@ -508,7 +562,7 @@ class StreamingManager:
             
         finally:
             # 停止显示
-            if display:
+            if display and not interrupted:
                 display.stop()
                 
                 # 计算性能指标
@@ -554,7 +608,8 @@ class StreamingManager:
             "elapsed_time": time.time() - start_time,
             "chunk_count": chunk_count,
             "characters": len(full_response),
-            "success": not full_response.startswith("流式聊天失败")
+            "success": not full_response.startswith("流式聊天失败"),
+            "interrupted": False,
         }
     
     def get_supported_providers(self) -> list:
@@ -604,12 +659,16 @@ async def stream_llm_response(
     if llm and provider not in streaming_manager.get_supported_providers():
         streaming_manager.register_llm(provider, llm)
 
-    result = await streaming_manager.stream_chat(
-        provider=provider,
-        prompt=prompt,
-        display_title=display_title,
-        show_display=show_display
-    )
+    try:
+        result = await streaming_manager.stream_chat(
+            provider=provider,
+            prompt=prompt,
+            display_title=display_title,
+            show_display=show_display
+        )
+    except KeyboardInterrupt:
+        logger.info("LLM streaming interrupted, propagating to caller")
+        raise
 
     return result["response"]
 

@@ -59,6 +59,9 @@ DEFAULT_ENGINE_CONFIGS: Dict[str, Dict[str, Any]] = {
 }
 
 
+from asyncio import TimerHandle
+
+
 @dataclass(slots=True)
 class AppState:
     """Global state shared across the CLI, command handlers, and services."""
@@ -79,6 +82,10 @@ class AppState:
 
     # Session restoration for mode switching
     _basic_session_id: Optional[str] = None
+
+    # Interrupt handling
+    exit_hint_until: Optional[float] = None
+    exit_hint_handle: Optional[TimerHandle] = None
 
     def get_engine_config(self, engine: str | None = None) -> Dict[str, Any]:
         key = engine or self.current_engine

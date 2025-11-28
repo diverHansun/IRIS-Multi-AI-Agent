@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Optional
 
 from src.components.shared.memory import (
@@ -91,6 +92,10 @@ async def _cli_loop(ctx: AppState) -> None:
         try:
             prompt = _build_prompt(ctx)
             query = await asyncio.to_thread(ctx.console.input, prompt)
+            if ctx.exit_hint_handle:
+                ctx.exit_hint_handle.cancel()
+                ctx.exit_hint_handle = None
+            ctx.exit_hint_until = None
             if not query.strip():
                 continue
 
@@ -106,9 +111,35 @@ async def _cli_loop(ctx: AppState) -> None:
                 break
 
         except KeyboardInterrupt:
-            ctx.console.print("\nInterrupted. Cleaning up...", style=COLORS["warning"])
-            ctx.console.print("Goodbye!", style=COLORS["info"])
-            break
+            now = time.monotonic()
+            if ctx.exit_hint_until and now < ctx.exit_hint_until:
+                if ctx.exit_hint_handle:
+                    ctx.exit_hint_handle.cancel()
+                    ctx.exit_hint_handle = None
+                ctx.exit_hint_until = None
+                ctx.console.print("\nGoodbye!", style=COLORS["info"])
+                break
+
+            EXIT_CONFIRM_WINDOW = 3.0
+            ctx.exit_hint_until = now + EXIT_CONFIRM_WINDOW
+
+            if ctx.exit_hint_handle:
+                ctx.exit_hint_handle.cancel()
+
+            loop = asyncio.get_running_loop()
+
+            def clear_hint() -> None:
+                if ctx.exit_hint_until and time.monotonic() >= ctx.exit_hint_until:
+                    ctx.exit_hint_until = None
+                    ctx.exit_hint_handle = None
+
+            ctx.exit_hint_handle = loop.call_later(EXIT_CONFIRM_WINDOW, clear_hint)
+
+            ctx.console.print(
+                "\nInterrupted. Press Ctrl+C again within 3s to exit.",
+                style=COLORS["warning"],
+            )
+            continue
         except ExecutionTimeoutError as exc:
             # Catch timeout errors that might propagate to the main loop
             ctx.console.print(
@@ -130,6 +161,9 @@ async def _handle_conversation(ctx: AppState, query: str) -> None:
     adapter = get_adapter(ctx.current_engine)
     try:
         await adapter.handle_query(ctx, query)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        # Allow interrupt to propagate to main loop for double Ctrl+C handling
+        raise
     except ExecutionTimeoutError as exc:
         # Handle execution timeout specifically with detailed message
         ctx.console.print(
