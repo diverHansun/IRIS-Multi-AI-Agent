@@ -6,6 +6,9 @@
 
 from pydantic_settings import BaseSettings
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -49,64 +52,35 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-# 检查API密钥并打印配置信息
-def _print_config_info():
-    """打印配置信息"""
-    # 检查智谱AI API密钥
-    if not settings.zhipu_api_key:
-        print("ERROR: ZHIPU_API_KEY not found")
-        print("HINT: Please set your ZhipuAI API key in .env file")
-        print("HINT: Ensure .env file is saved with UTF-8 encoding")
-    else:
-        print(f"SUCCESS: ZhipuAI API key configured: {settings.zhipu_api_key[:10]}...{settings.zhipu_api_key[-10:]}")
+# 检查API密钥并记录配置信息
+def _validate_config():
+    """验证配置信息 - 检查必需的配置项"""
+    errors = []
+    warnings = []
 
-    # 检查Tavily API密钥
-    if not settings.tavily_api_key:
-        print("WARNING: TAVILY_API_KEY not found")
-        print("HINT: Please set your Tavily API key in .env file for enhanced search functionality")
-    else:
-        print(f"SUCCESS: Tavily API key configured: {settings.tavily_api_key[:10]}...{settings.tavily_api_key[-10:]}")
+    # 1. 检查必需的LLM配置（至少一个）
+    has_zhipu = settings.zhipu_api_key and not settings.zhipu_api_key.startswith("your_")
+    has_openai = settings.openai_api_key and not settings.openai_api_key.startswith("your_")
+    has_ollama = True  # Ollama 通常本地运行，无需密钥
 
-    # 检查OpenAI API密钥
-    if not settings.openai_api_key:
-        print("WARNING: OPENAI_API_KEY not found")
-        print("HINT: Please set your OpenAI API key in .env file for GPT models")
-    else:
-        try:
-            print(f"SUCCESS: OpenAI API key configured: {settings.openai_api_key[:10]}...{settings.openai_api_key[-10:]}")
-        except UnicodeEncodeError:
-            print("SUCCESS: OpenAI API key configured (length: {} chars)".format(len(settings.openai_api_key)))
+    if not has_zhipu and not has_openai:
+        errors.append("At least one LLM API key must be configured (ZHIPU_API_KEY or OPENAI_API_KEY)")
 
-    # 检查高德地图API密钥
-    if not settings.amap_api_key:
-        print("WARNING: AMAP_API_KEY not found")
-        print("HINT: Please set your Amap API key in .env file for map search functionality")
-    else:
-        print(f"SUCCESS: Amap API key configured: {settings.amap_api_key[:10]}...{settings.amap_api_key[-10:]}")
+    # 2. 检查可选功能的配置
+    has_tavily = settings.tavily_api_key and not settings.tavily_api_key.startswith("your_")
+    has_amap = settings.amap_api_key and not settings.amap_api_key.startswith("your_")
+    has_notion = settings.notion_token and not settings.notion_token.startswith("your_") and not settings.notion_token.startswith("secret_")
 
-    # 检查 Notion API 密钥
-    if not settings.notion_token:
-        print("WARNING: NOTION_TOKEN not found")
-        print("HINT: Please set your Notion integration token in .env file for Notion functionality")
-    else:
-        print(f"SUCCESS: Notion token configured: {settings.notion_token[:10]}...{settings.notion_token[-10:]}")
+    # 3. 记录可选配置状态（仅在 DEBUG 级别）
+    logger.debug(f"LLM Providers: zhipu={has_zhipu}, openai={has_openai}, ollama={has_ollama}")
+    logger.debug(f"Optional services: tavily={has_tavily}, amap={has_amap}, notion={has_notion}")
 
-    # 显示LLM配置信息
-    available_llms = []
-    if settings.zhipu_api_key:
-        available_llms.append("zhipu")
-    if settings.openai_api_key:
-        available_llms.append("openai")
-    # Ollama 不需要API密钥，始终可用
-    available_llms.append("ollama")
-
-    if available_llms:
-        print(f"SUCCESS: Available LLM providers: {', '.join(available_llms)}")
-        print(f"INFO: Default LLM provider: {settings.default_llm_provider}")
-    else:
-        print("ERROR: No LLM providers configured!")
-        print("HINT: Please set at least one of ZHIPU_API_KEY or OPENAI_API_KEY")
+    # 4. 输出错误信息
+    if errors:
+        for error in errors:
+            logger.error(error)
+        logger.error("Please configure your API keys in .env file")
 
 
-# 自动打印配置信息
-_print_config_info()
+# 自动验证配置信息
+_validate_config()
