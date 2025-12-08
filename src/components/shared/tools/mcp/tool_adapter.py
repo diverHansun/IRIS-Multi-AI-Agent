@@ -1,15 +1,17 @@
 from typing import Any, Dict, List, Optional
+import logging
 import re
 
 from langchain_core.tools import BaseTool
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_set_tool_name(tool: BaseTool, new_name: str) -> None:
     try:
         tool.name = new_name  # most BaseTool instances allow attribute mutation
-    except Exception:
-        # If immutable, ignore renaming
-        pass
+    except Exception as exc:
+        logger.warning("Unable to set tool name to '%s': %s", new_name, exc)
 
 
 def apply_naming_and_filter(
@@ -25,35 +27,48 @@ def apply_naming_and_filter(
 
     result: List[BaseTool] = []
 
+    logger.debug(
+        "Applying naming/filter to %d tools (include=%s, exclude=%s, strategy=%s)",
+        len(tools),
+        include_tools,
+        exclude_tools,
+        namespace_strategy,
+    )
+
     for t in tools:
-        name = t.name
-        # filter by include/exclude if configured
-        if include_set and name not in include_set:
-            continue
-        if exclude_set and name in exclude_set:
-            continue
+        name = getattr(t, "name", "<unknown>")
+        try:
+            if include_set and name not in include_set:
+                logger.debug("Skipping tool not in include list: %s", name)
+                continue
+            if exclude_set and name in exclude_set:
+                logger.debug("Skipping tool in exclude list: %s", name)
+                continue
 
-        # naming (prefix)
-        if namespace_strategy == "prefix":
-            prefix = rename_prefix or default_prefix
-            if prefix and not name.startswith(prefix):
-                _safe_set_tool_name(t, f"{prefix}{name}")
-        # sanitize to satisfy providers like OpenAI function name rules
-        # Allowed: letters, digits, underscore, hyphen (^[a-zA-Z0-9_-]+$)
-        sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", t.name)
-        if sanitized != t.name:
-            _safe_set_tool_name(t, sanitized)
-        result.append(t)
+            if namespace_strategy == "prefix":
+                prefix = rename_prefix or default_prefix
+                if prefix and not name.startswith(prefix):
+                    _safe_set_tool_name(t, f"{prefix}{name}")
 
+            sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", t.name)
+            if sanitized != t.name:
+                logger.debug("Sanitizing tool name '%s' -> '%s'", t.name, sanitized)
+                _safe_set_tool_name(t, sanitized)
+
+            result.append(t)
+        except Exception as exc:
+            logger.warning("Failed to process tool '%s': %s", name, exc, exc_info=True)
+
+    logger.debug("Naming/filter applied. Tools remaining: %d", len(result))
     return result
 
 
 def schema_summary(tool: BaseTool) -> Dict[str, Any]:
     """Return a concise schema summary for CLI -v view."""
-    # Prefer pydantic v2 API if available
     try:
         args_schema = getattr(tool, "args_schema", None)
         if args_schema is None:
+            logger.debug("Tool %s has no args_schema", getattr(tool, "name", "<unknown>"))
             return {"name": tool.name, "params": []}
 
         schema = None
@@ -62,6 +77,7 @@ def schema_summary(tool: BaseTool) -> Dict[str, Any]:
         elif hasattr(args_schema, "schema"):
             schema = args_schema.schema()
         else:
+            logger.debug("Tool %s args_schema missing schema methods", getattr(tool, "name", "<unknown>"))
             return {"name": tool.name, "params": []}
 
         props = schema.get("properties", {})
@@ -75,5 +91,6 @@ def schema_summary(tool: BaseTool) -> Dict[str, Any]:
                 "type": t if isinstance(t, str) else "union" if t else "unknown",
             })
         return {"name": tool.name, "params": params}
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to summarize schema for tool %s: %s", getattr(tool, "name", "<unknown>"), exc)
         return {"name": tool.name, "params": []}

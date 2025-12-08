@@ -5,8 +5,11 @@
 """
 
 import asyncio
+import logging
 import threading
 from typing import Any, Callable, Coroutine
+
+logger = logging.getLogger(__name__)
 
 
 def async_to_sync(async_func: Callable[..., Coroutine]) -> Callable[..., Any]:
@@ -31,6 +34,7 @@ def async_to_sync(async_func: Callable[..., Coroutine]) -> Callable[..., Any]:
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
+                logger.debug("Event loop running; executing async function in thread")
                 # 如果事件循环正在运行，使用新线程
                 result = None
                 exception = None
@@ -44,6 +48,7 @@ def async_to_sync(async_func: Callable[..., Coroutine]) -> Callable[..., Any]:
                         new_loop.close()
                     except Exception as e:
                         exception = e
+                        logger.error("Async execution failed in thread: %s", e, exc_info=True)
                     finally:
                         # 清理线程中的事件循环
                         try:
@@ -59,10 +64,11 @@ def async_to_sync(async_func: Callable[..., Coroutine]) -> Callable[..., Any]:
                     raise exception
                 return result
             else:
-                # 事件循环存在但未运行
+                logger.debug("Event loop present and not running; executing directly")
                 return loop.run_until_complete(_async_wrapper())
         except RuntimeError:
             # 没有事件循环，创建新的
+            logger.debug("No event loop found; creating new loop for async function")
             return asyncio.run(_async_wrapper())
     
     return sync_wrapper
@@ -75,8 +81,8 @@ def run_async_safely(coro_func: Callable[[], Coroutine]) -> Any:
     Args:
         coro_func: 返回协程对象的函数
         
-    Returns:
-        协程执行结果
+        Returns:
+            协程执行结果
     """
     try:
         # 尝试获取当前的事件循环
@@ -95,12 +101,14 @@ def run_async_safely(coro_func: Callable[[], Coroutine]) -> Any:
                     result = new_loop.run_until_complete(fresh_coro)
                 except Exception as e:
                     exception = e
+                    logger.error("Coroutine failed in thread with running loop: %s", e, exc_info=True)
                 finally:
                     try:
                         new_loop.close()
                     except:
                         pass
             
+            logger.debug("Running coroutine in thread because loop is already running")
             thread = threading.Thread(target=run_in_thread)
             thread.start()
             thread.join()
@@ -114,6 +122,7 @@ def run_async_safely(coro_func: Callable[[], Coroutine]) -> Any:
             try:
                 loop = asyncio.get_event_loop()
                 if not loop.is_running():
+                    logger.debug("Using existing but idle event loop to run coroutine")
                     fresh_coro = coro_func()
                     return loop.run_until_complete(fresh_coro)
                 else:
@@ -121,6 +130,7 @@ def run_async_safely(coro_func: Callable[[], Coroutine]) -> Any:
                     raise RuntimeError("事件循环正在运行")
             except RuntimeError:
                 # 没有事件循环，创建新的
+                logger.debug("No existing event loop; creating new loop with asyncio.run")
                 fresh_coro = coro_func()
                 return asyncio.run(fresh_coro)
                 
@@ -136,7 +146,9 @@ def run_async_safely(coro_func: Callable[[], Coroutine]) -> Any:
                 result = asyncio.run(fresh_coro)
             except Exception as ex:
                 exception = ex
+                logger.error("Coroutine failed in fallback thread execution: %s", ex, exc_info=True)
         
+        logger.debug("Running coroutine in fallback thread with new event loop")
         thread = threading.Thread(target=run_in_thread)
         thread.start()
         thread.join()
@@ -144,4 +156,3 @@ def run_async_safely(coro_func: Callable[[], Coroutine]) -> Any:
         if exception:
             raise exception
         return result
-

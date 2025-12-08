@@ -3,6 +3,7 @@ SDK Tool Manager
 
 Provides unified interface to manage and access all SDK tools
 """
+import logging
 from typing import List, Dict, Any, Callable
 from langchain_core.tools import BaseTool
 
@@ -14,6 +15,8 @@ from .time.adapter import get_available_time_tools
 from .amap.adapter import get_available_amap_tools
 from .notion.adapter import get_available_notion_tools
 from .okx_market.adapter import get_available_okx_tools
+
+logger = logging.getLogger(__name__)
 
 
 class SDKToolManager:
@@ -30,51 +33,45 @@ class SDKToolManager:
         Returns:
             List[BaseTool]: List of all SDK tools
         """
-        tools = []
+        tools: List[BaseTool] = []
+        stats = {"total": 0, "success": 0, "failed": 0}
 
-        # Math tools
-        math_tools = get_available_math_tools()
-        if math_tools:
-            tools.extend(math_tools)
+        loaders: List[Dict[str, Any]] = [
+            {"name": "math", "loader": get_available_math_tools},
+            {"name": "tavily", "loader": get_available_tavily_tools},
+            {"name": "zhipu", "loader": get_available_zhipu_tools},
+            {"name": "search", "loader": get_all_search_tools},
+            {"name": "time", "loader": get_available_time_tools},
+            {"name": "amap", "loader": get_available_amap_tools},
+            {"name": "notion", "loader": get_available_notion_tools, "optional": True},
+            {"name": "okx", "loader": get_available_okx_tools},
+        ]
 
-        # Search tools - Tavily
-        tavily_tools = get_available_tavily_tools()
-        if tavily_tools:
-            tools.extend(tavily_tools)
+        logger.info("Loading SDK tools from %d sources", len(loaders))
+        for entry in loaders:
+            name = entry["name"]
+            loader: Callable[[], List[BaseTool]] = entry["loader"]
+            optional = entry.get("optional", False)
+            stats["total"] += 1
 
-        # Search tools - Zhipu
-        zhipu_tools = get_available_zhipu_tools()
-        if zhipu_tools:
-            tools.extend(zhipu_tools)
+            logger.debug("Loading %s tools...", name)
+            try:
+                available = loader()
+                count = len(available) if available else 0
+                tools.extend(available or [])
+                stats["success"] += 1
+                logger.info("Loaded %d %s tools", count, name)
+            except Exception as exc:
+                stats["failed"] += 1
+                level = logger.warning if optional else logger.error
+                level("Failed to load %s tools: %s", name, exc, exc_info=not optional)
 
-        # Search tools - All (DuckDuckGo Instant Answer + Legacy HTML scraping)
-        search_tools = get_all_search_tools()
-        if search_tools:
-            tools.extend(search_tools)
-
-        # Time tools
-        time_tools = get_available_time_tools()
-        if time_tools:
-            tools.extend(time_tools)
-
-        # Amap tools
-        amap_tools = get_available_amap_tools()
-        if amap_tools:
-            tools.extend(amap_tools)
-
-        # Notion tools
-        try:
-            notion_tools = get_available_notion_tools()
-            if notion_tools:
-                tools.extend(notion_tools)
-        except Exception:
-            pass  # Notion tools are optional, skip on failure
-
-        # OKX cryptocurrency tools
-        okx_tools = get_available_okx_tools()
-        if okx_tools:
-            tools.extend(okx_tools)
-
+        logger.info(
+            "SDK tools load complete: %d/%d sources succeeded, total tools: %d",
+            stats["success"],
+            stats["total"],
+            len(tools),
+        )
         return tools
 
     @staticmethod
@@ -85,9 +82,25 @@ class SDKToolManager:
         Returns:
             Dict[str, List[BaseTool]]: Dictionary of tools grouped by category
         """
-        tavily_tools = get_available_tavily_tools()
-        zhipu_tools = get_available_zhipu_tools()
-        search_tools = get_all_search_tools()
+        logger.debug("Building SDK tools by category")
+        tavily_tools = []
+        zhipu_tools = []
+        search_tools = []
+
+        try:
+            tavily_tools = get_available_tavily_tools()
+        except Exception as exc:
+            logger.error("Failed to load tavily tools for category listing: %s", exc, exc_info=True)
+
+        try:
+            zhipu_tools = get_available_zhipu_tools()
+        except Exception as exc:
+            logger.error("Failed to load zhipu tools for category listing: %s", exc, exc_info=True)
+
+        try:
+            search_tools = get_all_search_tools()
+        except Exception as exc:
+            logger.error("Failed to load search tools for category listing: %s", exc, exc_info=True)
 
         # Combine all search tools (Tavily + Zhipu + DuckDuckGo + Legacy)
         all_search_tools = []
@@ -105,13 +118,14 @@ class SDKToolManager:
             "zhipu": zhipu_tools if zhipu_tools else [],
             "time": get_available_time_tools(),
             "amap": get_available_amap_tools(),
-            "okx": get_available_okx_tools()
+            "okx": get_available_okx_tools(),
         }
 
         # Add Notion tools with error handling
         try:
             categories["notion"] = get_available_notion_tools()
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to load notion tools for category listing: %s", exc)
             categories["notion"] = []
 
         return categories

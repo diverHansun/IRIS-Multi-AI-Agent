@@ -1,7 +1,11 @@
 import datetime
-import pytz
+import logging
 from typing import Dict, Any
+
+import pytz
 from langchain_core.tools import tool
+
+logger = logging.getLogger(__name__)
 
 
 def get_current_time(timezone: str = "Asia/Shanghai") -> Dict[str, Any]:
@@ -15,6 +19,7 @@ def get_current_time(timezone: str = "Asia/Shanghai") -> Dict[str, Any]:
         Dict[str, Any]: 包含当前日期和时间信息的字典
     """
     try:
+        logger.debug("Fetching current time for timezone: %s", timezone)
         # 获取指定时区的当前时间
         tz = pytz.timezone(timezone)
         current_time = datetime.datetime.now(tz)
@@ -29,8 +34,10 @@ def get_current_time(timezone: str = "Asia/Shanghai") -> Dict[str, Any]:
             "timestamp": current_time.timestamp()
         }
         
+        logger.debug("Current time fetched for timezone %s: %s", timezone, time_info["datetime"])
         return time_info
     except Exception as e:
+        logger.error("Failed to fetch current time for timezone %s: %s", timezone, e, exc_info=True)
         return {"error": f"获取时间时发生错误: {str(e)}"}
 
 
