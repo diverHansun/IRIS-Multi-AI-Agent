@@ -96,34 +96,27 @@ class BaseDeepAgent:
         else:
             config = base_config
 
-        # Debug: Check MemorySaver storage before ainvoke
-        print(f"\n[DEBUG BaseDeepAgent.invoke] Before runtime.ainvoke for session_id={session_id}")
-        print(f"[DEBUG BaseDeepAgent.invoke] Config: {config}")
+        logger.debug("Before runtime.ainvoke for session_id=%s", session_id)
+        logger.debug("Config: %s", config)
         if hasattr(self.runtime_checkpointer, 'storage'):
             thread_id = config.get("configurable", {}).get("thread_id")
             checkpoint_ns = config.get("configurable", {}).get("checkpoint_ns", "")
             if thread_id and thread_id in self.runtime_checkpointer.storage:
                 if checkpoint_ns in self.runtime_checkpointer.storage[thread_id]:
                     existing_keys = list(self.runtime_checkpointer.storage[thread_id][checkpoint_ns].keys())
-                    print(f"[DEBUG BaseDeepAgent.invoke] MemorySaver has {len(existing_keys)} checkpoints")
-                    print(f"[DEBUG BaseDeepAgent.invoke] Checkpoint IDs: {existing_keys}")
-                    print(f"[DEBUG BaseDeepAgent.invoke] ID types: {[type(k).__name__ for k in existing_keys]}")
+                    logger.debug("MemorySaver has %d checkpoints", len(existing_keys))
+                    logger.debug("Checkpoint IDs: %s", existing_keys)
+                    logger.debug("ID types: %s", [type(k).__name__ for k in existing_keys])
                 else:
-                    print(f"[DEBUG BaseDeepAgent.invoke] No checkpoints for checkpoint_ns='{checkpoint_ns}'")
+                    logger.debug("No checkpoints for checkpoint_ns='%s'", checkpoint_ns)
             else:
-                print(f"[DEBUG BaseDeepAgent.invoke] No checkpoints for thread_id={thread_id}")
+                logger.debug("No checkpoints for thread_id=%s", thread_id)
 
         try:
-            print(f"[DEBUG BaseDeepAgent.invoke] Calling runtime.ainvoke()...")
+            logger.debug("Calling runtime.ainvoke()...")
             result = await self.runtime.ainvoke(payload, config=config)
-            print(f"[DEBUG BaseDeepAgent.invoke] runtime.ainvoke() succeeded")
+            logger.debug("runtime.ainvoke() succeeded")
         except Exception as exc:  # pylint: disable=broad-except
-            import traceback
-            print(f"\n[DEBUG BaseDeepAgent.invoke] ERROR during runtime.ainvoke():")
-            print(f"[DEBUG BaseDeepAgent.invoke] Exception type: {type(exc).__name__}")
-            print(f"[DEBUG BaseDeepAgent.invoke] Exception message: {exc}")
-            print(f"[DEBUG BaseDeepAgent.invoke] Full traceback:")
-            print(traceback.format_exc())
             logger.error("Deep agent invocation failed: %s", exc, exc_info=True)
             return self._build_error_response(exc, session_id)
 

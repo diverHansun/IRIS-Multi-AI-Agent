@@ -7,6 +7,8 @@ import json
 import logging
 from typing import Any, Dict, Iterable
 
+logger = logging.getLogger(__name__)
+
 from src.agents.deepagents.managers import subagent_manager
 from src.application.commands.base import BaseCommand, CommandResult
 from src.application.services.agent.deep.agent_lifecycle import create_default_deep_agent
@@ -197,7 +199,7 @@ class DeepCommand(BaseCommand):
                     "Filesystem configuration reloaded and deep agent reinitialised."
                 )
             except Exception as exc:  # pylint: disable=broad-except
-                logging.warning(
+                logger.warning(
                     "Failed to reinitialise deep agent after filesystem reload: %s",
                     exc,
                 )

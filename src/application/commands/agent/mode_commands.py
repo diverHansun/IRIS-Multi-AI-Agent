@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from src.application.commands.base import BaseCommand, CommandResult
+
+logger = logging.getLogger(__name__)
 
 
 class ModeCommand(BaseCommand):
@@ -104,8 +108,7 @@ class ModeCommand(BaseCommand):
                 )
             except Exception as exc:
                 # If agent creation fails, still allow mode switch but show warning
-                import logging
-                logging.warning("Failed to initialize deep agent on mode switch: %s", exc)
+                logger.warning("Failed to initialize deep agent on mode switch: %s", exc)
                 return CommandResult.success(
                     "Switched to deep agent mode. Agent will be initialized on first use."
                 )
@@ -161,8 +164,7 @@ class ModeCommand(BaseCommand):
             )
         except Exception as exc:
             # If agent creation fails, still allow mode switch but show warning
-            import logging
-            logging.warning("Failed to initialize basic agent on mode switch: %s", exc)
+            logger.warning("Failed to initialize basic agent on mode switch: %s", exc)
             return CommandResult.success(
                 "Switched to basic agent mode. Agent will be initialized on first use."
             )

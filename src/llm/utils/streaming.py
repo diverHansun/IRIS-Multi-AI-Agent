@@ -528,12 +528,14 @@ class StreamingManager:
                             **PANEL_DEFAULTS,
                         )
                     )
-                except UnicodeEncodeError:
+                except UnicodeEncodeError as e:
+                    logger.warning("Unicode encoding error while displaying interrupted response: %s", e)
                     print(f"\n=== {display_title} (Interrupted) ===")
                     try:
                         safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
                         print(safe_response)
-                    except Exception:
+                    except Exception as fallback_e:
+                        logger.warning("Failed to encode response with GBK fallback: %s", fallback_e)
                         print("[Response contains special characters, cannot display completely]")
                     print("=" * 50)
             else:
@@ -579,14 +581,16 @@ class StreamingManager:
                             **PANEL_DEFAULTS,
                         )
                     )
-                except UnicodeEncodeError:
+                except UnicodeEncodeError as e:
+                    logger.warning("Unicode encoding error while displaying final response: %s", e)
                     # 如果有Unicode问题，使用简化显示
                     print(f"\n=== {display_title} (完成) ===")
                     # 尝试安全编码
                     try:
                         safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
                         print(safe_response)
-                    except:
+                    except Exception as fallback_e:
+                        logger.warning("Failed to encode final response with GBK fallback: %s", fallback_e)
                         print("[响应内容包含特殊字符，无法完整显示]")
                     print("=" * 50)
                 
@@ -599,8 +603,9 @@ class StreamingManager:
                             f"{chunk_count} 数据块",
                             style=COLORS["text_dim"],
                         )
-                    except UnicodeEncodeError:
+                    except UnicodeEncodeError as e:
                         # 安全的性能显示
+                        logger.warning("Unicode encoding error while displaying performance metrics: %s", e)
                         print(f"性能: {elapsed:.2f}s | {len(full_response)} 字符 | {chars_per_second:.1f} 字符/秒 | {chunk_count} 数据块")
         
         return {

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -11,6 +12,8 @@ from .types import (
     StreamableHTTPOptions,
     Transport,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _read_toml(path: Path) -> Dict[str, Any]:
@@ -380,8 +383,7 @@ def load_config(path: Optional[Path] = None) -> MCPConfig:
             loaded_paths.append(str(p))
         except Exception as e:
             # Log error but continue with other configs
-            import logging
-            logging.warning(f"Failed to load MCP config from {p}: {e}")
+            logger.warning(f"Failed to load MCP config from {p}: {e}")
     
     # Merge configs
     merged_data = _merge_configs(configs)
