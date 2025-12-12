@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 
 from src.core.providers.basicagents_provider_registry import BasicAgentsProviderRegistry
+from src.components.basicagents.prompts.registry import PromptRegistry
 from src.agents.basicagents.exceptions import (
     ConfigurationError,
     AuthenticationError,
@@ -34,7 +35,7 @@ class AgentConfig:
         model: Model name (e.g., 'glm-4.5', 'gpt-4o')
         llm_params: LLM-specific parameters (temperature, max_tokens, streaming, api_key, base_url)
         agent_params: Agent runtime parameters (max_iterations, max_execution_time, agent_type)
-        provider_specific: Provider-specific parameters (thinking_mode, temperature_fixed, system_prompt, locale)
+        provider_specific: Provider-specific parameters (thinking_mode, temperature_fixed, system_prompt, extra_params)
     """
 
     provider: str
@@ -266,19 +267,19 @@ class AgentConfig:
         """
         Extract provider-specific parameters from raw configuration.
 
+        Uses PromptRegistry to dynamically load system prompts based on provider
+        and agent_type, eliminating hardcoded file paths (follows KISS and YAGNI).
+
         Args:
             raw_config: Raw configuration from registry
 
         Returns:
             Dictionary of provider-specific parameters
         """
-        # List of supported provider-specific keys
         provider_specific_keys = [
             "thinking_mode",
             "temperature_fixed",
             "system_prompt",
-            "system_prompt_file",
-            "locale",
             "extra_params",
         ]
 
@@ -288,56 +289,40 @@ class AgentConfig:
             if k in raw_config
         }
 
-        # Load system_prompt from file if system_prompt_file is specified
-        if "system_prompt_file" in provider_specific and not provider_specific.get("system_prompt"):
-            prompt_file = provider_specific["system_prompt_file"]
-            provider_specific["system_prompt"] = AgentConfig._load_system_prompt(prompt_file)
+        if not provider_specific.get("system_prompt"):
+            try:
+                provider = raw_config.get("provider", "").lower()
+                # 关键修复：根据 agent_type 使用正确的 prompt 类型
+                agent_type = raw_config.get("agent_type", "react")
 
-        return provider_specific
+                # 将 agent_type 映射到 prompt 类型
+                prompt_type_map = {
+                    "function_calling": "function_calling",
+                    "react": "react_json",
+                }
+                prompt_type = prompt_type_map.get(agent_type, "react_json")
 
-    @staticmethod
-    def _load_system_prompt(prompt_file: str) -> str:
-        """
-        Load system prompt content from file.
-
-        Args:
-            prompt_file: Path to prompt file (relative to project root)
-
-        Returns:
-            Prompt content as string
-
-        Raises:
-            ConfigurationError: If file cannot be read
-        """
-        try:
-            # Support both absolute and relative paths
-            if not os.path.isabs(prompt_file):
-                # Assume relative to project root
-                project_root = os.getcwd()
-                prompt_file = os.path.join(project_root, prompt_file)
-
-            with open(prompt_file, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-
-            if not content:
-                raise ConfigurationError(
-                    f"System prompt file is empty: {prompt_file}",
-                    config_key="system_prompt_file"
+                logger.debug(
+                    f"Loading system prompt: agent_type={agent_type} -> prompt_type={prompt_type}"
                 )
 
-            logger.debug(f"Loaded system prompt from: {prompt_file}")
-            return content
+                prompt = PromptRegistry.get_prompt(
+                    agent_type=prompt_type,
+                    provider=provider,
+                    locale="en_US"
+                )
+                provider_specific["system_prompt"] = prompt
+                logger.debug(
+                    f"Loaded system prompt via PromptRegistry for "
+                    f"provider={provider}, agent_type={agent_type}, prompt_type={prompt_type}"
+                )
+            except FileNotFoundError as e:
+                logger.warning(
+                    f"No system prompt found in PromptRegistry: {e}; "
+                    "adapter will use default fallback"
+                )
 
-        except FileNotFoundError:
-            raise ConfigurationError(
-                f"System prompt file not found: {prompt_file}",
-                config_key="system_prompt_file"
-            )
-        except Exception as e:
-            raise ConfigurationError(
-                f"Failed to load system prompt from {prompt_file}: {str(e)}",
-                config_key="system_prompt_file"
-            )
+        return provider_specific
 
     @staticmethod
     def _validate_config(config: "AgentConfig") -> None:

@@ -20,8 +20,7 @@
           "max_execution_time": 300,
           "memory_enabled": true,
           "supports_tools": true,
-          "streaming": false,
-          "system_prompt_file": "config/agents/basic/prompts/providers/glm_template.md"
+          "streaming": false
         },
         "glm-4.5": {
           "name": "GLM-4.5",
@@ -72,8 +71,7 @@
           "max_execution_time": 600,
           "memory_enabled": true,
           "supports_tools": true,
-          "streaming": false,
-          "system_prompt_file": "config/agents/basic/prompts/react_json_en_US.md"
+          "streaming": false
         },
         "gpt-5-mini": {
           "name": "GPT-5-mini",
@@ -87,8 +85,7 @@
           "max_execution_time": 600,
           "memory_enabled": true,
           "supports_tools": true,
-          "streaming": false,
-          "system_prompt_file": "config/agents/basic/prompts/react_json_en_US.md"
+          "streaming": false
         },
         "gpt-4o": {
           "name": "GPT-4o",
@@ -101,8 +98,7 @@
           "max_execution_time": 300,
           "memory_enabled": true,
           "supports_tools": true,
-          "streaming": false,
-          "system_prompt_file": "config/agents/basic/prompts/react_json_en_US.md"
+          "streaming": false
         },
         "gpt-4o-mini": {
           "name": "GPT-4o-mini",
@@ -115,8 +111,7 @@
           "max_execution_time": 300,
           "memory_enabled": true,
           "supports_tools": true,
-          "streaming": false,
-          "system_prompt_file": "config/agents/basic/prompts/react_json_en_US.md"
+          "streaming": false
         },
         "gpt-4.1-nano": {
           "name": "GPT-4.1-nano",
@@ -129,8 +124,7 @@
           "max_execution_time": 300,
           "memory_enabled": true,
           "supports_tools": true,
-          "streaming": false,
-          "system_prompt_file": "config/agents/basic/prompts/react_json_en_US.md"
+          "streaming": false
         }
       }
     }
