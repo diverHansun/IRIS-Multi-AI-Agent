@@ -41,9 +41,25 @@ class ListSessionsCommand(BaseCommand):
     help_text = "List available sessions."
 
     async def execute(self, ctx, args: str) -> CommandResult:
-        if ctx.global_memory is None:
-            return CommandResult.error("Global memory is not initialized.")
-        sessions = ctx.global_memory.list_sessions()
+        if ctx.session_manager is None:
+            return CommandResult.error("Session manager is not initialized.")
+
+        arg = args.strip().lower()
+        show_all = arg == "all"
+
+        if show_all and hasattr(ctx.session_manager, "list_all_sessions"):
+            sessions_grouped = ctx.session_manager.list_all_sessions()
+            return CommandResult(
+                type="render",
+                payload={
+                    "kind": "sessions_grouped",
+                    "sessions": sessions_grouped,
+                    "current_session_id": ctx.session_id,
+                    "current_mode": ctx.session_manager.mode,
+                },
+            )
+
+        sessions = ctx.session_manager.list_sessions()
         return CommandResult(
             type="render",
             payload={
@@ -63,15 +79,25 @@ class RestoreSessionCommand(BaseCommand):
         target = args.strip()
         if not target:
             return CommandResult.error("Usage: /restore <session_id>")
-        if ctx.session_manager is None or ctx.global_memory is None:
+        if ctx.session_manager is None:
             return CommandResult.error("Session system is not initialized.")
-        if ctx.session_manager.switch_to_session(target):
+
+        # Prefer current mode; if not found, check other modes and guide user
+        if ctx.session_manager.session_exists(target):
             ctx.session_id = target
-            session_info = ctx.global_memory.get_session_info(target)
+            session_info = ctx.session_manager.get_session_info(target)
             return CommandResult.success(
                 f"Switched to session: {target}",
                 payload={"session_id": target, "session_info": session_info},
             )
+
+        for mode in ("llm", "basic", "deep"):
+            if ctx.session_manager.session_exists(target, mode=mode):
+                return CommandResult.error(
+                    f"Session '{target}' exists in mode '{mode}', not current mode '{ctx.session_manager.mode}'. "
+                    f"Switch to {mode} mode first."
+                )
+
         return CommandResult.error(f"Session does not exist: {target}")
 
 
@@ -84,11 +110,13 @@ class DeleteSessionCommand(BaseCommand):
         target = args.strip()
         if not target:
             return CommandResult.error("Usage: /delete_session <session_id>")
-        if ctx.global_memory is None or ctx.session_manager is None:
+        if ctx.session_manager is None:
             return CommandResult.error("Session system is not initialized.")
-        if not ctx.global_memory.session_exists(target):
+        if not ctx.session_manager.session_exists(target):
             return CommandResult.error(f"Session does not exist: {target}")
-        if ctx.global_memory.storage.delete_session(target):
+
+        storage = ctx.session_manager.storage
+        if storage.delete_session(target):
             payload = {"deleted_session_id": target}
             message = f"Session deleted: {target}"
             if target == ctx.session_id:

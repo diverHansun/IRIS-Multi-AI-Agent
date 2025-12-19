@@ -10,9 +10,10 @@ import time
 from typing import Optional
 
 from src.components.shared.memory import (
-    GlobalMemoryManager,
     SessionManager,
-    MemorySyncAdapter,
+    LLMMemory,
+    BasicAgentCheckpointer,
+    DeepAgentCheckpointer,
 )
 
 from src.application.commands import dispatch
@@ -78,10 +79,12 @@ def _initialize_memory(ctx: AppState) -> None:
     Following SRP: CLI manages basic/llm memory, deep agent manages deep memory.
     """
     ctx.console.print("Initializing memory system...", style=COLORS["warning"])
-    # Initialize for basic/llm modes (shared storage)
-    ctx.global_memory = GlobalMemoryManager(agent_mode="basic", max_messages=50)
-    ctx.session_manager = SessionManager(ctx.global_memory)
-    ctx.memory_sync = MemorySyncAdapter(ctx.global_memory, agent_mode="basic")
+    # Initialize for basic/llm modes (isolated storage per mode)
+    ctx.session_manager = SessionManager(mode="basic")
+    ctx.basic_checkpointer = BasicAgentCheckpointer()
+    ctx.llm_memory = LLMMemory()
+    ctx.deep_checkpointer = None
+
     ctx.session_id = ctx.session_manager.prompt_for_session_choice()
     ctx.console.print(f"Current Session ID: {ctx.session_id}", style=COLORS["text_dim"])
     ctx.hitl_manager = SessionHITLManager()
@@ -296,5 +299,4 @@ async def _cleanup_engines(ctx: AppState) -> None:
         await DifyService().cleanup(ctx)
     except Exception as exc:  # pragma: no cover - best effort cleanup
         logger.debug("Engine cleanup skipped: %s", exc)
-
 

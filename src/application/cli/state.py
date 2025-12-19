@@ -72,9 +72,15 @@ class AppState:
         default_factory=lambda: deepcopy(DEFAULT_ENGINE_CONFIGS)
     )
 
+    # Legacy fields (will be removed after migration)
     global_memory: Any = None
-    session_manager: Any = None
     memory_sync: Any = None
+
+    # New memory components
+    session_manager: Any = None
+    llm_memory: Any = None
+    basic_checkpointer: Any = None
+    deep_checkpointer: Any = None
     session_id: Optional[str] = None
     streaming_manager: Any = None
     mcp_manager: Any = None

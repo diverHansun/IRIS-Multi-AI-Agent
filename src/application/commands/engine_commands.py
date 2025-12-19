@@ -31,54 +31,99 @@ class SwitchEngineCommand(BaseCommand):
             await DifyService().cleanup(ctx)
 
         ctx.current_engine = engine
-        
+
         # Update memory system mode when switching engines
-        # LLM and basic agent modes share storage, deep mode is isolated
+        # LLM and basic agent modes share isolated directories; deep is isolated separately
         if engine in ("llm", "agent"):
-            from src.components.shared.memory import GlobalMemoryManager, SessionManager, MemorySyncAdapter
+            from src.components.shared.memory import (
+                SessionManager,
+                LLMMemory,
+                BasicAgentCheckpointer,
+                DeepAgentCheckpointer,
+            )
             import logging
+
             logger = logging.getLogger(__name__)
-            
-            # Determine agent_mode based on engine and agent config
             agent_config = ctx.get_engine_config("agent")
             agent_type = agent_config.get("agent_type", "basic")
-            
-            if engine == "llm" or agent_type == "basic":
-                # Use shared storage for LLM and basic agent
-                new_mode = "llm" if engine == "llm" else "basic"
-                
-                # Check if we need to create new memory manager (e.g., switching from deep mode)
-                current_mode = getattr(ctx.global_memory, "agent_mode", None) if hasattr(ctx, "global_memory") else None
-                
-                if current_mode == "deep" or current_mode != new_mode:
-                    # Create new memory manager for llm/basic mode
-                    logger.info(f"Switching from {current_mode} to {new_mode} mode: creating new memory manager")
-                    ctx.global_memory = GlobalMemoryManager(agent_mode=new_mode, max_messages=50)
-                    ctx.session_manager = SessionManager(ctx.global_memory, mode=new_mode)
-                    ctx.memory_sync = MemorySyncAdapter(ctx.global_memory, agent_mode=new_mode)
+
+            # Ensure session manager exists
+            if not getattr(ctx, "session_manager", None) or getattr(ctx.session_manager, "memory_manager", None):
+                ctx.session_manager = SessionManager(mode="basic")
+
+            if engine == "llm":
+                if getattr(ctx.session_manager, "memory_manager", None):
+                    ctx.session_manager = SessionManager(mode="llm")
                 else:
-                    # Just update the mode
-                    logger.info(f"Updating memory manager mode to {new_mode}")
-                    if hasattr(ctx, "global_memory") and ctx.global_memory:
-                        ctx.global_memory.agent_mode = new_mode
-                    if hasattr(ctx, "session_manager") and ctx.session_manager:
-                        ctx.session_manager.mode = new_mode
-                    if hasattr(ctx, "memory_sync") and ctx.memory_sync:
-                        ctx.memory_sync.agent_mode = new_mode
-                
-                # Reload session from correct storage
-                if hasattr(ctx, "session_manager") and ctx.session_manager:
-                    recent_session = ctx.session_manager.get_most_recent_session()
+                    ctx.session_manager.mode = "llm"
+                ctx.llm_memory = ctx.llm_memory or LLMMemory()
+                ctx.basic_checkpointer = None
+                ctx.deep_checkpointer = None
+                ctx.memory_sync = None
+                ctx.global_memory = None
+
+                # Preserve restored session if valid, else load recent/new
+                if ctx.session_id and ctx.session_manager.session_exists(ctx.session_id, mode="llm"):
+                    logger.info("Keeping user-selected LLM session: %s", ctx.session_id)
+                    ctx.console.print(f"[dim]Kept current LLM session: {ctx.session_id}[/]")
+                else:
+                    recent_session = ctx.session_manager.get_most_recent_session(mode="llm")
                     if recent_session:
                         ctx.session_id = recent_session["session_id"]
-                        logger.info(f"Loaded recent {new_mode} session: {ctx.session_id}")
-                        ctx.console.print(f"[dim]Loaded recent {new_mode} session: {ctx.session_id}[/]")
+                        logger.info("Loaded recent LLM session: %s", ctx.session_id)
+                        ctx.console.print(f"[dim]Loaded recent llm session: {ctx.session_id}[/]")
                     else:
-                        # No existing session, create new one
                         ctx.session_id = ctx.session_manager.create_new_session()
-                        logger.info(f"Created new {new_mode} session: {ctx.session_id}")
-                        ctx.console.print(f"[dim]Created new {new_mode} session: {ctx.session_id}[/]")
-        
+                        logger.info("Created new LLM session: %s", ctx.session_id)
+                        ctx.console.print(f"[dim]Created new llm session: {ctx.session_id}[/]")
+
+            elif engine == "agent" and agent_type == "basic":
+                if getattr(ctx.session_manager, "memory_manager", None):
+                    ctx.session_manager = SessionManager(mode="basic")
+                else:
+                    ctx.session_manager.mode = "basic"
+                ctx.basic_checkpointer = ctx.basic_checkpointer or BasicAgentCheckpointer()
+                ctx.llm_memory = ctx.llm_memory or LLMMemory()
+                ctx.deep_checkpointer = None
+                ctx.memory_sync = None
+                ctx.global_memory = None
+
+                if ctx.session_id and ctx.session_manager.session_exists(ctx.session_id, mode="basic"):
+                    logger.info("Keeping user-selected basic session: %s", ctx.session_id)
+                    ctx.console.print(f"[dim]Kept current basic session: {ctx.session_id}[/]")
+                else:
+                    recent_session = ctx.session_manager.get_most_recent_session(mode="basic")
+                    if recent_session:
+                        ctx.session_id = recent_session["session_id"]
+                        logger.info("Loaded recent basic session: %s", ctx.session_id)
+                        ctx.console.print(f"[dim]Loaded recent basic session: {ctx.session_id}[/]")
+                    else:
+                        ctx.session_id = ctx.session_manager.create_new_session()
+                        logger.info("Created new basic session: %s", ctx.session_id)
+                        ctx.console.print(f"[dim]Created new basic session: {ctx.session_id}[/]")
+
+            elif engine == "agent" and agent_type == "deep":
+                ctx.session_manager = SessionManager(mode="deep")
+                ctx.deep_checkpointer = ctx.deep_checkpointer or DeepAgentCheckpointer()
+                ctx.basic_checkpointer = None
+                ctx.llm_memory = None
+                ctx.global_memory = None
+                ctx.memory_sync = None
+
+                if ctx.session_id and ctx.session_manager.session_exists(ctx.session_id, mode="deep"):
+                    logger.info("Keeping user-selected deep session: %s", ctx.session_id)
+                    ctx.console.print(f"[dim]Kept current deep session: {ctx.session_id}[/]")
+                else:
+                    recent_session = ctx.session_manager.get_most_recent_session(mode="deep")
+                    if recent_session:
+                        ctx.session_id = recent_session["session_id"]
+                        logger.info("Loaded recent deep session: %s", ctx.session_id)
+                        ctx.console.print(f"[dim]Loaded recent deep session: {ctx.session_id}[/]")
+                    else:
+                        ctx.session_id = ctx.session_manager.create_new_session()
+                        logger.info("Created new deep session: %s", ctx.session_id)
+                        ctx.console.print(f"[dim]Created new deep session: {ctx.session_id}[/]")
+
         service = get_current_service(ctx)
         init_result = await service.initialize(ctx)
         return CommandResult(
