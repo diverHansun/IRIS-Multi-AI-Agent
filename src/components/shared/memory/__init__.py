@@ -4,20 +4,23 @@ Memory Management Module
 Provides global memory management and session lifecycle services.
 
 Architecture:
-- global_memory.py: GlobalMemoryManager for managing storage instances (Shared/Deep)
-- session_manager.py: SessionManager for session lifecycle management (Create/Switch/Clear)
-- memory_sync.py: MemorySyncAdapter for syncing Runtime (LangGraph) and Storage (File)
-- session_context.py: SessionContext for passing session metadata
+- session_manager.py: Session lifecycle management (Create/Switch/Clear)
+- session_context.py: Session metadata helper
+- llm_memory.py: LLM-only storage helper
+- basic_agent_checkpointer.py: LangGraph checkpointer backed by SessionStorage
+- deep_agent_checkpointer.py: Deep Agent checkpointer with runtime sync
 """
 
-from .global_memory import GlobalMemoryManager
 from .session_manager import SessionManager
 from .session_context import SessionContext
-from .memory_sync import MemorySyncAdapter
+from .llm_memory import LLMMemory
+from .basic_agent_checkpointer import BasicAgentCheckpointer
+from .deep_agent_checkpointer import DeepAgentCheckpointer
 
 __all__ = [
-    'GlobalMemoryManager',
-    'SessionManager',
-    'SessionContext',
-    'MemorySyncAdapter',
+    "SessionManager",
+    "SessionContext",
+    "LLMMemory",
+    "BasicAgentCheckpointer",
+    "DeepAgentCheckpointer",
 ]

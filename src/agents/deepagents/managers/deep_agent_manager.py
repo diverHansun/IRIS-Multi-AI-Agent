@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 from src.agents.deepagents.factories.registry import DeepAgentFactoryRegistry
 from src.agents.deepagents.adapters.base import BaseDeepAgentAdapter
-from src.components.shared.memory import MemorySyncAdapter
+from src.components.shared.memory import DeepAgentCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -31,20 +31,15 @@ class DeepAgentManager:
         model: str,
         *,
         function_type: str = "research",
-        global_memory_manager: Optional[Any] = None,
-        memory_sync: Optional[MemorySyncAdapter] = None,
+        deep_checkpointer: Optional[DeepAgentCheckpointer] = None,
         **user_params: Any,
     ) -> Any:
         """Create a DeepAgent instance for the requested function type."""
         provider_key = provider.lower()
         function_type = user_params.pop("function_type", function_type)
 
-        # Extract global_memory_manager from user_params if provided there
-        if global_memory_manager is None:
-            global_memory_manager = user_params.pop("global_memory_manager", None)
-
-        if memory_sync is None:
-            memory_sync = user_params.pop("memory_sync", None)
+        if deep_checkpointer is None:
+            deep_checkpointer = user_params.pop("deep_checkpointer", None) or DeepAgentCheckpointer()
         logger.info("Creating deep agent for provider=%s model=%s function=%s", provider_key, model, function_type)
 
         resolved_model = self._get_provider_config(provider_key, model)
@@ -70,8 +65,7 @@ class DeepAgentManager:
             adapter=adapter,
             subagent_manager=self.subagent_manager,
             middleware_config=middleware_config,
-            global_memory_manager=global_memory_manager,
-            memory_sync=memory_sync,
+            deep_checkpointer=deep_checkpointer,
             **user_params,
         )
 

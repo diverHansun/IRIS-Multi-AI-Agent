@@ -17,47 +17,10 @@ from .event_handler import DeepAgentEventHandler
 from ..hitl.handler import handle_hitl_interrupt, HITLDecisionError
 from ..hitl.session_manager import SessionHITLManager
 from ..hitl.file_ops import FileOpTracker
-from src.components.shared.memory.memory_sync import MemorySyncAdapter
-from src.components.shared.memory.session_context import SessionContext
-from src.components.shared.persistence import persist_conversation_state
+from src.components.shared.memory import DeepAgentCheckpointer
 from src.application.cli.theme import COLORS
 
 logger = logging.getLogger(__name__)
-
-
-async def _persist_conversation_state(
-    ctx,
-    session_ctx: SessionContext,
-    runtime_checkpointer,
-    runtime_config: Dict[str, Any],
-    agent_memory_sync: Optional[MemorySyncAdapter],
-    reason: str = "normal"
-) -> bool:
-    """
-    Wrapper for shared persist_conversation_state helper.
-
-    This wrapper maintains backward compatibility with existing calls
-    while delegating to the shared helper in src.components.shared.persistence.
-
-    Args:
-        ctx: CLI context for console output
-        session_ctx: Session context containing session_id
-        runtime_checkpointer: Runtime checkpointer (MemorySaver)
-        runtime_config: Runtime configuration with thread_id
-        agent_memory_sync: Memory sync adapter (handles filtering and persistence)
-        reason: Reason for persistence (for logging/debugging)
-
-    Returns:
-        True if persistence succeeded, False otherwise
-    """
-    return await persist_conversation_state(
-        session_ctx=session_ctx,
-        runtime_checkpointer=runtime_checkpointer,
-        runtime_config=runtime_config,
-        agent_memory_sync=agent_memory_sync,
-        reason=reason,
-        ctx=ctx
-    )
 
 
 def _get_agent_config(ctx) -> Dict[str, Any]:
@@ -133,15 +96,10 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     max_execution_time = safety_opts.get("max_execution_time")
     deadline = time.perf_counter() + max_execution_time if isinstance(max_execution_time, (int, float)) else None
 
-    session_ctx = agent.create_session_context(session_id)
-    runtime_config = session_ctx.build_runtime_config(runtime_config)
-
-    agent_memory_sync = getattr(agent, "memory_sync", None)
-    if agent_memory_sync is None:
-        agent_memory_sync = getattr(ctx, "memory_sync", None)
-        if agent_memory_sync is not None:
-            setattr(agent, "memory_sync", agent_memory_sync)
     runtime_checkpointer = getattr(agent, "runtime_checkpointer", None)
+    deep_checkpointer: DeepAgentCheckpointer = getattr(agent, "deep_checkpointer", None) or getattr(ctx, "deep_checkpointer", None) or DeepAgentCheckpointer()
+    setattr(agent, "deep_checkpointer", deep_checkpointer)
+    setattr(ctx, "deep_checkpointer", deep_checkpointer)
 
     # Check if MemorySaver already has checkpoint for this session
     # MemorySaver is in-memory, so it only has checkpoints from current program run
@@ -160,34 +118,22 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             logger.warning(f"Failed to check checkpoint existence: {exc}")
 
     # Only inject history from storage if MemorySaver doesn't have checkpoint yet
-    # This prevents duplicate history: MemorySaver will automatically include its checkpoint
-    if agent_memory_sync and not has_checkpoint:
+    if not has_checkpoint:
         logger.info("First query in this session: loading history from storage into input")
-        runtime_input = agent_memory_sync.enhance_runtime_input(
-            session_ctx,
+        runtime_input = deep_checkpointer.enhance_runtime_input(
+            session_id,
             query,
-            max_history=10
+            max_history=10,
         )
     else:
-        if has_checkpoint:
-            logger.info("Continuing session: MemorySaver will provide history automatically")
-        else:
-            logger.debug("MemorySyncAdapter unavailable; using query without history")
+        logger.info("Continuing session: MemorySaver will provide history automatically")
         runtime_input = agent.create_runtime_input(query)
 
     ctx.console.print("[dim]Deep agent reasoning...[/]")
 
-    # Inject persistence context into state for SubAgent access
-    # SubAgent task tool can extract these from runtime.state to call persist_conversation_state
-    # Note: These keys are prefixed with _ to indicate internal use
-    if isinstance(runtime_input, dict):
-        runtime_input["_session_ctx"] = session_ctx
-        runtime_input["_memory_sync"] = agent_memory_sync
-        runtime_input["_runtime_checkpointer"] = runtime_checkpointer
-        runtime_input["_runtime_config"] = runtime_config
-
     pending_input: Any = runtime_input
     timed_out = False
+    final_state: Optional[Dict[str, Any]] = None
 
     try:
         while True:
@@ -226,25 +172,15 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                     f"[yellow]TIMEOUT: The agent took longer than expected for this step.[/]"
                 )
 
-                # Special case: Early timeout before any checkpoint exists
-                # Need to manually save user query to prevent data loss
                 checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config) if runtime_checkpointer else None
-                if not checkpoint_tuple and agent_memory_sync:
-                    logger.warning("No checkpoint found - manually saving user query")
-                    from langchain_core.messages import HumanMessage
-
-                    storage = agent_memory_sync.storage
-                    existing_messages = storage.load_session(session_ctx.session_id) or []
-                    existing_messages.append(HumanMessage(content=query))
-                    storage.save_session(session_ctx.session_id, existing_messages)
-                    logger.info(f"Manually saved user query (total messages: {len(existing_messages)})")
-                else:
-                    # Use unified persistence helper (DRY principle)
-                    await _persist_conversation_state(
-                        ctx, session_ctx, runtime_checkpointer,
-                        runtime_config, agent_memory_sync,
-                        reason="step_timeout"
-                    )
+                if not checkpoint_tuple:
+                    logger.warning("No checkpoint found - persisting current state via DeepAgentCheckpointer")
+                deep_checkpointer.persist_from_runtime(
+                    session_id,
+                    runtime_checkpointer,
+                    runtime_config,
+                    None,
+                )
 
                 # Notify agent using SystemMessage (won't be persisted)
                 ctx.console.print(f"[dim]Informing agent about timeout...[/]")
@@ -278,11 +214,11 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                     f"({exc.elapsed_time:.1f}s / {exc.max_execution_time:.1f}s)[/]"
                 )
 
-                # Persist clean checkpoint (no timeout AIMessage污染)
-                await _persist_conversation_state(
-                    ctx, session_ctx, runtime_checkpointer,
-                    runtime_config, agent_memory_sync,
-                    reason="max_execution_time"
+                deep_checkpointer.persist_from_runtime(
+                    session_id,
+                    runtime_checkpointer,
+                    runtime_config,
+                    None,
                 )
 
                 # Notify agent using SystemMessage
@@ -349,13 +285,13 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         )
 
         try:
-            await _persist_conversation_state(
-                ctx,
-                session_ctx,
+            # NOTE: Do NOT use event_handler.last_agent_state here!
+            # Extract full state from runtime_checkpointer instead.
+            deep_checkpointer.persist_from_runtime(
+                session_id,
                 runtime_checkpointer,
                 runtime_config,
-                agent_memory_sync,
-                reason="user_interrupt",
+                agent_state=None,  # Force using runtime_checkpointer
             )
         except Exception as exc:
             logger.warning("Failed to persist conversation on interrupt: %s", exc)
@@ -389,18 +325,19 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         ctx.console.print("[bold red]Deep agent execution timed out.[/]")
         return ""
 
-    # Normal completion - persist using unified helper (DRY principle)
-    await _persist_conversation_state(
-        ctx, session_ctx, runtime_checkpointer,
-        runtime_config, agent_memory_sync,
-        reason="normal"
+    # Normal completion - persist
+    # NOTE: Do NOT use event_handler.last_agent_state here!
+    # It only contains the last update chunk, which may miss HumanMessages.
+    # Instead, let persist_from_runtime() extract the full state from runtime_checkpointer.
+    deep_checkpointer.persist_from_runtime(
+        session_id,
+        runtime_checkpointer,
+        runtime_config,
+        agent_state=None,  # Force using runtime_checkpointer
     )
+    logger.info("[CONVERSATION] Persistence completed for session %s", session_id)
 
-    # Update session checkpoint metadata
-    if agent_memory_sync:
-        agent.update_session_checkpoint(session_ctx)
-        logger.info(f"[CONVERSATION] Persistence completed for session {session_id}")
-
+    # Get final state for result preparation (event_handler state is OK for this purpose)
     final_state = event_handler.last_agent_state
     if not final_state:
         ctx.console.print("[bold red]Deep agent failed to produce a response.[/]")

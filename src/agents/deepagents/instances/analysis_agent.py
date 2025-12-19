@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from .base_deep_agent import BaseDeepAgent
+from src.components.shared.memory.deep_agent_checkpointer import DeepAgentCheckpointer
 
 
 class AnalysisAgent(BaseDeepAgent):
@@ -16,8 +17,7 @@ class AnalysisAgent(BaseDeepAgent):
         adapter,
         runtime: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        global_memory_manager: Optional[Any] = None,
-        memory_sync: Optional[Any] = None,
+        deep_checkpointer: Optional[DeepAgentCheckpointer] = None,
     ) -> None:
         base_metadata = {"capabilities": ["data_analysis", "reporting", "insights"]}
         if metadata:
@@ -26,6 +26,5 @@ class AnalysisAgent(BaseDeepAgent):
             adapter=adapter,
             runtime=runtime,
             metadata=base_metadata,
-            global_memory_manager=global_memory_manager,
-            memory_sync=memory_sync,
+            deep_checkpointer=deep_checkpointer,
         )

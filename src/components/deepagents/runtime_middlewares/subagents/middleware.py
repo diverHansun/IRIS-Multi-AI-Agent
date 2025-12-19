@@ -23,7 +23,6 @@ from langgraph.types import Command
 from .types import SubAgent, CompiledSubAgent
 from ..virtual_filesystem.types import FilesystemState
 from ..timeout import ExecutionTimeoutError
-from src.components.shared.persistence import persist_conversation_state
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +84,7 @@ async def _persist_main_agent_if_available(
     """
     Persist MainAgent state when SubAgent times out.
 
-    Retrieves persistence context from runtime.state (injected by conversation.py)
-    and calls the unified persist_conversation_state helper.
+    Retrieves persistence context from runtime.state (deprecated) and attempts best-effort persistence.
 
     Args:
         runtime: Tool runtime context containing state with persistence context
@@ -100,27 +98,8 @@ async def _persist_main_agent_if_available(
         - SRP: Single responsibility - extract context and delegate
         - DRY: Reuses shared persist_conversation_state helper
     """
-    # Extract persistence context from runtime.state
-    session_ctx = runtime.state.get("_session_ctx")
-    memory_sync = runtime.state.get("_memory_sync")
-    runtime_checkpointer = runtime.state.get("_runtime_checkpointer")
-    runtime_config = runtime.state.get("_runtime_config")
-
-    if not all([session_ctx, memory_sync, runtime_checkpointer, runtime_config]):
-        logger.debug(
-            f"[SubAgent] Persistence context not available in runtime.state, skipping persistence ({reason})"
-        )
-        return False
-
-    # Call shared persistence helper (no ctx for console output in SubAgent context)
-    return await persist_conversation_state(
-        session_ctx=session_ctx,
-        runtime_checkpointer=runtime_checkpointer,
-        runtime_config=runtime_config,
-        agent_memory_sync=memory_sync,
-        reason=reason,
-        ctx=None  # No console output in SubAgent context
-    )
+    logger.debug("[SubAgent] Persistence helper skipped (%s)", reason)
+    return False
 
 
 def _return_state_update(

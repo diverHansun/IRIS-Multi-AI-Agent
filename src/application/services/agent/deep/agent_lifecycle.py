@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from src.agents.deepagents.managers import deep_agent_manager
 from src.core.providers import deepagents_provider_registry
+from src.components.shared.memory import DeepAgentCheckpointer
 
 
 def _agent_config(ctx) -> Dict[str, Any]:
@@ -33,11 +34,8 @@ async def _instantiate_agent(
     """
     Instantiate deep agent with isolated memory system.
 
-    Deep mode creates its own GlobalMemoryManager and MemorySyncAdapter
-    with agent_mode="deep" to ensure storage isolation from basic/llm modes.
+    Deep mode uses DeepAgentCheckpointer to ensure storage isolation from basic/llm modes.
     """
-    from src.components.shared.memory import GlobalMemoryManager, MemorySyncAdapter
-
     providers = deepagents_provider_registry.list_providers()
 
     resolved_provider = (provider or "").lower()
@@ -52,20 +50,17 @@ async def _instantiate_agent(
         else:
             resolved_model = model
 
-    # Create isolated memory system for deep mode
-    deep_global_memory = GlobalMemoryManager(agent_mode="deep", max_messages=50)
-    deep_memory_sync = MemorySyncAdapter(deep_global_memory, agent_mode="deep")
+    deep_checkpointer = getattr(ctx, "deep_checkpointer", None) or DeepAgentCheckpointer()
 
     agent = await deep_agent_manager.create_deep_agent(
         provider=resolved_provider,
         model=resolved_model,
-        global_memory_manager=deep_global_memory,
-        memory_sync=deep_memory_sync,
+        deep_checkpointer=deep_checkpointer,
         function_type=function_type,
     )
 
-    # Attach memory_sync to agent for conversation handling
-    setattr(agent, "memory_sync", deep_memory_sync)
+    setattr(agent, "deep_checkpointer", deep_checkpointer)
+    setattr(ctx, "deep_checkpointer", deep_checkpointer)
 
     return agent, resolved_provider, resolved_model
 
