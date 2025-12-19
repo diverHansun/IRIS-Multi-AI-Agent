@@ -24,8 +24,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.basicagents.config import AgentConfig
 from src.agents.basicagents.exceptions import AgentExecutionError
-from langgraph.checkpoint.memory import MemorySaver
-from src.components.shared.memory.session_context import SessionContext
+from src.components.shared.memory.basic_agent_checkpointer import BasicAgentCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ class BaseAgent(ABC):
         llm: BaseChatModel,
         graph: CompiledStateGraph,
         tools: List[BaseTool],
-        checkpointer: Optional[MemorySaver],
+        checkpointer: Optional[BasicAgentCheckpointer],
         config: AgentConfig,
     ):
         """
@@ -253,8 +252,14 @@ class BaseAgent(ABC):
         if not self.enable_memory or not self.checkpointer:
             return extra_config
 
-        session_ctx = self._create_session_context(session_id)
-        return session_ctx.build_runtime_config(extra_config)
+        runtime_config = {"configurable": {"thread_id": session_id, "checkpoint_ns": ""}}
+        if extra_config and isinstance(extra_config, dict):
+            merged = dict(extra_config)
+            merged_configurable = dict(merged.get("configurable", {}))
+            merged_configurable.update(runtime_config["configurable"])
+            merged["configurable"] = merged_configurable
+            return merged
+        return runtime_config
 
     def _parse_graph_output(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -602,14 +607,6 @@ class BaseAgent(ABC):
             Agent information dictionary
         """
         return self.get_agent_info()
-
-    def _create_session_context(self, session_id: str) -> SessionContext:
-        return SessionContext(
-            session_id=session_id,
-            agent_type="basic",
-            provider=self.provider,
-            function_type=self.config.agent_params.get("agent_type", "default"),
-        )
 
     def get_llm(self) -> Optional[BaseChatModel]:
         """

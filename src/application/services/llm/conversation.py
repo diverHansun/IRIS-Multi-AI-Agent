@@ -24,8 +24,10 @@ async def handle_llm_query(
     *,
     streaming: bool = True,
 ) -> str:
-    history = ctx.global_memory.get_session_history(ctx.session_id) if ctx.global_memory else None
-    context_messages = history.messages[-10:] if history and getattr(history, "messages", None) else []
+    llm_memory = getattr(ctx, "llm_memory", None)
+    context_messages: List[Any] = []
+    if llm_memory and ctx.session_id:
+        context_messages = llm_memory.get_history(ctx.session_id, max_messages=10)
 
     prompt = query
     if context_messages:
@@ -47,7 +49,7 @@ async def handle_llm_query(
         answer = response.content if hasattr(response, "content") else str(response)
         ctx.console.print(f"[bold green]LLM >[/] {answer}")
 
-    if ctx.global_memory:
-        ctx.global_memory.add_llm_conversation(ctx.session_id, query, answer)
+    if llm_memory and ctx.session_id:
+        llm_memory.add_conversation(ctx.session_id, query, answer)
 
     return answer

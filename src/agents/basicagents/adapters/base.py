@@ -25,7 +25,7 @@ from src.agents.basicagents.exceptions import (
     GraphCreationError,
     AgentCreationError,
 )
-from langgraph.checkpoint.memory import MemorySaver
+from src.components.shared.memory import BasicAgentCheckpointer
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,7 @@ class AgentAdapter(ABC):
         except Exception as e:
             raise ToolLoadingError(f"Failed to load tools: {e}") from e
 
-    def create_checkpointer(self) -> Optional[MemorySaver]:
+    def create_checkpointer(self) -> Optional[BasicAgentCheckpointer]:
         """
         Create checkpointer if memory is enabled.
 
@@ -170,17 +170,19 @@ class AgentAdapter(ABC):
         Uses self.config.agent_params for configuration.
 
         Returns:
-            MemorySaver instance if memory enabled, None otherwise
+            Checkpointer instance if memory enabled, None otherwise
         """
         if not self.config.agent_params.get("memory_enabled", True):
             logger.info("Memory disabled, skipping checkpointer creation")
             return None
 
-        # Use MemorySaver for runtime state management
-        # Persistence is handled by MemorySyncAdapter
-        checkpointer = MemorySaver()
+        if self._shared_checkpointer is not None:
+            logger.info("Using shared checkpointer provided by caller")
+            return self._shared_checkpointer
 
-        logger.info("Checkpointer created (MemorySaver)")
+        checkpointer = BasicAgentCheckpointer()
+
+        logger.info("Checkpointer created (BasicAgentCheckpointer)")
         return checkpointer
 
     @abstractmethod
@@ -188,7 +190,7 @@ class AgentAdapter(ABC):
         self,
         llm: BaseChatModel,
         tools: List[BaseTool],
-        checkpointer: Optional[MemorySaver],
+        checkpointer: Optional[Any],
     ) -> CompiledStateGraph:
         """
         Create agent graph.
@@ -215,7 +217,7 @@ class AgentAdapter(ABC):
         llm: BaseChatModel,
         graph: CompiledStateGraph,
         tools: List[BaseTool],
-        checkpointer: Optional[MemorySaver],
+        checkpointer: Optional[Any],
     ):
         """
         Instantiate agent with all components.
