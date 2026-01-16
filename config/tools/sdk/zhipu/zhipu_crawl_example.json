@@ -1,0 +1,22 @@
+{
+  "api": {
+    "base_url": "https://open.bigmodel.cn/api/paas/v4/reader",
+    "timeout": 30,
+    "max_retries": 3,
+    "retry_delay": 1.0
+  },
+  "crawl": {
+    "timeout": 20,
+    "no_cache": false,
+    "return_format": "markdown",
+    "retain_images": true,
+    "no_gfm": false,
+    "keep_img_data_url": false,
+    "with_images_summary": false,
+    "with_links_summary": false
+  },
+  "cache": {
+    "enable_cache": false,
+    "cache_expire_seconds": 300
+  }
+}

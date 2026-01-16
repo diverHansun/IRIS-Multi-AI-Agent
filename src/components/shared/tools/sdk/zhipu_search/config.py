@@ -42,6 +42,35 @@ class ZhipuCacheConfig:
 
 
 @dataclass
+class ZhipuCrawlAPIConfig:
+    """Zhipu Crawl API configuration"""
+    base_url: str = "https://open.bigmodel.cn/api/paas/v4/reader"
+    timeout: int = 30
+    max_retries: int = 3
+    retry_delay: float = 1.0
+
+
+@dataclass
+class ZhipuCrawlRequestConfig:
+    """Zhipu Crawl request defaults"""
+    timeout: int = 20
+    no_cache: bool = False
+    return_format: Literal["markdown", "text"] = "markdown"
+    retain_images: bool = True
+    no_gfm: bool = False
+    keep_img_data_url: bool = False
+    with_images_summary: bool = False
+    with_links_summary: bool = False
+
+
+@dataclass
+class ZhipuCrawlCacheConfig:
+    """Crawl cache configuration"""
+    enable_cache: bool = False
+    cache_expire_seconds: int = 300
+
+
+@dataclass
 class ZhipuConfig:
     """Complete Zhipu configuration"""
     api: ZhipuAPIConfig = field(default_factory=ZhipuAPIConfig)
@@ -78,10 +107,48 @@ class ZhipuConfig:
         # Validate Cache config
         if self.cache.cache_expire_seconds <= 0:
             logger.warning("Invalid cache_expire_seconds, resetting to 300")
-            self.cache.cache_expire_seconds = 300
+        self.cache.cache_expire_seconds = 300
 
     def is_available(self) -> bool:
         """Check if Zhipu API is available (API key configured)"""
+        return bool(self.api_key and len(self.api_key.strip()) > 0)
+
+
+@dataclass
+class ZhipuCrawlConfig:
+    """Complete Zhipu Crawl configuration"""
+    api: ZhipuCrawlAPIConfig = field(default_factory=ZhipuCrawlAPIConfig)
+    crawl: ZhipuCrawlRequestConfig = field(default_factory=ZhipuCrawlRequestConfig)
+    cache: ZhipuCrawlCacheConfig = field(default_factory=ZhipuCrawlCacheConfig)
+
+    api_key: Optional[str] = None
+
+    def __post_init__(self):
+        """Post-initialization validation and setup"""
+        if not self.api_key:
+            self.api_key = os.getenv("ZHIPU_API_KEY")
+        self._validate_config()
+
+    def _validate_config(self):
+        """Validate configuration values"""
+        if self.api.timeout <= 0:
+            logger.warning("Invalid crawl API timeout, resetting to 30")
+            self.api.timeout = 30
+        if self.api.max_retries < 0:
+            logger.warning("Invalid crawl API max_retries, resetting to 3")
+            self.api.max_retries = 3
+        if self.crawl.timeout <= 0:
+            logger.warning("Invalid crawl timeout, resetting to 20")
+            self.crawl.timeout = 20
+        if self.crawl.return_format not in ("markdown", "text"):
+            logger.warning("Invalid return_format, resetting to markdown")
+            self.crawl.return_format = "markdown"
+        if self.cache.cache_expire_seconds <= 0:
+            logger.warning("Invalid crawl cache_expire_seconds, resetting to 300")
+            self.cache.cache_expire_seconds = 300
+
+    def is_available(self) -> bool:
+        """Check if Zhipu Crawl API is available (API key configured)"""
         return bool(self.api_key and len(self.api_key.strip()) > 0)
 
 
@@ -163,8 +230,84 @@ def load_config_from_env() -> ZhipuConfig:
     )
 
 
+def load_crawl_config_from_json(config_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Load crawl configuration from JSON file
+
+    Args:
+        config_path: Path to config file, defaults to config/tools/sdk/zhipu/zhipu_crawl.json
+
+    Returns:
+        Dictionary with configuration values
+    """
+    if config_path is None:
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parent.parent.parent.parent.parent.parent.parent
+        config_path = project_root / "config" / "tools" / "sdk" / "zhipu" / "zhipu_crawl.json"
+    else:
+        config_path = Path(config_path)
+
+    if not config_path.exists():
+        logger.warning(f"Crawl config file not found at {config_path}, using defaults")
+        return {}
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        logger.info(f"Loaded Zhipu crawl configuration from {config_path}")
+        return config_data
+    except Exception as e:
+        logger.error(f"Failed to load crawl config from {config_path}: {e}")
+        return {}
+
+
+def load_crawl_config_from_env() -> ZhipuCrawlConfig:
+    """
+    Load crawl configuration from environment variables and JSON file
+
+    Returns:
+        ZhipuCrawlConfig instance
+    """
+    json_config = load_crawl_config_from_json()
+
+    api_config = ZhipuCrawlAPIConfig(
+        base_url=json_config.get("api", {}).get("base_url", "https://open.bigmodel.cn/api/paas/v4/reader"),
+        timeout=int(json_config.get("api", {}).get("timeout", 30)),
+        max_retries=int(json_config.get("api", {}).get("max_retries", 3)),
+        retry_delay=float(json_config.get("api", {}).get("retry_delay", 1.0)),
+    )
+
+    crawl_data = json_config.get("crawl", {})
+    crawl_config = ZhipuCrawlRequestConfig(
+        timeout=int(crawl_data.get("timeout", 20)),
+        no_cache=crawl_data.get("no_cache", False),
+        return_format=crawl_data.get("return_format", "markdown"),
+        retain_images=crawl_data.get("retain_images", True),
+        no_gfm=crawl_data.get("no_gfm", False),
+        keep_img_data_url=crawl_data.get("keep_img_data_url", False),
+        with_images_summary=crawl_data.get("with_images_summary", False),
+        with_links_summary=crawl_data.get("with_links_summary", False),
+    )
+
+    cache_data = json_config.get("cache", {})
+    cache_config = ZhipuCrawlCacheConfig(
+        enable_cache=cache_data.get("enable_cache", False),
+        cache_expire_seconds=int(cache_data.get("cache_expire_seconds", 300)),
+    )
+
+    api_key = os.getenv("ZHIPU_API_KEY")
+
+    return ZhipuCrawlConfig(
+        api=api_config,
+        crawl=crawl_config,
+        cache=cache_config,
+        api_key=api_key,
+    )
+
+
 # Global configuration instance
 _global_config: Optional[ZhipuConfig] = None
+_global_crawl_config: Optional[ZhipuCrawlConfig] = None
 
 
 def get_config() -> ZhipuConfig:
@@ -197,6 +340,36 @@ def reset_config() -> None:
     _global_config = None
 
 
+def get_crawl_config() -> ZhipuCrawlConfig:
+    """
+    Get global Zhipu Crawl configuration instance (singleton pattern)
+
+    Returns:
+        ZhipuCrawlConfig instance
+    """
+    global _global_crawl_config
+    if _global_crawl_config is None:
+        _global_crawl_config = load_crawl_config_from_env()
+    return _global_crawl_config
+
+
+def set_crawl_config(config: ZhipuCrawlConfig) -> None:
+    """
+    Set global crawl configuration instance
+
+    Args:
+        config: ZhipuCrawlConfig instance to set as global
+    """
+    global _global_crawl_config
+    _global_crawl_config = config
+
+
+def reset_crawl_config() -> None:
+    """Reset global crawl configuration to reload from environment"""
+    global _global_crawl_config
+    _global_crawl_config = None
+
+
 def get_config_summary() -> Dict[str, Any]:
     """
     Get configuration summary
@@ -225,4 +398,37 @@ def get_config_summary() -> Dict[str, Any]:
             "enabled": config.cache.enable_cache,
             "expire_seconds": config.cache.cache_expire_seconds
         }
+    }
+
+
+def get_crawl_config_summary() -> Dict[str, Any]:
+    """
+    Get crawl configuration summary
+
+    Returns:
+        Dictionary with configuration summary
+    """
+    config = get_crawl_config()
+
+    return {
+        "api_available": config.is_available(),
+        "api_config": {
+            "base_url": config.api.base_url,
+            "timeout": config.api.timeout,
+            "max_retries": config.api.max_retries,
+        },
+        "crawl_defaults": {
+            "timeout": config.crawl.timeout,
+            "return_format": config.crawl.return_format,
+            "retain_images": config.crawl.retain_images,
+            "with_images_summary": config.crawl.with_images_summary,
+            "with_links_summary": config.crawl.with_links_summary,
+            "no_cache": config.crawl.no_cache,
+            "no_gfm": config.crawl.no_gfm,
+            "keep_img_data_url": config.crawl.keep_img_data_url,
+        },
+        "cache": {
+            "enabled": config.cache.enable_cache,
+            "expire_seconds": config.cache.cache_expire_seconds,
+        },
     }

@@ -16,6 +16,7 @@ from requests.exceptions import RequestException, HTTPError
 from langchain_core.tools import tool
 
 from .config import get_config
+from .zhipu_crawl_tools import ZHIPU_CRAWL_TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -293,4 +294,7 @@ def get_available_zhipu_tools() -> List[Any]:
         logger.warning("Zhipu API key not configured, returning empty tool list")
         return []
 
-    return ZHIPU_SEARCH_TOOLS
+    tools: List[Any] = []
+    tools.extend(ZHIPU_SEARCH_TOOLS)
+    tools.extend(ZHIPU_CRAWL_TOOLS)
+    return tools

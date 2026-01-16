@@ -216,6 +216,7 @@ config/tools/mcp/mcp.toml
 # Search tools configuration (may contain custom settings)
 config/tools/sdk/search/duckduckgo.json
 config/tools/sdk/zhipu/zhipu_search.json
+config/tools/sdk/zhipu/zhipu_crawl.json
 
 # 记忆存储文件夹
 .memory/ 
