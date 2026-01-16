@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: crawl4ai
+    ports:
+      - "11235:11235"
+    shm_size: 1g
+    restart: unless-stopped
+    # ============================================
+    # LLM 配置说明：
+    # 1. 复制 .llm.env.example 为 .llm.env
+    # 2. 在 .llm.env 中填写你的 API Key
+    # 3. 取消下面 env_file 的注释以启用 LLM 功能
+    # 
+    # LLM 功能包括：
+    # - 内容过滤 (content_filter_type: "pruning" 或 "bm25")
+    # - 智能内容提取 (extract_main_content: true)
+    # - 高质量 Markdown 生成 (prefer_fit_markdown: true)
+    # ============================================
+    # env_file:
+    #   - .llm.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11235/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
