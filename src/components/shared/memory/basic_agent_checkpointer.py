@@ -14,6 +14,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 
+from src.core.project import ProjectContext, MetadataManager
 from ..storage.session_storage import SessionStorage
 
 logger = logging.getLogger(__name__)
@@ -22,9 +23,24 @@ logger = logging.getLogger(__name__)
 class BasicAgentCheckpointer(BaseCheckpointSaver[int]):
     """LangGraph checkpointer backed by SessionStorage for Basic Agent."""
 
-    def __init__(self, storage_dir: str = "data/basicagent/sessions", max_messages: int = 50) -> None:
+    def __init__(
+        self,
+        storage_dir: Optional[str] = None,
+        max_messages: int = 50,
+        project_context: Optional[ProjectContext] = None,
+        metadata_manager: Optional[MetadataManager] = None,
+    ) -> None:
         super().__init__()
-        self.storage = SessionStorage(storage_dir)
+        self.project_context = project_context
+        self.metadata_manager = metadata_manager
+
+        resolved_dir = storage_dir
+        if not resolved_dir:
+            self.project_context = self.project_context or ProjectContext.from_cwd()
+            self.project_context.ensure_structure()
+            resolved_dir = str(self.project_context.get_storage_dir("basic"))
+
+        self.storage = SessionStorage(resolved_dir)
         self.max_messages = max_messages
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
@@ -114,6 +130,8 @@ class BasicAgentCheckpointer(BaseCheckpointSaver[int]):
 
         if not self.storage.save_session(thread_id, trimmed, metadata=metadata_out):
             logger.error("Failed to save session %s", thread_id)
+        else:
+            self._update_metadata(thread_id)
 
         checkpoint_id = self._make_checkpoint_id(len(trimmed))
         return {
@@ -258,3 +276,16 @@ class BasicAgentCheckpointer(BaseCheckpointSaver[int]):
     def _make_checkpoint_id(self, length: int) -> str:
         """Create a monotonic checkpoint id based on message count."""
         return f"{length:016d}"
+
+    def _update_metadata(self, session_id: str) -> None:
+        if self.metadata_manager and self.project_context:
+            try:
+                self.metadata_manager.update_project(
+                    project_path=self.project_context.project_path,
+                    project_id=self.project_context.project_id,
+                    project_name=self.project_context.project_name,
+                    mode="basic",
+                    session_id=session_id,
+                )
+            except Exception as exc:  # pragma: no cover
+                logger.debug("Metadata update skipped: %s", exc)

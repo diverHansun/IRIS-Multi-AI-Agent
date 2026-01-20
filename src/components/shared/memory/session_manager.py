@@ -1,4 +1,4 @@
-"""Session Manager with per-mode storage support."""
+"""Session Manager with project-aware storage support."""
 
 import logging
 import uuid
@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from rich.console import Console
 
+from src.core.project import ProjectContext, MetadataManager
 from ..storage.session_storage import SessionStorage
 
 console = Console()
@@ -21,21 +22,30 @@ class SessionManager:
         self,
         *,
         mode: str = "basic",
+        project_context: Optional[ProjectContext] = None,
         storage_dirs: Optional[Dict[str, str]] = None,
+        metadata_manager: Optional[MetadataManager] = None,
     ):
         """
         Initialize session manager.
 
         Args:
             mode: Active mode ("basic", "llm", "deep")
-            storage_dirs: Optional custom storage directory mapping
+            project_context: Optional project context; used to resolve .iris paths
+            storage_dirs: Optional custom storage directory mapping (overrides context)
+            metadata_manager: Optional metadata manager to track last sessions
         """
         self.mode = mode
-        self.storage_dirs = storage_dirs or {
-            "llm": "data/llm/sessions",
-            "basic": "data/basicagent/sessions",
-            "deep": "data/deepagent/sessions",
-        }
+        self.project_context = project_context
+        self.metadata_manager = metadata_manager
+
+        if storage_dirs:
+            self.storage_dirs = storage_dirs
+        else:
+            self.project_context = self.project_context or ProjectContext.from_cwd()
+            self.project_context.ensure_structure()
+            self.storage_dirs = self.project_context.get_storage_dirs_dict()
+
         self.storages: Dict[str, SessionStorage] = {
             m: SessionStorage(path) for m, path in self.storage_dirs.items()
         }
@@ -57,6 +67,7 @@ class SessionManager:
         self.current_session_id = session_id
         self.storage.initialize_empty_session(session_id)
         console.print(f"[dim]Created new session: {session_id}[/]")
+        self._update_metadata(self.mode, session_id)
         return session_id
 
     def get_or_create_default_session(self) -> str:
@@ -68,6 +79,7 @@ class SessionManager:
                 console.print(f"[dim]Loaded recent session: {self.current_session_id}[/]")
             else:
                 self.current_session_id = self.create_new_session()
+            self._update_metadata(self.mode, self.current_session_id)
         return self.current_session_id
 
     def prompt_for_session_choice(self) -> str:
@@ -97,12 +109,15 @@ class SessionManager:
                     summary = self.get_current_session_summary()
                     if summary != "No conversation history":
                         console.print(f"[dim]Summary: {summary}[/]")
+                    self._update_metadata(self.mode, self.current_session_id)
             except (KeyboardInterrupt, EOFError):
                 self.current_session_id = session_id
                 console.print(f"[dim]Defaulting to restore recent session: {session_id}[/]")
+                self._update_metadata(self.mode, self.current_session_id)
         else:
             self.current_session_id = self.create_new_session()
             console.print("[green]First run, created new session[/]")
+            self._update_metadata(self.mode, self.current_session_id)
 
         return self.current_session_id
 
@@ -115,6 +130,7 @@ class SessionManager:
         old_session = self.current_session_id
         self.current_session_id = session_id
         logger.info("Switched session: %s -> %s", old_session, session_id)
+        self._update_metadata(self.mode, session_id)
         return True
 
     def get_most_recent_session(self, mode: Optional[str] = None) -> Optional[Dict[str, Any]]:
@@ -208,3 +224,16 @@ class SessionManager:
             logger.warning("Storage for mode '%s' not preconfigured; creating default SessionStorage", mode)
             self.storages[mode] = SessionStorage(self.storage_dirs.get(mode, f"data/{mode}/sessions"))
         return self.storages[mode]
+
+    def _update_metadata(self, mode: str, session_id: str) -> None:
+        if self.metadata_manager and self.project_context:
+            try:
+                self.metadata_manager.update_project(
+                    project_path=self.project_context.project_path,
+                    project_id=self.project_context.project_id,
+                    project_name=self.project_context.project_name,
+                    mode=mode,
+                    session_id=session_id,
+                )
+            except Exception as exc:  # pragma: no cover - metadata should not block flows
+                logger.debug("Metadata update skipped: %s", exc)

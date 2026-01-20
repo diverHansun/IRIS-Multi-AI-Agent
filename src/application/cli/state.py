@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 from rich.console import Console
 
 from src.config import settings
+from src.core.project import ProjectContext, MetadataManager
 
 
 def _resolve_default_provider() -> str:
@@ -88,6 +89,10 @@ class AppState:
 
     # Session restoration for mode switching
     _basic_session_id: Optional[str] = None
+
+    # Project context
+    project_context: Optional[ProjectContext] = None
+    metadata_manager: Optional[MetadataManager] = None
 
     # Interrupt handling
     exit_hint_until: Optional[float] = None

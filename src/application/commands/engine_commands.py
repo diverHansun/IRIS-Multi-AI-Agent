@@ -46,17 +46,30 @@ class SwitchEngineCommand(BaseCommand):
             logger = logging.getLogger(__name__)
             agent_config = ctx.get_engine_config("agent")
             agent_type = agent_config.get("agent_type", "basic")
+            project_context = getattr(ctx, "project_context", None)
+            metadata_manager = getattr(ctx, "metadata_manager", None)
 
             # Ensure session manager exists
             if not getattr(ctx, "session_manager", None) or getattr(ctx.session_manager, "memory_manager", None):
-                ctx.session_manager = SessionManager(mode="basic")
+                ctx.session_manager = SessionManager(
+                    mode="basic",
+                    project_context=project_context,
+                    metadata_manager=metadata_manager,
+                )
 
             if engine == "llm":
                 if getattr(ctx.session_manager, "memory_manager", None):
-                    ctx.session_manager = SessionManager(mode="llm")
+                    ctx.session_manager = SessionManager(
+                        mode="llm",
+                        project_context=project_context,
+                        metadata_manager=metadata_manager,
+                    )
                 else:
                     ctx.session_manager.mode = "llm"
-                ctx.llm_memory = ctx.llm_memory or LLMMemory()
+                ctx.llm_memory = ctx.llm_memory or LLMMemory(
+                    project_context=project_context,
+                    metadata_manager=metadata_manager,
+                )
                 ctx.basic_checkpointer = None
                 ctx.deep_checkpointer = None
                 ctx.memory_sync = None
@@ -79,11 +92,21 @@ class SwitchEngineCommand(BaseCommand):
 
             elif engine == "agent" and agent_type == "basic":
                 if getattr(ctx.session_manager, "memory_manager", None):
-                    ctx.session_manager = SessionManager(mode="basic")
+                    ctx.session_manager = SessionManager(
+                        mode="basic",
+                        project_context=project_context,
+                        metadata_manager=metadata_manager,
+                    )
                 else:
                     ctx.session_manager.mode = "basic"
-                ctx.basic_checkpointer = ctx.basic_checkpointer or BasicAgentCheckpointer()
-                ctx.llm_memory = ctx.llm_memory or LLMMemory()
+                ctx.basic_checkpointer = ctx.basic_checkpointer or BasicAgentCheckpointer(
+                    project_context=project_context,
+                    metadata_manager=metadata_manager,
+                )
+                ctx.llm_memory = ctx.llm_memory or LLMMemory(
+                    project_context=project_context,
+                    metadata_manager=metadata_manager,
+                )
                 ctx.deep_checkpointer = None
                 ctx.memory_sync = None
                 ctx.global_memory = None
@@ -103,8 +126,15 @@ class SwitchEngineCommand(BaseCommand):
                         ctx.console.print(f"[dim]Created new basic session: {ctx.session_id}[/]")
 
             elif engine == "agent" and agent_type == "deep":
-                ctx.session_manager = SessionManager(mode="deep")
-                ctx.deep_checkpointer = ctx.deep_checkpointer or DeepAgentCheckpointer()
+                ctx.session_manager = SessionManager(
+                    mode="deep",
+                    project_context=project_context,
+                    metadata_manager=metadata_manager,
+                )
+                ctx.deep_checkpointer = ctx.deep_checkpointer or DeepAgentCheckpointer(
+                    project_context=project_context,
+                    metadata_manager=metadata_manager,
+                )
                 ctx.basic_checkpointer = None
                 ctx.llm_memory = None
                 ctx.global_memory = None

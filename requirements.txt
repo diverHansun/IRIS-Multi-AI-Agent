@@ -1,15 +1,15 @@
 # 核心框架
-langchain==1.0.5
+langchain==1.2.0
 langchain-community==1.0.0a1
-langchain-core==1.0.4
+langchain-core==1.2.2
 langchain-text-splitters==1.0.0
-langgraph==1.0.2
+langgraph==1.0.5
 
 # LLM集成
 zhipuai==2.1.5.20250825
 langchain-anthropic==1.0.0
 langchain-ollama==1.0.0
-langchain-openai==1.0.2
+langchain-openai==1.1.0
 openai==2.5.0
 ollama==0.6.0
 
@@ -42,11 +42,11 @@ numpy==2.2.6
 sympy==1.14.0
 
 # 数据处理
-PyYAML==6.0.2
-Jinja2==3.1.6
+pyyaml==6.0.2
+jinja2==3.1.6
 
 # MCP集成
-langchain-mcp-adapters==0.1.11
+langchain-mcp-adapters==0.1.13
 mcp==1.13.1
 tomli==2.2.1
 
@@ -55,3 +55,7 @@ pytz==2025.2
 
 # ASCII艺术
 pyfiglet==1.0.4
+
+# 测试框架
+pytest==9.0.0
+pytest-asyncio==1.3.0

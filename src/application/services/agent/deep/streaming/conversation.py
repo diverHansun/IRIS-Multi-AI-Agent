@@ -97,7 +97,16 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     deadline = time.perf_counter() + max_execution_time if isinstance(max_execution_time, (int, float)) else None
 
     runtime_checkpointer = getattr(agent, "runtime_checkpointer", None)
-    deep_checkpointer: DeepAgentCheckpointer = getattr(agent, "deep_checkpointer", None) or getattr(ctx, "deep_checkpointer", None) or DeepAgentCheckpointer()
+    project_context = getattr(ctx, "project_context", None)
+    metadata_manager = getattr(ctx, "metadata_manager", None)
+    deep_checkpointer: DeepAgentCheckpointer = (
+        getattr(agent, "deep_checkpointer", None)
+        or getattr(ctx, "deep_checkpointer", None)
+        or DeepAgentCheckpointer(
+            project_context=project_context,
+            metadata_manager=metadata_manager,
+        )
+    )
     setattr(agent, "deep_checkpointer", deep_checkpointer)
     setattr(ctx, "deep_checkpointer", deep_checkpointer)
 

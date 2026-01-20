@@ -40,7 +40,11 @@ class BaseDeepAgentFactory(ABC):
         """Create the deep agent."""
         resolved_middleware = self._resolve_middleware_config(adapter, middleware_config)
 
-        available_subagents = subagent_manager.get_available_subagents()
+        # Some managers may only expose get_available_types; keep both for compatibility
+        if hasattr(subagent_manager, "get_available_subagents"):
+            available_subagents = subagent_manager.get_available_subagents()
+        else:
+            available_subagents = {name: {} for name in subagent_manager.get_available_types()}
         system_prompt = adapter.get_system_prompt(
             subagents=available_subagents.keys(),
             tools=user_params.get("tools"),

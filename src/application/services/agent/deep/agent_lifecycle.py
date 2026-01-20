@@ -50,7 +50,10 @@ async def _instantiate_agent(
         else:
             resolved_model = model
 
-    deep_checkpointer = getattr(ctx, "deep_checkpointer", None) or DeepAgentCheckpointer()
+    deep_checkpointer = getattr(ctx, "deep_checkpointer", None) or DeepAgentCheckpointer(
+        project_context=getattr(ctx, "project_context", None),
+        metadata_manager=getattr(ctx, "metadata_manager", None),
+    )
 
     agent = await deep_agent_manager.create_deep_agent(
         provider=resolved_provider,

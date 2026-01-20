@@ -1,14 +1,11 @@
-"""Manager layer for DeepAgents."""
+"""Deep Agent managers module."""
 
-from .subagent_manager import SubAgentManager
-from .deep_agent_manager import DeepAgentManager
-
-subagent_manager = SubAgentManager()
-deep_agent_manager = DeepAgentManager(subagent_manager=subagent_manager)
+from src.agents.deepagents.managers.deep_agent_manager import DeepAgentManager, deep_agent_manager
+from src.agents.deepagents.managers.subagent_manager import SubagentManager, subagent_manager
 
 __all__ = [
     "DeepAgentManager",
-    "SubAgentManager",
     "deep_agent_manager",
+    "SubagentManager",
     "subagent_manager",
 ]

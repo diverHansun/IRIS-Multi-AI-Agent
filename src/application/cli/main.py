@@ -27,6 +27,7 @@ from src.application.cli.gui import logo as gui_logo
 from rich.markup import escape
 from src.application.cli.theme import COLORS
 
+from src.core.project import ProjectContext, MetadataManager
 from src.application.cli.state import AppState
 from src.components.deepagents.runtime_middlewares.timeout import ExecutionTimeoutError
 
@@ -79,10 +80,30 @@ def _initialize_memory(ctx: AppState) -> None:
     Following SRP: CLI manages basic/llm memory, deep agent manages deep memory.
     """
     ctx.console.print("Initializing memory system...", style=COLORS["warning"])
+    project_context = ProjectContext.from_cwd()
+    project_context.ensure_structure()
+    metadata_manager = MetadataManager()
+    metadata_manager.update_project(
+        project_path=project_context.project_path,
+        project_id=project_context.project_id,
+        project_name=project_context.project_name,
+    )
+    ctx.project_context = project_context
+    ctx.metadata_manager = metadata_manager
     # Initialize for basic/llm modes (isolated storage per mode)
-    ctx.session_manager = SessionManager(mode="basic")
-    ctx.basic_checkpointer = BasicAgentCheckpointer()
-    ctx.llm_memory = LLMMemory()
+    ctx.session_manager = SessionManager(
+        mode="basic",
+        project_context=project_context,
+        metadata_manager=metadata_manager,
+    )
+    ctx.basic_checkpointer = BasicAgentCheckpointer(
+        project_context=project_context,
+        metadata_manager=metadata_manager,
+    )
+    ctx.llm_memory = LLMMemory(
+        project_context=project_context,
+        metadata_manager=metadata_manager,
+    )
     ctx.deep_checkpointer = None
 
     ctx.session_id = ctx.session_manager.prompt_for_session_choice()
@@ -300,3 +321,6 @@ async def _cleanup_engines(ctx: AppState) -> None:
     except Exception as exc:  # pragma: no cover - best effort cleanup
         logger.debug("Engine cleanup skipped: %s", exc)
 
+
+def main() -> None:
+    asyncio.run(run())

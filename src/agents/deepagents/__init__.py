@@ -1,9 +1,5 @@
-"""DeepAgents package exposing manager-level APIs."""
+"""Deep Agents module."""
 
-from .managers.deep_agent_manager import DeepAgentManager
-from .managers.subagent_manager import SubAgentManager
+from src.agents.deepagents.managers import deep_agent_manager, subagent_manager
 
-__all__ = [
-    "DeepAgentManager",
-    "SubAgentManager",
-]
+__all__ = ["deep_agent_manager", "subagent_manager"]

@@ -221,6 +221,7 @@ config/tools/sdk/zhipu/zhipu_crawl.json
 # 记忆存储文件夹
 .memory/ 
 data/ 
+.iris/
 
 # Dify 个人配置文件
 config/dify/chatflows/*.yml

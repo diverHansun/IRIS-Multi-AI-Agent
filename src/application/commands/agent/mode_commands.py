@@ -67,9 +67,19 @@ class ModeCommand(BaseCommand):
 
             ctx._basic_session_id = ctx.session_id
 
-            ctx.session_manager = SessionManager(mode="deep")
+            project_context = getattr(ctx, "project_context", None)
+            metadata_manager = getattr(ctx, "metadata_manager", None)
 
-            ctx.deep_checkpointer = ctx.deep_checkpointer or DeepAgentCheckpointer()
+            ctx.session_manager = SessionManager(
+                mode="deep",
+                project_context=project_context,
+                metadata_manager=metadata_manager,
+            )
+
+            ctx.deep_checkpointer = ctx.deep_checkpointer or DeepAgentCheckpointer(
+                project_context=project_context,
+                metadata_manager=metadata_manager,
+            )
             ctx.basic_checkpointer = None
             ctx.llm_memory = None
             ctx.memory_sync = None
@@ -113,12 +123,22 @@ class ModeCommand(BaseCommand):
         from src.components.shared.memory import SessionManager, BasicAgentCheckpointer, LLMMemory
 
         if not getattr(ctx, "session_manager", None) or getattr(ctx.session_manager, "memory_manager", None):
-            ctx.session_manager = SessionManager(mode="basic")
+            ctx.session_manager = SessionManager(
+                mode="basic",
+                project_context=getattr(ctx, "project_context", None),
+                metadata_manager=getattr(ctx, "metadata_manager", None),
+            )
         else:
             ctx.session_manager.mode = "basic"
 
-        ctx.basic_checkpointer = ctx.basic_checkpointer or BasicAgentCheckpointer()
-        ctx.llm_memory = ctx.llm_memory or LLMMemory()
+        ctx.basic_checkpointer = ctx.basic_checkpointer or BasicAgentCheckpointer(
+            project_context=getattr(ctx, "project_context", None),
+            metadata_manager=getattr(ctx, "metadata_manager", None),
+        )
+        ctx.llm_memory = ctx.llm_memory or LLMMemory(
+            project_context=getattr(ctx, "project_context", None),
+            metadata_manager=getattr(ctx, "metadata_manager", None),
+        )
         ctx.deep_checkpointer = None
         ctx.memory_sync = None
         ctx.global_memory = None

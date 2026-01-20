@@ -15,6 +15,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 
+from src.core.project import ProjectContext, MetadataManager
 from ..storage.session_storage import SessionStorage
 
 logger = logging.getLogger(__name__)
@@ -25,12 +26,23 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
 
     def __init__(
         self,
-        storage_dir: str = "data/deepagent/sessions",
+        storage_dir: Optional[str] = None,
         runtime_checkpointer: MemorySaver | None = None,
         max_messages: int = 100,
+        project_context: Optional[ProjectContext] = None,
+        metadata_manager: Optional[MetadataManager] = None,
     ) -> None:
         super().__init__()
-        self.storage = SessionStorage(storage_dir)
+        self.project_context = project_context
+        self.metadata_manager = metadata_manager
+
+        resolved_dir = storage_dir
+        if not resolved_dir:
+            self.project_context = self.project_context or ProjectContext.from_cwd()
+            self.project_context.ensure_structure()
+            resolved_dir = str(self.project_context.get_storage_dir("deep"))
+
+        self.storage = SessionStorage(resolved_dir)
         self.runtime_checkpointer = runtime_checkpointer or MemorySaver()
         self.max_messages = max_messages
 
@@ -80,9 +92,8 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("Failed to read runtime checkpoint for %s: %s", session_id, exc)
 
-        # Debug: log raw messages before filtering
         logger.debug("[PERSIST] Messages to persist (raw): %d messages", len(messages_to_persist))
-        for idx, msg in enumerate(messages_to_persist[:5]):  # Log first 5
+        for idx, msg in enumerate(messages_to_persist[:5]):
             msg_type = type(msg).__name__ if hasattr(msg, "__class__") else str(type(msg))
             msg_content = getattr(msg, "content", str(msg))[:50] if hasattr(msg, "content") else str(msg)[:50]
             logger.debug("[PERSIST]   [%d] %s: %s...", idx, msg_type, msg_content)
@@ -93,17 +104,12 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
             return False
 
         logger.debug("[PERSIST] After filtering: %d conversational messages", len(filtered))
-        for idx, msg in enumerate(filtered[:5]):  # Log first 5
+        for idx, msg in enumerate(filtered[:5]):
             logger.debug("[PERSIST]   [%d] %s: %s...", idx, type(msg).__name__, msg.content[:50])
 
-        # CRITICAL FIX: The messages from runtime_checkpointer already contain full history.
-        # Do NOT merge with existing session - just replace it.
-        # The MemorySaver checkpoint is the source of truth after each conversation turn.
         existing = self.storage.load_session(session_id) or []
         logger.debug("[PERSIST] Existing session messages: %d", len(existing))
 
-        # Use filtered messages directly (they are already the complete history)
-        # Only deduplicate to handle edge cases
         deduplicated = self._deduplicate_messages(filtered)
         logger.debug("[PERSIST] After deduplication: %d messages (no merge, direct replacement)", len(deduplicated))
 
@@ -115,6 +121,7 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
             logger.error("Failed to persist messages for session %s", session_id)
             return False
 
+        self._update_metadata(session_id)
         return True
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
@@ -194,6 +201,8 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
 
         if not self.storage.save_session(thread_id, trimmed, metadata=metadata):
             logger.error("Failed to save checkpoint for session %s", thread_id)
+        else:
+            self._update_metadata(thread_id)
 
         checkpoint_id = self._make_checkpoint_id(len(trimmed))
         return {
@@ -251,12 +260,15 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
         flattened = self._flatten_messages(messages)
         filtered = [m for m in flattened if isinstance(m, (HumanMessage, AIMessage))]
 
-        # Debug logging
         human_count = sum(1 for m in filtered if isinstance(m, HumanMessage))
         ai_count = sum(1 for m in filtered if isinstance(m, AIMessage))
         logger.debug(
             "[FILTER] Input: %d messages, Flattened: %d, Filtered: %d (Human: %d, AI: %d)",
-            len(messages), len(flattened), len(filtered), human_count, ai_count
+            len(messages),
+            len(flattened),
+            len(filtered),
+            human_count,
+            ai_count,
         )
 
         return filtered
@@ -266,13 +278,6 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
         Remove consecutive duplicates only.
 
         This preserves non-consecutive duplicates (e.g., user asks the same question twice).
-        Only removes true duplicates like:
-        - Same message appearing twice in a row due to a bug
-        - Repeated system messages
-
-        Example:
-        [H1, A1, H1, A2] -> keeps all (H1 not consecutive)
-        [H1, H1, A1, A1] -> [H1, A1] (consecutive duplicates removed)
         """
         if not messages:
             return []
@@ -282,14 +287,12 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
 
         for msg in messages[1:]:
             prev = deduped[-1]
-            # Only remove if both type and content match the previous message
-            if (type(msg).__name__ == type(prev).__name__ and
-                msg.content == prev.content):
+            if (type(msg).__name__ == type(prev).__name__ and msg.content == prev.content):
                 duplicates_removed += 1
                 logger.debug(
                     "[DEDUP] Removing consecutive duplicate: %s: %s...",
                     type(msg).__name__,
-                    (msg.content[:30] if hasattr(msg, "content") else "")
+                    (msg.content[:30] if hasattr(msg, "content") else ""),
                 )
                 continue
 
@@ -338,3 +341,16 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
     def _make_checkpoint_id(self, length: int) -> str:
         """Create a monotonic checkpoint id based on message count."""
         return f"{length:016d}"
+
+    def _update_metadata(self, session_id: str) -> None:
+        if self.metadata_manager and self.project_context:
+            try:
+                self.metadata_manager.update_project(
+                    project_path=self.project_context.project_path,
+                    project_id=self.project_context.project_id,
+                    project_name=self.project_context.project_name,
+                    mode="deep",
+                    session_id=session_id,
+                )
+            except Exception as exc:  # pragma: no cover
+                logger.debug("Metadata update skipped: %s", exc)
