@@ -1,4 +1,4 @@
-# Multi-AI-Agent 🤖
+# IRIS      Multi-AI-Agent 🤖
 基于LangChain和多LLM的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎、高德地图、OKX加密货币和Notion知识管理功能。
 
 ## ✨ 一、功能特性
@@ -132,27 +132,36 @@ Agent引擎提供两种模式，可通过 `/mode <basic|deep>` 在引擎内切�
 
 ### 1. 环境准备
 
-确保您的Python版本 >= 3.8
+确保您的Python版本 >= 3.10，并已安装 [uv](https://github.com/astral-sh/uv) 包管理器。
 
 ```bash
 # 克隆项目
 git clone <your-repo-url>
 cd Multi-AI-Agent
 
-# 创建虚拟环境
-python -m venv .venv
-
-# 激活虚拟环境 (Windows PowerShell)
-.venv\Scripts\Activate.ps1
-
-# 激活虚拟环境 (Linux/Mac)
-source .venv/bin/activate
-
-# 安装依赖
-pip install -r requirements.txt
+# 使用uv创建虚拟环境并安装依赖
+uv sync
 ```
 
-### 2. 配置API密钥
+### 2. 打包安装
+
+使用uv工具安装，支持在项目根目录直接运行 `iris` 命令：
+
+```powershell
+# Windows PowerShell
+.venv\Scripts\activate
+uv tool install --python .venv\Scripts\python.exe --force .
+```
+
+```bash
+# Linux/Mac
+source .venv/bin/activate
+uv tool install --python .venv/bin/python --force .
+```
+
+### 3. 配置API密钥
+
+首次运行会自动创建 `~/.iris/` 全局配置目录（Windows: `C:\Users\<你>\.iris\`）。
 
 支持的API服务：
 
@@ -163,13 +172,23 @@ pip install -r requirements.txt
 5. **高德地图** - [高德地图开放平台](https://lbs.amap.com/dev/key/app) (推荐)
 6. **Notion** - [Notion API](https://developers.notion.com/) (可选)
 
-复制 `.env.example` 为 `.env`：
+配置API密钥：
 
-```bash
-cp .env.example .env
+```powershell
+# Windows PowerShell
+cd $env:USERPROFILE\.iris
+Copy-Item .env.example .env -Force
+notepad .env  # 编辑并填写API密钥
 ```
 
-编辑 `.env` 文件：
+```bash
+# Linux/Mac
+cd ~/.iris
+cp .env.example .env
+nano .env  # 编辑并填写API密钥
+```
+
+`.env` 文件配置示例：
 ```env
 # 必需 - 至少配置一个LLM
 ZHIPU_API_KEY=your_zhipu_api_key_here
@@ -177,8 +196,6 @@ OPENAI_API_KEY=your_openai_api_key_here
 
 # Ollama本地模型配置(可选)
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gpt-oss:20b
-# 建议使用规则代理模式以获得最佳网络兼容性
 
 # 推荐 - 搜索和地图功能
 TAVILY_API_KEY=your_tavily_api_key_here
@@ -186,26 +203,37 @@ AMAP_API_KEY=your_amap_api_key_here
 
 # Dify云端AI平台(可选)
 DIFY_API_KEY=your_dify_api_key_here
-DIFY_BASE_URL=https://api.dify.ai/v1
 
 # 可选 - Notion知识管理
 NOTION_TOKEN=your_notion_integration_token_here
 
-# 可选 - 加密货币功能
-# OKX_API_KEY=your_okx_api_key_here
-# OKX_SECRET_KEY=your_okx_secret_key_here
-# OKX_PASSPHRASE=your_okx_passphrase_here
-
 # LLM配置
-DEFAULT_LLM_PROVIDER=zhipu OR openai OR ollama
-DEFAULT_LLM_MODEL=glm-4-plus OR gpt-4o
+DEFAULT_LLM_PROVIDER=zhipu
+DEFAULT_LLM_MODEL=glm-4.5-flash
 ```
 
-### 3. 运行程序
+### 4. 运行程序
+
+在项目根目录下运行：
 
 ```bash
-# 启动交互式CLI
-python main.py
+iris
+```
+
+> **💡 提示**: 首次运行会自动初始化配置目录，后续可在任意位置运行 `iris` 命令启动。
+
+### 5. 更新程序
+
+修改代码后，重新打包安装：
+
+```powershell
+# Windows PowerShell
+uv tool install --python .venv\Scripts\python.exe --force .
+```
+
+```bash
+# Linux/Mac
+uv tool install --python .venv/bin/python --force .
 ```
 
 ## 💬 四、常用命令速查
@@ -373,11 +401,29 @@ ollama pull gpt-oss:20b
 
 ### 配置优先级
 
-项目支持多层级配置，优先级从高到低：
+项目支持多层级配置系统，优先级从高到低：
 
-1. **环境变量** (`.env` 文件) - API密钥、默认模型等
-2. **JSON配置文件** (`config/llm/models/providers.json`) - 模型参数、特性等
-3. **代码默认值** - 兜底配置
+1. **当前目录 `.env` 文件** - 项目特定的环境变量和API密钥
+2. **项目级配置** (`<project>/.iris/`) - 项目特定的配置文件和设置
+3. **用户级配置** (`~/.iris/`) - 全局用户配置，所有项目共享
+4. **内置默认配置** - 打包在程序中的默认配置（兜底）
+
+### 配置目录结构
+
+首次运行会自动创建用户级配置目录 `~/.iris/`（Windows: `C:\Users\<你>\.iris\`），包含：
+
+```
+~/.iris/
+├── .env              # 全局API密钥配置
+├── .env.example      # 配置模板
+├── config.toml       # 全局配置文件
+├── llm/              # LLM模型配置
+├── agents/           # Agent配置
+├── tools/            # 工具配置
+└── sessions/         # 会话数据
+```
+
+项目级配置（可选）：在项目根目录创建 `.iris/` 目录可覆盖全局配置。
 
 ### 核心配置项
 
@@ -395,21 +441,32 @@ ollama pull gpt-oss:20b
 
 ### 高级配置
 
-使用 `config/llm/models/providers.json` 自定义模型参数：
+#### LLM模型配置
+
+位置：`~/.iris/llm/models/providers.json`（或项目级 `.iris/llm/models/providers.json`）
 
 - **模型参数覆盖**: `mode_overrides` 字段可针对不同模式设置不同参数
 - **温度固定**: 部分模型（如GPT-5）的温度参数固定，无法通过配置修改
 - **工具支持**: `supports_tools` 字段控制模型是否启用工具调用
 
-DeepAgent配置：
-- 主代理配置：`config/agents/deep/models/mainagents.json`
-- 子代理配置：`config/agents/deep/models/subagents.json`
-- 中间件配置：`config/agents/deep/middleware/`
+#### DeepAgent配置
+
+位置：`~/.iris/agents/deep/models/`（或项目级 `.iris/agents/deep/models/`）
+
+- 主代理配置：`mainagents.json`
+- 子代理配置：`subagents.json`
+- 中间件配置：`middleware/` 目录
+
+#### 配置覆盖策略
+
+- **全局配置**: 修改 `~/.iris/` 下的配置文件，影响所有项目
+- **项目配置**: 在项目根目录创建 `.iris/` 并放置配置文件，仅影响当前项目
+- **临时配置**: 在当前目录创建 `.env` 文件，覆盖环境变量
 
 详细配置说明请参考：
-- 配置文件：`config/llm/models/providers.json`
-- 配置模板：`.env.example`
-- 示例配置：相关目录下的`example`文件
+- 安装指南：[IRIS_SETUP.md](IRIS_SETUP.md)
+- 配置模板：`~/.iris/.env.example`
+- 内置默认配置：打包在程序中自动加载
 
 > **💡 配置热重载**: 修改配置文件后，使用 `/reload` 命令即可生效，无需重启程序
 
