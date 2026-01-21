@@ -33,7 +33,7 @@ from src.application.cli.theme import COLORS, PANEL_DEFAULTS
 
 # 导入配置
 try:
-    from src.config import settings
+    from src.core.config import settings
 except ImportError:
     # 如果作为独立模块运行，创建一个简单的配置
     class Settings:

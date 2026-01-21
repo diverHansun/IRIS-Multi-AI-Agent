@@ -12,6 +12,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from src.core.config.loader import ConfigLoader, get_config_loader
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,8 +32,13 @@ class DeepAgentsProviderRegistry:
     - DIP: Depends on configuration files, not concrete implementations
     """
 
-    def __init__(self, base_path: str | Path = "config/agents/deep") -> None:
-        self.base_path = Path(base_path)
+    def __init__(
+        self,
+        base_path: Optional[str | Path] = "config/agents/deep",
+        config_loader: Optional[ConfigLoader] = None,
+    ) -> None:
+        self.base_path = Path(base_path) if base_path else None
+        self._config_loader: ConfigLoader = config_loader or get_config_loader()
         self._cache: Dict[Path, Dict[str, Any]] = {}
         self._providers: Dict[str, Any] = {}
         self._middleware_cache: Optional[Dict[str, Any]] = None
@@ -286,44 +293,74 @@ class DeepAgentsProviderRegistry:
         self, *, use_cache: bool = True
     ) -> Dict[str, Any]:
         """Load main providers configuration with fallback support."""
-        primary_path = self.base_path / "models" / "mainagents.json"
-        fallback_path = self.base_path / "models" / "mainagents.example.json"
-        if primary_path.exists():
-            return self._load_json(primary_path, use_cache=use_cache)
-        return self._load_json(fallback_path, use_cache=use_cache)
+        # 先尝试 .iris（项目/用户）与内置 config
+        config = self._config_loader.load_shared_json("agents/deep/mainagents.json")
+        if config:
+            return config
+
+        # 回退到显式 base_path
+        if self.base_path:
+            primary_path = self.base_path / "models" / "mainagents.json"
+            fallback_path = self.base_path / "models" / "mainagents.example.json"
+            if primary_path.exists():
+                return self._load_json(primary_path, use_cache=use_cache)
+            return self._load_json(fallback_path, use_cache=use_cache)
+
+        return {}
 
     def _load_subagent_models_config(
         self, *, use_cache: bool = True
     ) -> Dict[str, Any]:
         """Load subagent models configuration."""
-        return self._load_json(
-            self.base_path / "models" / "subagents.json", use_cache=use_cache
-        )
+        config = self._config_loader.load_shared_json("agents/deep/subagents.json")
+        if config:
+            return config
+
+        if self.base_path:
+            return self._load_json(
+                self.base_path / "models" / "subagents.json", use_cache=use_cache
+            )
+        return {}
 
     def _load_middleware_config(self, *, use_cache: bool = True) -> Dict[str, Any]:
         """Load middleware configuration for filesystem and shell settings."""
-        middleware_dir = self.base_path / "middleware"
-        filesystem_dir = middleware_dir / "filesystem"
+        virtual_cfg: Dict[str, Any] = (
+            self._config_loader.load_shared_json(
+                "agents/deep/middleware/filesystem/virtual_filesystem.json"
+            )
+            or {}
+        )
+        real_cfg: Dict[str, Any] = (
+            self._config_loader.load_shared_json(
+                "agents/deep/middleware/filesystem/real_filesystem.json"
+            )
+            or {}
+        )
+        shell_cfg: Dict[str, Any] = (
+            self._config_loader.load_shared_json("agents/deep/middleware/shell.json")
+            or {}
+        )
 
-        virtual_cfg: Dict[str, Any] = {}
-        real_cfg: Dict[str, Any] = {}
-        shell_cfg: Dict[str, Any] = {}
+        if self.base_path:
+            middleware_dir = self.base_path / "middleware"
+            filesystem_dir = middleware_dir / "filesystem"
 
-        virtual_path = filesystem_dir / "virtual_filesystem.json"
-        real_path = filesystem_dir / "real_filesystem.json"
-        legacy_path = middleware_dir / "filesystem.json"
-        shell_path = middleware_dir / "shell.json"
+            virtual_path = filesystem_dir / "virtual_filesystem.json"
+            real_path = filesystem_dir / "real_filesystem.json"
+            legacy_path = middleware_dir / "filesystem.json"
+            shell_path = middleware_dir / "shell.json"
 
-        if virtual_path.exists():
-            virtual_cfg = self._load_json(virtual_path, use_cache=use_cache)
-        elif legacy_path.exists():
-            virtual_cfg = self._load_json(legacy_path, use_cache=use_cache)
+            if not virtual_cfg:
+                if virtual_path.exists():
+                    virtual_cfg = self._load_json(virtual_path, use_cache=use_cache)
+                elif legacy_path.exists():
+                    virtual_cfg = self._load_json(legacy_path, use_cache=use_cache)
 
-        if real_path.exists():
-            real_cfg = self._load_json(real_path, use_cache=use_cache)
+            if not real_cfg and real_path.exists():
+                real_cfg = self._load_json(real_path, use_cache=use_cache)
 
-        if shell_path.exists():
-            shell_cfg = self._load_json(shell_path, use_cache=use_cache)
+            if not shell_cfg and shell_path.exists():
+                shell_cfg = self._load_json(shell_path, use_cache=use_cache)
 
         return {
             "filesystem": {

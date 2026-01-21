@@ -5,28 +5,19 @@
 """
 
 import logging
-import sys
-import os
 from typing import Dict, Any, Optional
 from langchain_core.tools import tool
 from typing import Annotated
 
-# 添加项目根目录到Python路径
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
 # 导入项目配置
 try:
-    from src.config import settings
-except ImportError:
-    try:
-        from config import settings
-    except ImportError:
-        # 如果无法导入配置，创建一个简单的配置对象
-        class Settings:
-            amap_api_key = None
-        settings = Settings()
+    from src.core.config import settings
+except Exception:
+    # 如果无法导入配置，创建一个简单的配置对象
+    class Settings:
+        amap_api_key = None
+
+    settings = Settings()
 
 from .client import AmapClient
 from .constants import API_ENDPOINTS, DEFAULT_PARAMS

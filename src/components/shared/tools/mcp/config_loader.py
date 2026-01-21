@@ -5,6 +5,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
+from src.core.config import ensure_initialized, get_config_loader
+
 from .types import (
     MCPConfig,
     RetryConfig,
@@ -257,10 +259,13 @@ def find_config_paths() -> List[Path]:
         else:
             return []
 
+    ensure_initialized(quiet=True)
+    loader = get_config_loader()
+
     # Look for both TOML and JSON config files
-    candidates = [Path("config/tools/mcp/mcp.toml"), Path("config/tools/mcp/mcp.json")]
-    for candidate in candidates:
-        if candidate.exists():
+    for rel in ["tools/mcp/mcp.toml", "tools/mcp/mcp.json"]:
+        candidate = loader.resolve_config_path(rel)
+        if candidate and candidate.exists():
             paths.append(candidate)
     
     return paths

@@ -9,7 +9,7 @@ import logging
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from src.config import settings
+from src.core.config import settings
 from src.core.providers import llm_registry
 from src.llm.adapters import (
     ZhipuAdapter,

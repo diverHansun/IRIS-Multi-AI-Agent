@@ -1,5 +1,10 @@
 """
 Refactored CLI main loop entrypoint.
+
+Supports three-layer configuration:
+1. Environment variables + .env files
+2. Project-level config (<project>/.iris/)
+3. User-level config (~/.iris/)
 """
 
 from __future__ import annotations
@@ -28,6 +33,13 @@ from rich.markup import escape
 from src.application.cli.theme import COLORS
 
 from src.core.project import ProjectContext, MetadataManager
+from src.core.config import (
+    ensure_initialized,
+    set_project_context,
+    get_config,
+    load_env_for_project,
+    reload_settings,
+)
 from src.application.cli.state import AppState
 from src.components.deepagents.runtime_middlewares.timeout import ExecutionTimeoutError
 
@@ -44,7 +56,18 @@ except Exception:  # pragma: no cover - optional dependency
 async def run() -> None:
     """
     Entrypoint for the CLI main loop.
+
+    Initialization order:
+    1. Ensure global config (~/.iris/) is initialized
+    2. Create project context
+    3. Set project context for config loader
+    4. Initialize memory system
+    5. Start CLI loop
     """
+    # 1. Ensure global configuration is initialized
+    # This will create ~/.iris/ and copy default configs on first run
+    ensure_initialized(quiet=True)
+
     ctx = AppState()
     if MCP_AVAILABLE:
         ctx.mcp_manager = GlobalMCPManager
@@ -82,6 +105,14 @@ def _initialize_memory(ctx: AppState) -> None:
     ctx.console.print("Initializing memory system...", style=COLORS["warning"])
     project_context = ProjectContext.from_cwd()
     project_context.ensure_structure()
+
+    # Reload env & settings for the detected project
+    load_env_for_project(project_context.project_path)
+    reload_settings()
+
+    # Set project context for config loader (enables project-level config)
+    set_project_context(project_context.iris_dir)
+
     metadata_manager = MetadataManager()
     metadata_manager.update_project(
         project_path=project_context.project_path,

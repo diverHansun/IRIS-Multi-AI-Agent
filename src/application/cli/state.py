@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 
 from rich.console import Console
 
-from src.config import settings
+from src.core.config import settings
 from src.core.project import ProjectContext, MetadataManager
 
 

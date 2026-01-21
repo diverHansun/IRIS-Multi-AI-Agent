@@ -7,6 +7,8 @@ import json
 from typing import Optional, List, Dict, Union
 from pathlib import Path
 
+from src.core.config import ensure_initialized, get_config_loader
+
 
 class Crawl4AIConfig:
     """Configuration for Crawl4AI connector"""
@@ -21,15 +23,14 @@ class Crawl4AIConfig:
     
     def _find_config_file(self):
         """Find the config file in the standard locations"""
-        possible_paths = [
-            os.getenv("CRAWL4AI_CONFIG_PATH"),
-            "config/tools/connector/crawl4ai/config.json",
-        ]
-        
-        for path in possible_paths:
-            if path and os.path.exists(path):
-                return path
-        return None
+        env_path = os.getenv("CRAWL4AI_CONFIG_PATH")
+        if env_path and os.path.exists(env_path):
+            return env_path
+
+        ensure_initialized(quiet=True)
+        loader = get_config_loader()
+        resolved = loader.resolve_config_path("tools/connector/crawl4ai/config.json")
+        return str(resolved) if resolved else None
     
     def _load_config_from_file(self):
         """Load configuration from the JSON file"""

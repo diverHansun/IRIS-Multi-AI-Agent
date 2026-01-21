@@ -11,6 +11,8 @@ from typing import Dict, Any, Optional, List, Literal
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from src.core.config import ensure_initialized, get_config_loader
+
 logger = logging.getLogger(__name__)
 
 
@@ -155,6 +157,36 @@ class TavilyConfig:
         return bool(self.api_key and len(self.api_key.strip()) > 0)
 
 
+def _load_json_with_loader(
+    default_relative_path: str, config_path: Optional[str]
+) -> Dict[str, Any]:
+    """
+    Load JSON configuration via shared ConfigLoader with optional explicit path.
+    """
+    if config_path:
+        path_obj = Path(config_path)
+        if not path_obj.exists():
+            logger.warning("Config file not found at %s, using defaults", path_obj)
+            return {}
+        try:
+            with open(path_obj, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error("Failed to load config from %s: %s", path_obj, e)
+            return {}
+
+    ensure_initialized(quiet=True)
+    loader = get_config_loader()
+    data = loader.load_shared_json(default_relative_path)
+    if data is None:
+        logger.warning(
+            "Config %s not found in .iris or bundled defaults, using empty config",
+            default_relative_path,
+        )
+        return {}
+    return data
+
+
 def load_config_from_json(config_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Load configuration from JSON file
@@ -165,27 +197,10 @@ def load_config_from_json(config_path: Optional[str] = None) -> Dict[str, Any]:
     Returns:
         Dictionary with configuration values
     """
-    if config_path is None:
-        # Default path - navigate from src/components/shared/tools/sdk/tavily_search/config.py
-        # up to project root (6 levels) then to config/tools/sdk/tavily/config.json
-        current_file = Path(__file__).resolve()
-        project_root = current_file.parent.parent.parent.parent.parent.parent.parent
-        config_path = project_root / "config" / "tools" / "sdk" / "tavily" / "config.json"
-    else:
-        config_path = Path(config_path)
-
-    if not config_path.exists():
-        logger.warning(f"Config file not found at {config_path}, using defaults")
-        return {}
-
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
-        logger.info(f"Loaded Tavily configuration from {config_path}")
-        return config_data
-    except Exception as e:
-        logger.error(f"Failed to load config from {config_path}: {e}")
-        return {}
+    config_data = _load_json_with_loader("tools/sdk/tavily.json", config_path)
+    if config_path:
+        logger.info("Loaded Tavily configuration from %s", config_path)
+    return config_data
 
 
 def load_config_from_env() -> TavilyConfig:

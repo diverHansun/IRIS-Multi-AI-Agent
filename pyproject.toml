@@ -39,8 +39,16 @@ dependencies = [
     "rich==14.2.0",
     "sympy==1.14.0",
     "tomli==2.2.1",
+    "tomlkit>=0.12.0",
     "urllib3==2.5.0",
     "zhipuai==2.1.5.20250825",
+]
+
+[tool.hatch.build]
+include = [
+    "config/**",
+    "IRIS_SETUP.md",
+    "src/agents/deepagents/**",
 ]
 
 [project.scripts]
@@ -52,6 +60,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+force-include = { "config" = "config" }
 
 [tool.uv]
 package = true

@@ -25,6 +25,7 @@ from src.application.services.dify.client import DifyClient, DifyClientError
 from src.application.services.dify.streaming import DifyStreaming
 from src.application.services.dify.upload import handle_upload_command
 from src.application.cli.theme import COLORS
+from src.core.config import ensure_initialized, get_config_loader
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class _DifyRuntime:
     """
 
     def __init__(
-        self, console: Console, config_path: str = "config/dify/config.json"
+        self, console: Console, config_path: Optional[str] = None
     ) -> None:
         self.console = console
         self.config_path = config_path
@@ -98,9 +99,20 @@ class _DifyRuntime:
         return {"type": "success", "message": "Dify client initialised successfully."}
 
     def _load_config(self) -> Dict[str, Any]:
-        config_file = Path(self.config_path)
+        if self.config_path:
+            config_file = Path(self.config_path)
+        else:
+            ensure_initialized(quiet=True)
+            loader = get_config_loader()
+            resolved = loader.resolve_config_path("dify/config.json")
+            if not resolved:
+                raise FileNotFoundError(
+                    "Missing configuration file: dify/config.json (not found in .iris)"
+                )
+            config_file = resolved
+
         if not config_file.exists():
-            raise FileNotFoundError(f"Missing configuration file: {self.config_path}")
+            raise FileNotFoundError(f"Missing configuration file: {config_file}")
 
         raw_content = config_file.read_text(encoding="utf-8")
         substituted = self._substitute_env_vars(raw_content)

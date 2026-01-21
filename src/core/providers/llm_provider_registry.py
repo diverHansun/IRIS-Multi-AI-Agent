@@ -4,17 +4,49 @@ LLM Provider Registry
 Manages provider configurations specifically for LLM module.
 Provides pure LLM parameters without agent-specific configurations.
 
+Supports three-layer configuration:
+1. Project-level config (<project>/.iris/llm/providers.json)
+2. User-level config (~/.iris/llm/providers.json)
+3. Built-in config (config/llm/models/providers.json)
+
 Following SOLID principles:
 - SRP: Only manages LLM configurations
 - OCP: Extendable without modifying existing code
 - DIP: Depends on abstractions (config files), not concrete implementations
 """
 
+from __future__ import annotations
+
+import json
 import logging
 import os
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _load_json_file(path: Path) -> Optional[Dict[str, Any]]:
+    """Load JSON file safely."""
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("Failed to load %s: %s", path, e)
+        return None
+
+
+def _deep_merge(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+    """Deep merge two dictionaries."""
+    result = base.copy()
+    for key, value in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 class LLMProviderRegistry:
@@ -25,39 +57,68 @@ class LLMProviderRegistry:
     - Load and manage LLM provider configurations
     - Provide pure LLM parameters (temperature, max_tokens, etc.)
     - Resolve configuration with priority: user params > env vars > config file
+
+    Configuration priority (high to low):
+    1. Project-level config (<project>/.iris/llm/providers.json)
+    2. User-level config (~/.iris/llm/providers.json)
+    3. Built-in config (config/llm/models/providers.json)
     """
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(
+        self,
+        config_path: Optional[str] = None,
+        user_config_dir: Optional[Path] = None,
+        project_config_dir: Optional[Path] = None,
+        config_loader=None,
+    ):
         """
         Initialize LLM provider registry.
 
         Args:
-            config_path: Path to configuration file. If None, uses default path.
+            config_path: Optional custom configuration path (highest priority fallback).
+            user_config_dir: Override user config directory (~/.iris/).
+            project_config_dir: Override project config directory (<project>/.iris/).
+            config_loader: Optional shared ConfigLoader instance.
         """
+        from src.core.config.loader import ConfigLoader, get_config_loader
+
         self._providers: Dict[str, Dict[str, Any]] = {}
-        self._config_path = config_path or "config/llm/models/providers.json"
+        self._custom_config_path = Path(config_path) if config_path else None
+        self._config_loader: ConfigLoader = config_loader or get_config_loader()
+
+        # Allow overrides of loader directories for advanced use-cases
+        if user_config_dir:
+            self._config_loader._user_config_dir = Path(user_config_dir)
+        if project_config_dir is not None:
+            self._config_loader._project_config_dir = (
+                Path(project_config_dir) if project_config_dir else None
+            )
+
+        self._load_from_config()
+
+    def set_project_config_dir(self, path: Optional[Path]) -> None:
+        """Set project config directory and reload."""
+        self._config_loader._project_config_dir = path
         self._load_from_config()
 
     def _load_from_config(self) -> None:
-        """Load provider configurations from JSON file."""
-        try:
-            import json
+        """
+        Load provider configurations with three-layer merging.
 
-            with open(self._config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
+        Priority: built-in < user-level < project-level
+        """
+        self._providers = {}
 
-            self._providers = config_data.get("providers", {})
-            logger.info(f"Loaded {len(self._providers)} LLM provider configurations")
+        config_data = self._config_loader.load_shared_json("llm/providers.json") or {}
 
-        except FileNotFoundError:
-            logger.error(f"Configuration file not found: {self._config_path}")
-            self._providers = {}
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse configuration file: {e}")
-            self._providers = {}
-        except Exception as e:
-            logger.error(f"Failed to load provider configurations: {e}")
-            self._providers = {}
+        # Custom fallback path (highest priority override) if provided
+        if not config_data and self._custom_config_path:
+            config_data = _load_json_file(self._custom_config_path) or {}
+
+        providers = config_data.get("providers", {})
+        self._providers = _deep_merge(self._providers, providers)
+
+        logger.info("Loaded %d LLM provider configurations", len(self._providers))
 
     def reload_config(self) -> bool:
         """

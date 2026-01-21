@@ -15,7 +15,10 @@ Design:
 """
 
 import logging
+from pathlib import Path
 from typing import Dict, Any, Optional
+
+from src.core.config.loader import ConfigLoader, get_config_loader
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,9 @@ class BasicAgentsProviderRegistry:
     - Business logic (handled by AgentConfig)
     """
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(
+        self, config_path: Optional[str] = None, config_loader: Optional[ConfigLoader] = None
+    ):
         """
         Initialize BasicAgents provider registry.
 
@@ -44,28 +49,32 @@ class BasicAgentsProviderRegistry:
             config_path: Path to configuration file. If None, uses default path.
         """
         self._providers: Dict[str, Dict[str, Any]] = {}
-        self._config_path = config_path or "config/agents/basic/models/providers.json"
+        self._custom_config_path = Path(config_path) if config_path else None
+        self._config_loader: ConfigLoader = config_loader or get_config_loader()
         self._load_from_config()
 
     def _load_from_config(self) -> None:
         """Load provider configurations from JSON file."""
         try:
-            import json
+            config_data = self._config_loader.load_shared_json(
+                "agents/basic/providers.json"
+            )
+            if not config_data and self._custom_config_path:
+                import json
 
-            with open(self._config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
+                with open(self._custom_config_path, "r", encoding="utf-8") as f:
+                    config_data = json.load(f)
 
-            self._providers = config_data.get("providers", {})
-            logger.info(f"Loaded {len(self._providers)} BasicAgents provider configurations")
+            self._providers = (config_data or {}).get("providers", {})
+            logger.info(
+                "Loaded %d BasicAgents provider configurations", len(self._providers)
+            )
 
         except FileNotFoundError:
-            logger.error(f"Configuration file not found: {self._config_path}")
-            self._providers = {}
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse configuration file: {e}")
+            logger.error("BasicAgents configuration file not found")
             self._providers = {}
         except Exception as e:
-            logger.error(f"Failed to load provider configurations: {e}")
+            logger.error("Failed to load provider configurations: %s", e)
             self._providers = {}
 
     def reload_config(self) -> bool:

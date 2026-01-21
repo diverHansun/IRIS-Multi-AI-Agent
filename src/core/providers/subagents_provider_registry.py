@@ -5,12 +5,13 @@ Manages subagent configurations with clear parameter categorization following
 the same pattern as BasicAgentsProviderRegistry for consistency.
 """
 
-import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from src.components.deepagents.prompts.registry import DeepAgentPromptRegistry
+from src.core.config.loader import ConfigLoader, get_config_loader
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class SubAgentsProviderRegistry:
         self,
         config_path: Optional[str] = None,
         prompt_registry: Optional[DeepAgentPromptRegistry] = None,
+        config_loader: Optional[ConfigLoader] = None,
     ):
         """
         Initialize SubAgents provider registry.
@@ -45,9 +47,8 @@ class SubAgentsProviderRegistry:
             prompt_registry: Optional custom prompt registry instance.
                 If None, creates default instance.
         """
-        self._config_path = Path(
-            config_path or "config/agents/deep/models/subagents.json"
-        )
+        self._custom_config_path = Path(config_path) if config_path else None
+        self._config_loader: ConfigLoader = config_loader or get_config_loader()
         self._prompt_registry = prompt_registry or DeepAgentPromptRegistry()
         self._configs: Dict[str, Dict[str, Any]] = {}
         self._load_from_config()
@@ -55,22 +56,26 @@ class SubAgentsProviderRegistry:
     def _load_from_config(self) -> None:
         """Load subagent configurations from JSON file."""
         try:
-            with open(self._config_path, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
+            config_data = self._config_loader.load_shared_json(
+                "agents/deep/subagents.json"
+            )
+            if not config_data and self._custom_config_path:
+                with open(self._custom_config_path, "r", encoding="utf-8") as f:
+                    config_data = json.load(f)
 
-            self._configs = config_data
+            self._configs = config_data or {}
             logger.info(
-                f"Loaded {len(self._configs)} subagent configurations from {self._config_path}"
+                "Loaded %d subagent configurations", len(self._configs)
             )
 
         except FileNotFoundError:
-            logger.error(f"Configuration file not found: {self._config_path}")
+            logger.error("Subagent configuration file not found")
             self._configs = {}
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse configuration file: {e}")
+            logger.error("Failed to parse configuration file: %s", e)
             self._configs = {}
         except Exception as e:
-            logger.error(f"Failed to load subagent configurations: {e}")
+            logger.error("Failed to load subagent configurations: %s", e)
             self._configs = {}
 
     def reload_config(self) -> bool:
