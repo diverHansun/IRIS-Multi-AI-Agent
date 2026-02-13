@@ -12,8 +12,14 @@ This guide shows how to package and use the `iris` command globally, while keepi
 Run in the project root:
 ```powershell
 .venv\Scripts\activate
-uv tool install --python .venv\Scripts\python.exe --force .
+uv tool uninstall muti-ai-agent 2>$null
+uv tool uninstall iris-muti-ai-agent 2>$null
+uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall --refresh --no-cache .
 ```
+Branding and package naming:
+- Brand label: `IRIS:muti-ai-agent`
+- Python package id: `iris-muti-ai-agent` (used by `uv tool`)
+
 This packages the project (including bundled `config/`) and installs `iris` to your user tool path (e.g. `C:\Users\<you>\.local\bin\iris.exe`).
 
 ## 3) Initialize global config
@@ -35,7 +41,7 @@ Keys placed here work for all directories. A project-specific `.env` (or `<proje
 ## 5) Update after code changes
 Rebuild and reinstall the tool anytime you modify the project:
 ```powershell
-uv tool install --python .venv\Scripts\python.exe --force .
+uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall --refresh --no-cache .
 ```
 
 ## 6) Verify

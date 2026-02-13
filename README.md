@@ -145,18 +145,25 @@ uv sync
 
 ### 2. 打包安装
 
-使用uv工具安装，支持在项目根目录直接运行 `iris` 命令：
+使用 uv 工具安装后，可在项目根目录直接运行 `iris` 命令。
+
+- 品牌名称: `IRIS:muti-ai-agent`
+- Python 分发包名: `iris-muti-ai-agent`（用于 `uv tool` 安装管理）
 
 ```powershell
 # Windows PowerShell
 .venv\Scripts\activate
-uv tool install --python .venv\Scripts\python.exe --force .
+uv tool uninstall muti-ai-agent 2>$null
+uv tool uninstall iris-muti-ai-agent 2>$null
+uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall --refresh --no-cache .
 ```
 
 ```bash
 # Linux/Mac
 source .venv/bin/activate
-uv tool install --python .venv/bin/python --force .
+uv tool uninstall muti-ai-agent || true
+uv tool uninstall iris-muti-ai-agent || true
+uv tool install --python .venv/bin/python --editable --force --reinstall --refresh --no-cache .
 ```
 
 ### 3. 配置API密钥
@@ -228,14 +235,52 @@ iris
 
 ```powershell
 # Windows PowerShell
-uv tool install --python .venv\Scripts\python.exe --force .
+uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall --refresh --no-cache .
 ```
 
 ```bash
 # Linux/Mac
-uv tool install --python .venv/bin/python --force .
+uv tool install --python .venv/bin/python --editable --force --reinstall --refresh --no-cache .
 ```
 
+### 6. 启动 Crawl4AI Connector 服务（Docker）
+
+项目根目录已提供 `docker-compose.yml`，可直接启动：
+
+```powershell
+# 启动 Crawl4AI 服务
+docker compose up -d crawl4ai
+
+# 查看状态
+docker compose ps crawl4ai
+
+# 查看最近日志
+docker compose logs --tail 100 crawl4ai
+
+# 健康检查
+Invoke-WebRequest http://localhost:11235/health
+```
+
+```bash
+# 启动 Crawl4AI 服务
+docker compose up -d crawl4ai
+
+# 查看状态
+docker compose ps crawl4ai
+
+# 查看最近日志
+docker compose logs --tail 100 crawl4ai
+
+# 健康检查
+curl http://localhost:11235/health
+```
+
+服务启动后可在 CLI 中验证：
+
+```text
+/connector status
+/connector tools
+```
 ## 💬 四、常用命令速查
 
 ### 全局命令（所有引擎可用）

@@ -1,7 +1,7 @@
 [project]
-name = "muti-ai-agent"
-version = "0.1.0"
-description = "Add your description here"
+name = "iris-muti-ai-agent"
+version = "0.1.1"
+description = "IRIS:muti-ai-agent multi-engine AI agent CLI"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
