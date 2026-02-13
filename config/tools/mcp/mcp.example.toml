@@ -6,56 +6,55 @@ namespace_strategy = "prefix"
 default_prefix = "mcp_"
 
 # Filesystem MCP
-[servers.filesystem]
+[mcp_servers.filesystem]
 transport = "stdio"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "Relative path to the folder you want the AI to access"]
 rename_prefix = "fs:"
 
 # Notion MCP 
-[servers.notion]
+[mcp_servers.notion]
 transport = "stdio"
-command = "notion-mcp-server"
-args = []
+command = "npx"
+args = ["-y", "@notionhq/notion-mcp-server"]
 rename_prefix = "notion:"
 
-[servers.notion.env]
+[mcp_servers.notion.env]
 NOTION_TOKEN = "$NOTION_TOKEN"
-NOTION_MCP_URL = "$NOTION_MCP_URL"
 
 # Context7 MCP
-[servers.context7]
+[mcp_servers.context7]
 transport = "stdio"
 command = "npx"
 args = ["-y", "@upstash/context7-mcp", "--transport", "stdio"]
 rename_prefix = "ctx7:"
 
-[servers.context7.env]
+[mcp_servers.context7.env]
 CONTEXT7_MCP_URL = "https://mcp.context7.com/mcp"
 CONTEXT7_API_KEY = "$CONTEXT7_API_KEY"
 
 # Amap MCP
-[servers.amap-maps]
+[mcp_servers.amap-maps]
 transport = "stdio"
 command = "npx"
 args = ["-y", "@amap/amap-maps-mcp-server"]
 rename_prefix = "amap:"
 
-[servers.amap-maps.env]
+[mcp_servers.amap-maps.env]
 AMAP_MAPS_API_KEY = "$AMAP_MAPS_API_KEY"
 
 # Firecrawl MCP
-[servers.firecrawl-mcp]
+[mcp_servers.firecrawl-mcp]
 transport = "stdio"
 command = "npx"
 args = ["-y", "firecrawl-mcp"]
 rename_prefix = "firecrawl:"
 
-[servers.firecrawl-mcp.env]
+[mcp_servers.firecrawl-mcp.env]
 FIRECRAWL_API_KEY = "$FIRECRAWL_API_KEY"
 
 # Chrome DevTools MCP
-[servers.chrome-devtools]
+[mcp_servers.chrome-devtools]
 transport = "stdio"
 command = "npx"
 args = ["-y", "chrome-devtools-mcp@latest"]

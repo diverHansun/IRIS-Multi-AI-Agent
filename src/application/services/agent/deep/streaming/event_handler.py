@@ -480,9 +480,14 @@ class DeepAgentEventHandler:
         last_message = messages[-1]
 
         if isinstance(last_message, ToolMessage):
-            if not self.show_tool_results:
-                return f"{node}: Tool '{last_message.name}' completed."
-            return f"{node}: Tool '{last_message.name}' -> {last_message.content}"
+            tool_name = getattr(last_message, "name", "unknown") or "unknown"
+            tool_status = str(getattr(last_message, "status", "success") or "success").lower()
+
+            # Never render raw tool output content in updates stream; it can be very large
+            # (e.g. full file bodies from read tools) and only adds visual noise.
+            if tool_status not in {"success", "ok"}:
+                return f"{node}: Tool '{tool_name}' failed."
+            return f"{node}: Tool '{tool_name}' completed."
 
         if isinstance(last_message, AIMessage):
             content_snippet = self._truncate(str(last_message.content))

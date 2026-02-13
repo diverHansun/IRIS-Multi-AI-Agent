@@ -118,14 +118,17 @@ def _parse_streamable_options(name: str, options: Dict[str, Any]) -> StreamableH
         joined = ", ".join(unexpected)
         raise ValueError(f"Server '{name}' has unsupported Streamable HTTP options: {joined}")
 
-    timeout_ms = _coerce_optional_int(options.get("timeout_ms"), f"servers.{name}.options.timeout_ms")
+    timeout_ms = _coerce_optional_int(
+        options.get("timeout_ms"),
+        f"mcp_servers.{name}.options.timeout_ms",
+    )
     sse_timeout_ms = _coerce_optional_int(
         options.get("sse_read_timeout_ms"),
-        f"servers.{name}.options.sse_read_timeout_ms",
+        f"mcp_servers.{name}.options.sse_read_timeout_ms",
     )
     terminate_on_close = _coerce_optional_bool(
         options.get("terminate_on_close"),
-        f"servers.{name}.options.terminate_on_close",
+        f"mcp_servers.{name}.options.terminate_on_close",
     )
 
     insecure_skip_verify_raw = options.get("insecure_skip_verify")
@@ -135,7 +138,7 @@ def _parse_streamable_options(name: str, options: Dict[str, Any]) -> StreamableH
         insecure_skip_verify = insecure_skip_verify_raw
     else:
         raise ValueError(
-            f"servers.{name}.options.insecure_skip_verify must be a boolean",
+            f"mcp_servers.{name}.options.insecure_skip_verify must be a boolean",
         )
 
     return StreamableHTTPOptions(
@@ -187,7 +190,7 @@ def _build_stdio_server(
     if not isinstance(env_raw, dict):
         raise ValueError(f"Server '{name}' expects 'env' to be a mapping when transport is 'stdio'")
     env = _expand_env_in_mapping(env_raw)
-    env = _stringify_mapping(env, f"servers.{name}.env")
+    env = _stringify_mapping(env, f"mcp_servers.{name}.env")
 
     return ServerConfig(
         name=name,
@@ -222,7 +225,7 @@ def _build_streamable_http_server(
     if not isinstance(headers_raw, dict):
         raise ValueError(f"Server '{name}' expects 'headers' to be a mapping when transport is 'streamable_http'")
     headers_expanded = _expand_env_in_mapping(headers_raw)
-    headers = _stringify_mapping(headers_expanded, f"servers.{name}.headers")
+    headers = _stringify_mapping(headers_expanded, f"mcp_servers.{name}.headers")
 
     options_raw = raw.get("options", {}) or {}
     if not isinstance(options_raw, dict):
@@ -289,7 +292,15 @@ def _validate_and_build(config_dict: Dict[str, Any]) -> MCPConfig:
         backoff_ms=int(retry_dict.get("backoff_ms", 500)),
     )
 
-    servers_dict = config_dict.get("servers", {}) or {}
+    if "servers" in config_dict:
+        raise ValueError(
+            "Legacy key 'servers' is no longer supported. "
+            "Please rename it to 'mcp_servers'."
+        )
+
+    servers_dict = config_dict.get("mcp_servers", {}) or {}
+    if not isinstance(servers_dict, dict):
+        raise ValueError("Top-level 'mcp_servers' must be a mapping")
     servers: Dict[str, ServerConfig] = {}
     for name, raw in servers_dict.items():
         if not isinstance(raw, dict):
@@ -298,7 +309,10 @@ def _validate_and_build(config_dict: Dict[str, Any]) -> MCPConfig:
         include_tools = list(raw.get("include_tools", []) or [])
         exclude_tools = list(raw.get("exclude_tools", []) or [])
         rename_prefix = raw.get("rename_prefix", None)
-        timeout_ms = _coerce_optional_int(raw.get("timeout_ms"), f"servers.{name}.timeout_ms")
+        timeout_ms = _coerce_optional_int(
+            raw.get("timeout_ms"),
+            f"mcp_servers.{name}.timeout_ms",
+        )
 
         transport = _parse_transport(raw.get("transport", "stdio"), name)
 
@@ -345,9 +359,9 @@ def _merge_configs(configs: List[Dict[str, Any]]) -> Dict[str, Any]:
     for config in configs[1:]:
         # Merge top-level keys
         for key, value in config.items():
-            if key == "servers" and "servers" in merged:
+            if key == "mcp_servers" and "mcp_servers" in merged:
                 # Merge servers dictionary
-                merged["servers"].update(value)
+                merged["mcp_servers"].update(value)
             else:
                 # Override other keys
                 merged[key] = value
