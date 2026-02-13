@@ -83,13 +83,18 @@ def _ensure_extension_allowed(path: Path, options: RealFilesystemOptions) -> Non
             raise FileTypeNotAllowedError(f"Files without an extension are not permitted: '{path}'")
 
 
-def ensure_directory_access(path: Path, options: RealFilesystemOptions) -> None:
+def ensure_directory_access(
+    path: Path,
+    options: RealFilesystemOptions,
+    *,
+    enforce_excluded: bool = True,
+) -> None:
     """Ensure a directory is reachable under the configured security rules."""
     case_sensitive = options.advanced.case_sensitive
     if not _is_within(path, options.security.allowed_paths, case_sensitive=case_sensitive):
         raise PathValidationError(f"Path '{path}' is outside the allowed directories")
 
-    if options.security.excluded_paths and _is_within(
+    if enforce_excluded and options.security.excluded_paths and _is_within(
         path, options.security.excluded_paths, case_sensitive=case_sensitive
     ):
         raise PathValidationError(f"Path '{path}' is in the excluded directories list")
@@ -98,9 +103,18 @@ def ensure_directory_access(path: Path, options: RealFilesystemOptions) -> None:
         raise PathValidationError(f"Symlink access is disabled: '{path}'")
 
 
-def ensure_file_access(path: Path, options: RealFilesystemOptions) -> None:
+def ensure_file_access(
+    path: Path,
+    options: RealFilesystemOptions,
+    *,
+    enforce_excluded: bool = True,
+) -> None:
     """Ensure a file path satisfies access, extension, and size rules."""
-    ensure_directory_access(path.parent if path.parent != Path(path.anchor) else path, options)
+    ensure_directory_access(
+        path.parent if path.parent != Path(path.anchor) else path,
+        options,
+        enforce_excluded=enforce_excluded,
+    )
     _ensure_extension_allowed(path, options)
 
     try:
@@ -117,25 +131,35 @@ def ensure_file_access(path: Path, options: RealFilesystemOptions) -> None:
         )
 
 
-def validate_directory(raw_path: str | None, options: RealFilesystemOptions) -> Path:
+def validate_directory(
+    raw_path: str | None,
+    options: RealFilesystemOptions,
+    *,
+    enforce_excluded: bool = True,
+) -> Path:
     """Validate a directory path string and return the canonical Path."""
     path = options.resolve_path(raw_path)
     if not path.exists():
         raise PathValidationError(f"Directory does not exist: '{path}'")
     if not path.is_dir():
         raise PathValidationError(f"Expected directory path but got: '{path}'")
-    ensure_directory_access(path, options)
+    ensure_directory_access(path, options, enforce_excluded=enforce_excluded)
     return path
 
 
-def validate_file(raw_path: str, options: RealFilesystemOptions) -> Path:
+def validate_file(
+    raw_path: str,
+    options: RealFilesystemOptions,
+    *,
+    enforce_excluded: bool = True,
+) -> Path:
     """Validate a file path string and return the canonical Path."""
     path = options.resolve_path(raw_path)
     if not path.exists():
         raise FileNotFoundError(f"File not found: '{path}'")
     if not path.is_file():
         raise PathValidationError(f"Expected file path but got: '{path}'")
-    ensure_file_access(path, options)
+    ensure_file_access(path, options, enforce_excluded=enforce_excluded)
     return path
 
 
@@ -147,7 +171,7 @@ def validate_new_file_path(raw_path: str, options: RealFilesystemOptions) -> Pat
         raise PathValidationError(f"Parent directory does not exist: '{parent}'")
     if not parent.is_dir():
         raise PathValidationError(f"Parent path is not a directory: '{parent}'")
-    ensure_directory_access(parent, options)
+    ensure_directory_access(parent, options, enforce_excluded=True)
     if path.exists():
         if path.is_dir():
             raise PathValidationError(f"Cannot write to directory path: '{path}'")

@@ -53,6 +53,7 @@ def register_default_commands() -> None:
         RestoreSessionCommand,
     )
     from src.application.commands.shared.mcp_connector_commands import ConnectorCommand, MCPCommand
+    from src.application.commands.shared.skills_commands import SkillsCommand
     from src.application.commands.shared.system_commands import ExitCommand, HelpCommand, InfoCommand
     from src.application.commands.shared.tools_commands import ToolsCommand
 
@@ -78,6 +79,7 @@ def register_default_commands() -> None:
         LLMStreamCommand(),
         MCPCommand(),
         ConnectorCommand(),
+        SkillsCommand(),
         GraphCommand(),
         NodesCommand(),
         VisualizeCommand(),

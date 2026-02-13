@@ -65,6 +65,12 @@ AGENT_TOOL_COMMANDS = [
     ("/connector reload", "Reload connector definitions"),
 ]
 
+SKILL_COMMANDS = [
+    ("/skills list", "List available skills (built-in, user, project)"),
+    ("/skills create <name>", "Create a new skill from template"),
+    ("/skills info <name>", "Show detailed skill information"),
+]
+
 DIFY_FILE_COMMANDS = [
     ("/upload <paths...>", "Upload files (dialog opens when no path is provided)"),
     ("/files", "List files queued for the next conversation"),
@@ -109,6 +115,7 @@ def print_welcome(console: Console) -> None:
         _format_command_section("Agent Engine", AGENT_ENGINE_COMMANDS),
         _format_command_section("Deep Agent Commands", DEEP_AGENT_COMMANDS),
         _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
+        _format_command_section("Skills", SKILL_COMMANDS),
     ]
 
     body = summary + "\n\n" + "\n\n".join(sections)
@@ -163,6 +170,7 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
         _format_command_section("Agent Engine", AGENT_ENGINE_COMMANDS),
         _format_command_section("Deep Agent Commands", DEEP_AGENT_COMMANDS),
         _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
+        _format_command_section("Skills", SKILL_COMMANDS),
     ]
 
     examples = dedent(

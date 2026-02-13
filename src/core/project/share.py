@@ -28,6 +28,7 @@ class IrisShareDir:
     │   ├── mcp/
     │   │   └── mcp.toml
     │   └── sdk/
+    ├── skills/
     ├── sessions/
     └── metadata.json
     """
@@ -161,6 +162,17 @@ class IrisShareDir:
     def get_mcp_config_file(cls) -> Path:
         """获取 MCP 配置文件路径"""
         return cls.get_mcp_dir() / "mcp.toml"
+
+    # =========================================================================
+    # Skills 配置
+    # =========================================================================
+
+    @classmethod
+    def get_skills_dir(cls) -> Path:
+        """获取 skills 配置目录"""
+        skills_dir = cls.get_share_dir() / "skills"
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        return skills_dir
 
     # =========================================================================
     # 会话存储

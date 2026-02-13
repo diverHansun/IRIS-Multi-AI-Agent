@@ -63,6 +63,11 @@ class ProjectContext:
     def agent_md_file(self) -> Path:
         return self.iris_dir / "agent.md"
 
+    @property
+    def skills_dir(self) -> Path:
+        """Project-level skills directory (<project>/.iris/skills/)."""
+        return self.iris_dir / "skills"
+
     def get_storage_dir(self, mode: str) -> Path:
         """
         Resolve storage directory for a mode.

@@ -68,6 +68,17 @@ class BaseDeepAgentFactory(ABC):
         # Inject virtual filesystem tools if enabled (SOLID: SRP - Factory manages tool composition)
         tools, filesystem_middlewares = self._inject_filesystem_tools(tools, resolved_middleware)
 
+        project_context = user_params.get("project_context")
+        if project_context is None and deep_checkpointer is not None:
+            project_context = getattr(deep_checkpointer, "project_context", None)
+
+        # Inject skills middleware if enabled (before shell injection)
+        skills_middleware = self._inject_skills_middleware(
+            resolved_middleware,
+            filesystem_middlewares,
+            project_context=project_context,
+        )
+
         # Inject shell tool if enabled (only for main agent, not subagents)
         tools, shell_middleware = self._inject_shell_tool(tools, resolved_middleware)
 
@@ -157,6 +168,7 @@ class BaseDeepAgentFactory(ABC):
             max_execution_time=max_execution_time,
             filesystem_middlewares=filesystem_middlewares,
             shell_middleware=shell_middleware,
+            skills_middleware=skills_middleware,
         )
 
         agent.set_runtime(runtime)
@@ -179,7 +191,7 @@ class BaseDeepAgentFactory(ABC):
         """
         provider_middleware = adapter.get_middleware_config()
         resolved = {}
-        for key in ("filesystem", "subagents", "patch_tool_calls", "shell"):
+        for key in ("filesystem", "subagents", "patch_tool_calls", "shell", "skills"):
             value = provider_middleware.get(key)
             if isinstance(value, dict):
                 resolved[key] = value
@@ -418,6 +430,79 @@ class BaseDeepAgentFactory(ABC):
                 logger.warning("Failed to inject shell tool: %s", exc, exc_info=True)
 
         return updated_tools or tools, shell_middleware
+
+    def _inject_skills_middleware(
+        self,
+        middleware_config: Dict[str, Any],
+        filesystem_middlewares: List[Any],
+        project_context: Any = None,
+    ) -> Optional[Any]:
+        """
+        Create skills middleware and extend real filesystem access for skill sources.
+        """
+        skills_config = middleware_config.get("skills", {})
+        if not isinstance(skills_config, dict) or not skills_config.get("enabled", True):
+            return None
+
+        try:
+            from src.components.deepagents.runtime_middlewares.skills import SkillsMiddleware
+            from src.components.shared.skills import SkillRegistry
+
+            project_skills_dir = project_context.skills_dir if project_context else None
+            sources = SkillRegistry.resolve_sources(
+                config=skills_config,
+                project_skills_dir=project_skills_dir,
+            )
+            source_paths = [source.path for source in sources if source.path.exists()]
+            self._extend_filesystem_for_skills(source_paths, filesystem_middlewares)
+
+            return SkillsMiddleware(config=skills_config, sources=sources)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Failed to inject skills middleware: %s", exc, exc_info=True)
+            return None
+
+    def _extend_filesystem_for_skills(
+        self,
+        skill_source_paths: List[Any],
+        filesystem_middlewares: List[Any],
+    ) -> None:
+        """
+        Extend real filesystem security allowlist for skill source roots.
+
+        NOTE:
+        - allowed_paths/excluded_paths are tuples; rebuild them instead of append.
+        - built-in skills directory is added to excluded paths to protect it from writes.
+        """
+        if not skill_source_paths:
+            return
+
+        try:
+            from src.components.deepagents.runtime_middlewares.real_filesystem import (
+                RealFilesystemMiddleware,
+            )
+            from src.components.shared.skills.types import BUILT_IN_SKILLS_DIR
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Failed to import filesystem/skills modules: %s", exc, exc_info=True)
+            return
+
+        for middleware in filesystem_middlewares:
+            if not isinstance(middleware, RealFilesystemMiddleware):
+                continue
+
+            security = middleware.options.security
+            existing_allowed = security.allowed_paths
+            new_paths = tuple(
+                path for path in skill_source_paths if path.exists() and path not in existing_allowed
+            )
+            if new_paths:
+                security.allowed_paths = existing_allowed + new_paths
+                logger.debug("Extended allowed_paths with skill sources: %s", new_paths)
+
+            if BUILT_IN_SKILLS_DIR.exists() and BUILT_IN_SKILLS_DIR not in security.excluded_paths:
+                security.excluded_paths = security.excluded_paths + (BUILT_IN_SKILLS_DIR,)
+                logger.debug("Added built-in skills dir to excluded_paths: %s", BUILT_IN_SKILLS_DIR)
+
+            break
 
     def describe(self) -> Dict[str, Any]:
         """Return metadata describing the factory."""

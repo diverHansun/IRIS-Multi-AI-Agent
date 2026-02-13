@@ -52,6 +52,7 @@ def create_deep_agent_runtime(
     filesystem_middleware: Any | None = None,
     filesystem_middlewares: Sequence[Any] | None = None,
     shell_middleware: Any | None = None,
+    skills_middleware: Any | None = None,
 ) -> CompiledStateGraph:
     """Create a configured deep agent runtime graph."""
 
@@ -122,7 +123,11 @@ def create_deep_agent_runtime(
         JsonArgsParserMiddleware(enable_logging=True),
         TodoListMiddleware(),
     ]
-    
+
+    # Add skills middleware if provided (after TodoList, before filesystem)
+    if skills_middleware is not None:
+        deepagent_middleware.append(skills_middleware)
+
     # Add filesystem middleware if enabled
     deepagent_middleware.extend(provided_filesystem_middlewares)
 

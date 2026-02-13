@@ -150,6 +150,23 @@ class RealFilesystemToolFactory:
             return suffix in extensions
         return "" in extensions
 
+    def _is_builtin_skill_path(self, raw_path: str) -> bool:
+        """
+        Return True when a path is under built-in skills directory.
+
+        This allows read operations to bypass generic excluded paths while still
+        keeping write protection enforced by normal security checks.
+        """
+        try:
+            from src.components.shared.skills.types import BUILT_IN_SKILLS_DIR
+
+            candidate = self.options.resolve_path(raw_path)
+            built_in_root = BUILT_IN_SKILLS_DIR.resolve(strict=False)
+            resolved_candidate = candidate.resolve(strict=False)
+            return resolved_candidate == built_in_root or built_in_root in resolved_candidate.parents
+        except Exception:  # pylint: disable=broad-except
+            return False
+
     @staticmethod
     def _coerce_encoding(encoding: str | None) -> str:
         """Normalise encoding names and ensure they are supported."""
@@ -453,7 +470,12 @@ class RealFilesystemToolFactory:
                 return "Limit must be greater than 0"
 
             try:
-                path = validate_file(file_path, self.options)
+                ignore_excluded = self._is_builtin_skill_path(file_path)
+                path = validate_file(
+                    file_path,
+                    self.options,
+                    enforce_excluded=not ignore_excluded,
+                )
             except FileTooLargeError as exc:
                 return str(exc)
             except FileNotFoundError as exc:

@@ -323,7 +323,7 @@ class DeepAgentsProviderRegistry:
         return {}
 
     def _load_middleware_config(self, *, use_cache: bool = True) -> Dict[str, Any]:
-        """Load middleware configuration for filesystem and shell settings."""
+        """Load middleware configuration for filesystem, shell, and skills settings."""
         virtual_cfg: Dict[str, Any] = (
             self._config_loader.load_shared_json(
                 "agents/deep/middleware/filesystem/virtual_filesystem.json"
@@ -340,6 +340,10 @@ class DeepAgentsProviderRegistry:
             self._config_loader.load_shared_json("agents/deep/middleware/shell.json")
             or {}
         )
+        skills_cfg: Dict[str, Any] = (
+            self._config_loader.load_shared_json("agents/deep/middleware/skills/skills.json")
+            or {}
+        )
 
         if self.base_path:
             middleware_dir = self.base_path / "middleware"
@@ -349,6 +353,7 @@ class DeepAgentsProviderRegistry:
             real_path = filesystem_dir / "real_filesystem.json"
             legacy_path = middleware_dir / "filesystem.json"
             shell_path = middleware_dir / "shell.json"
+            skills_path = middleware_dir / "skills" / "skills.json"
 
             if not virtual_cfg:
                 if virtual_path.exists():
@@ -362,12 +367,16 @@ class DeepAgentsProviderRegistry:
             if not shell_cfg and shell_path.exists():
                 shell_cfg = self._load_json(shell_path, use_cache=use_cache)
 
+            if not skills_cfg and skills_path.exists():
+                skills_cfg = self._load_json(skills_path, use_cache=use_cache)
+
         return {
             "filesystem": {
                 "virtual": virtual_cfg,
                 "real": real_cfg,
             },
             "shell": shell_cfg,
+            "skills": skills_cfg,
         }
 
     def _load_json(self, path: Path, *, use_cache: bool) -> Dict[str, Any]:
