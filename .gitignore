@@ -158,6 +158,8 @@ Thumbs.db
 *.log
 test_*.py
 *_test.py
+!tests/**/test_*.py
+!tests/**/*_test.py
 temp/
 tmp/
 debug/
