@@ -46,9 +46,9 @@ dependencies = [
 
 [tool.hatch.build]
 include = [
+    "src/**",
     "config/**",
     "IRIS_SETUP.md",
-    "src/agents/deepagents/**",
 ]
 
 [project.scripts]

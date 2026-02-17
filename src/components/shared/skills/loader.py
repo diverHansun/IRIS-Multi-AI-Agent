@@ -10,16 +10,23 @@ from typing import Any, List, Optional, Tuple
 import yaml
 
 from .types import (
+    ANTHROPIC_FRONTMATTER_FIELDS,
     MAX_SKILL_FILE_SIZE,
     SKILL_FILENAME,
     SkillLoadError,
     SkillMetadata,
+    SkillResources,
     SkillSource,
 )
 
 logger = logging.getLogger(__name__)
 
 _FRONTMATTER_PATTERN = re.compile(r"\A---\s*\n(.*?)\n---\s*(?:\n|$)", re.DOTALL)
+_RESOURCE_DIRS = {
+    "scripts": ("scripts",),
+    "references": ("references", "reference"),
+    "assets": ("assets",),
+}
 
 
 class SkillLoader:
@@ -97,6 +104,7 @@ class SkillLoader:
                 )
                 continue
 
+            skill.resources = self._scan_resources(skill_dir)
             skill.source_type = source.type
             skill.source_path = source.path
             skills.append(skill)
@@ -114,7 +122,7 @@ class SkillLoader:
         self,
         content: str,
         skill_path: Path,
-        directory_name: str,
+        _directory_name: str,
     ) -> Tuple[Optional[SkillMetadata], List[str]]:
         normalized = content.replace("\r\n", "\n")
         match = _FRONTMATTER_PATTERN.search(normalized)
@@ -130,6 +138,11 @@ class SkillLoader:
         if not isinstance(frontmatter, dict):
             return None, ["frontmatter must be a YAML mapping"]
 
+        frontmatter_keys = {str(key) for key in frontmatter.keys()}
+        unexpected_fields = sorted(frontmatter_keys - ANTHROPIC_FRONTMATTER_FIELDS)
+        if unexpected_fields:
+            return None, [f"unexpected frontmatter field(s): {', '.join(unexpected_fields)}"]
+
         metadata_field = frontmatter.get("metadata") or {}
         if not isinstance(metadata_field, dict):
             return None, ["metadata must be a mapping"]
@@ -143,27 +156,23 @@ class SkillLoader:
             return None, [allowed_tools_err]
 
         name = str(frontmatter.get("name") or "").strip()
+        if not name:
+            return None, ["name is required"]
+
         description = str(frontmatter.get("description") or "").strip()
+        if not description:
+            return None, ["description is required"]
+
         license_value = self._optional_str(frontmatter.get("license"))
         compatibility = self._optional_str(frontmatter.get("compatibility"))
-        argument_hint = self._optional_str(frontmatter.get("argument-hint"))
-        context = self._optional_str(frontmatter.get("context"))
-        agent = self._optional_str(frontmatter.get("agent"))
 
         skill = SkillMetadata(
-            name=name or directory_name,
+            name=name,
             description=description,
             license=license_value,
             compatibility=compatibility,
             metadata=metadata,
             allowed_tools=allowed_tools,
-            user_invocable=self._coerce_bool(frontmatter.get("user-invocable"), default=True),
-            disable_model_invocation=self._coerce_bool(
-                frontmatter.get("disable-model-invocation"), default=False
-            ),
-            argument_hint=argument_hint,
-            context=context,
-            agent=agent,
             path=skill_path.resolve(),
             source_path=skill_path.parent.resolve(),
         )
@@ -177,20 +186,6 @@ class SkillLoader:
         return text or None
 
     @staticmethod
-    def _coerce_bool(value: Any, *, default: bool) -> bool:
-        if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"true", "yes", "1", "on"}:
-                return True
-            if lowered in {"false", "no", "0", "off"}:
-                return False
-        return bool(value)
-
-    @staticmethod
     def _parse_allowed_tools(raw_value: Any) -> Tuple[List[str], Optional[str]]:
         if raw_value is None:
             return [], None
@@ -202,3 +197,26 @@ class SkillLoader:
             return values, None
         return [], "allowed-tools must be a string or list"
 
+    @staticmethod
+    def _scan_resources(skill_dir: Path) -> SkillResources:
+        """Scan standard skill resource directories and collect immediate files."""
+
+        resources = SkillResources()
+        for resource_type, candidates in _RESOURCE_DIRS.items():
+            collected: List[Path] = []
+            for dirname in candidates:
+                target_dir = skill_dir / dirname
+                if not target_dir.is_dir():
+                    continue
+                collected.extend(
+                    sorted(
+                        (
+                            entry.resolve()
+                            for entry in target_dir.iterdir()
+                            if entry.is_file() and not entry.name.startswith(".")
+                        ),
+                        key=lambda item: item.name,
+                    )
+                )
+            setattr(resources, resource_type, collected)
+        return resources

@@ -16,11 +16,11 @@ MAX_SKILL_NAME_LENGTH = 64
 
 
 class SkillsCommand(BaseCommand):
-    """Manage agent skills: list, create, and inspect."""
+    """Manage agent skills."""
 
     name = "skills"
     engine_scope = ("agent",)
-    help_text = "Manage agent skills (list, create, info)."
+    help_text = "Manage agent skills (list, create, info, reload)."
 
     async def execute(self, ctx, args: str) -> CommandResult:
         parts = args.strip().split()
@@ -34,6 +34,7 @@ class SkillsCommand(BaseCommand):
             "list": self._handle_list,
             "create": self._handle_create,
             "info": self._handle_info,
+            "reload": self._handle_reload,
         }
 
         handler = handlers.get(action)
@@ -47,7 +48,8 @@ class SkillsCommand(BaseCommand):
             "Usage:\n"
             "  /skills list\n"
             "  /skills create <name> [--project]\n"
-            "  /skills info <name>"
+            "  /skills info <name>\n"
+            "  /skills reload"
         )
 
     async def _handle_list(self, ctx, args: list[str]) -> CommandResult:  # noqa: ARG002
@@ -138,6 +140,34 @@ class SkillsCommand(BaseCommand):
             logger.warning("Failed to get skill info for '%s': %s", name, exc, exc_info=True)
             return CommandResult.error(f"Failed to get skill info: {exc}")
 
+    async def _handle_reload(self, ctx, args: list[str]) -> CommandResult:
+        if args:
+            return CommandResult.error("Usage: /skills reload")
+
+        try:
+            from src.components.shared.skills import SkillRegistry
+
+            registry = SkillRegistry.get_instance()
+            if registry.is_initialized():
+                registry.reload()
+            else:
+                self._ensure_initialized(registry, ctx)
+
+            skills = registry.get_all_skills()
+            errors = registry.get_load_errors()
+            lines = [f"Reloaded {len(skills)} skill(s)."]
+            if errors:
+                lines.append(f"Warnings: {len(errors)}")
+                for err in errors[:5]:
+                    lines.append(f"- {err.path}: {err.message}")
+                remaining = len(errors) - 5
+                if remaining > 0:
+                    lines.append(f"- ... (+{remaining} more)")
+            return CommandResult.success("\n".join(lines))
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Failed to reload skills: %s", exc, exc_info=True)
+            return CommandResult.error(f"Failed to reload skills: {exc}")
+
     def _ensure_initialized(self, registry, ctx) -> None:
         if registry.is_initialized():
             return
@@ -183,20 +213,12 @@ class SkillsCommand(BaseCommand):
             f"name: {name}\n"
             "description: >\n"
             "  TODO: Describe what this skill does and when to use it.\n"
-            "  Include keywords that help the agent recognize relevant tasks.\n"
-            "metadata:\n"
-            '  author: ""\n'
-            '  version: "1.0.0"\n'
-            "  category: general\n"
+            "  Include explicit trigger phrases users will likely say.\n"
             "---\n"
             "\n"
             f"# {name}\n"
             "\n"
             "TODO: Add skill instructions here.\n"
-            "\n"
-            "## When to Use\n"
-            "\n"
-            "Describe the scenarios where this skill should be activated.\n"
             "\n"
             "## Workflow\n"
             "\n"
@@ -206,7 +228,7 @@ class SkillsCommand(BaseCommand):
             "\n"
             "## Edge Cases\n"
             "\n"
-            "- TODO: Document edge cases\n"
+            "- TODO: Document edge cases and fallback behavior\n"
         )
 
     @staticmethod
@@ -255,6 +277,11 @@ class SkillsCommand(BaseCommand):
             f"Description: {skill.description or '(none)'}",
         ]
 
+        if skill.license:
+            lines.append(f"License: {skill.license}")
+        if skill.compatibility:
+            lines.append(f"Compatibility: {skill.compatibility}")
+
         if skill.metadata:
             lines.append("\nMetadata:")
             for key, value in skill.metadata.items():
@@ -263,11 +290,12 @@ class SkillsCommand(BaseCommand):
         if skill.allowed_tools:
             lines.append(f"\nAllowed Tools: {', '.join(skill.allowed_tools)}")
 
-        if skill.user_invocable is not None:
-            lines.append(f"User Invocable: {skill.user_invocable}")
+        if skill.resources.scripts:
+            lines.append(f"Scripts: {len(skill.resources.scripts)} file(s)")
+        if skill.resources.references:
+            lines.append(f"References: {len(skill.resources.references)} file(s)")
 
         return "\n".join(lines)
 
 
 __all__ = ["SkillsCommand"]
-

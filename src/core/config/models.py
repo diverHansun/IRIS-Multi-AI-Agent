@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Self
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field, SecretStr, field_serializer, model_validator
 
@@ -127,7 +127,7 @@ class IrisConfig(BaseModel):
     _is_project_config: bool = False
 
     @model_validator(mode="after")
-    def validate_config(self) -> Self:
+    def validate_config(self) -> "IrisConfig":
         """验证配置有效性"""
         # 验证 schema_version
         if not self.schema_version:

@@ -26,6 +26,21 @@ class SkillSource:
 
 
 @dataclass
+class SkillResources:
+    """Discovered resource files bundled with a skill."""
+
+    scripts: List[Path] = field(default_factory=list)
+    references: List[Path] = field(default_factory=list)
+    assets: List[Path] = field(default_factory=list)
+
+    @property
+    def has_content(self) -> bool:
+        """Return True when at least one resource bucket is non-empty."""
+
+        return bool(self.scripts or self.references or self.assets)
+
+
+@dataclass
 class SkillMetadata:
     """Parsed metadata from a SKILL.md file."""
 
@@ -39,17 +54,11 @@ class SkillMetadata:
     metadata: Dict[str, str] = field(default_factory=dict)
     allowed_tools: List[str] = field(default_factory=list)
 
-    # Claude Code extensions
-    user_invocable: bool = True
-    disable_model_invocation: bool = False
-    argument_hint: Optional[str] = None
-    context: Optional[str] = None
-    agent: Optional[str] = None
-
     # Internal fields
     path: Path = field(default_factory=lambda: Path("."))
     source_type: SkillSourceType = SkillSourceType.BUILT_IN
     source_path: Path = field(default_factory=lambda: Path("."))
+    resources: SkillResources = field(default_factory=SkillResources)
 
 
 @dataclass
@@ -80,7 +89,16 @@ MAX_SKILL_COMPATIBILITY_LENGTH = 500
 MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024
 SKILL_FILENAME = "SKILL.md"
 SKILL_NAME_PATTERN = r"^[a-z0-9]([a-z0-9]*(-[a-z0-9]+)*)?$"
+ANTHROPIC_FRONTMATTER_FIELDS = frozenset(
+    {
+        "name",
+        "description",
+        "license",
+        "compatibility",
+        "metadata",
+        "allowed-tools",
+    }
+)
 
 # CLI and middleware both import from here to avoid hard-coded paths.
 BUILT_IN_SKILLS_DIR = Path(__file__).resolve().parent / "built_in_skills"
-

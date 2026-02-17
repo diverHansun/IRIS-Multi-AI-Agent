@@ -85,12 +85,27 @@ class DeepCommand(BaseCommand):
         real_fs_service = RealFilesystemMiddlewareService(real_cfg)
         subagents_service = SubagentsMiddlewareService(middleware_cfg.get("subagents", {}))
         patch_service = PatchToolCallsService(middleware_cfg.get("patch_tool_calls", {}))
+        skills_cfg = middleware_cfg.get("skills", {})
+        if not isinstance(skills_cfg, dict):
+            skills_cfg = {}
+        prompt_cfg = skills_cfg.get("prompt", {})
+        if not isinstance(prompt_cfg, dict):
+            prompt_cfg = {}
+        max_skills_in_prompt = prompt_cfg.get("max_skills_in_prompt", 20)
+        try:
+            max_skills_in_prompt = int(max_skills_in_prompt)
+        except (TypeError, ValueError):
+            max_skills_in_prompt = 20
 
         middleware_status = {
             "virtual_filesystem": virtual_fs_service.describe(),
             "real_filesystem": real_fs_service.describe(),
             "subagents": subagents_service.describe(),
             "patch_tool_calls": patch_service.describe(),
+            "skills": {
+                "enabled": bool(skills_cfg.get("enabled", True)),
+                "max_skills_in_prompt": max_skills_in_prompt,
+            },
         }
 
         payload = {
@@ -116,6 +131,8 @@ class DeepCommand(BaseCommand):
             f"- Active Subagents: {', '.join(subagent_names) if subagent_names else 'none'}\n"
             f"- Virtual Filesystem: {fs_enabled} (long-term memory: {fs_long_term_memory})\n"
             f"- Real Filesystem: {real_fs_enabled}\n"
+            f"- Skills: {'enabled' if middleware_status['skills']['enabled'] else 'disabled'} "
+            f"(max in prompt: {middleware_status['skills']['max_skills_in_prompt']})\n"
             f"- Subagents Middleware: {'enabled' if middleware_status['subagents']['enabled'] else 'disabled'}\n"
             f"- Patch Tool Calls: {'enabled' if middleware_status['patch_tool_calls']['enabled'] else 'disabled'}"
         )

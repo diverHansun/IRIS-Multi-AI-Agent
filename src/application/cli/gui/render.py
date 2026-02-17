@@ -69,6 +69,7 @@ SKILL_COMMANDS = [
     ("/skills list", "List available skills (built-in, user, project)"),
     ("/skills create <name>", "Create a new skill from template"),
     ("/skills info <name>", "Show detailed skill information"),
+    ("/skills reload", "Reload skills from disk"),
 ]
 
 DIFY_FILE_COMMANDS = [
