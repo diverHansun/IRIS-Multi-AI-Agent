@@ -61,9 +61,6 @@ class ModeCommand(BaseCommand):
                         config["model"] = first_model
 
             # Switch to deep mode memory system
-            import logging
-
-            logger = logging.getLogger(__name__)
 
             ctx._basic_session_id = ctx.session_id
 
