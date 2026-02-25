@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict
 
 
@@ -18,7 +19,7 @@ class ShellMiddlewareService:
         self._config: Dict[str, Any] = config or {}
 
         self.enabled: bool = bool(self._config.get("enabled", False))
-        self.workspace_root = self._config.get("workspace_root", ".")
+        self.workspace_root = self._config.get("workspace_root", "auto")
         self.shell_type = self._config.get("shell_type", "cmd")
         self.command_timeout = float(self._config.get("command_timeout", 30.0))
         self.startup_timeout = float(self._config.get("startup_timeout", 10.0))
@@ -67,3 +68,45 @@ class ShellMiddlewareService:
             "environment": self.environment,
             "startup_commands": self.startup_commands,
         }
+
+    @staticmethod
+    def resolve_workspace(
+        raw_config: Dict[str, Any],
+        project_root: Path | str | None = None,
+    ) -> Dict[str, Any]:
+        """
+        Merge shell workspace config with runtime project root.
+
+        Rules:
+        - "auto", ".", missing -> project root
+        - relative path -> project root / relative path
+        - absolute path -> unchanged
+        - no project_root -> return a shallow copy unchanged
+        """
+        merged = dict(raw_config or {})
+        if project_root is None:
+            return merged
+
+        root = project_root if isinstance(project_root, Path) else Path(project_root)
+        root = root.resolve()
+
+        workspace = merged.get("workspace_root", "auto")
+        if workspace in (None, "", "auto", "."):
+            merged["workspace_root"] = str(root)
+            return merged
+
+        if isinstance(workspace, Path):
+            if workspace.is_absolute():
+                return merged
+            merged["workspace_root"] = str((root / workspace).resolve())
+            return merged
+
+        if isinstance(workspace, str):
+            workspace_path = Path(workspace)
+            if workspace_path.is_absolute():
+                return merged
+            merged["workspace_root"] = str((root / workspace_path).resolve())
+            return merged
+
+        merged["workspace_root"] = str(root)
+        return merged

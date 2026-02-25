@@ -269,16 +269,16 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
 
         logger.info("Executing shell command: %s", command[:100])
 
+        original_timeout = session._command_timeout
         try:
             # Apply timeout override if provided
-            original_timeout = session._command_timeout
             if timeout_override and timeout_override > 0:
                 session._command_timeout = timeout_override
 
-            result = session.execute(command)
-
-            # Restore original timeout
-            session._command_timeout = original_timeout
+            try:
+                result = session.execute(command)
+            finally:
+                session._command_timeout = original_timeout
 
             # Format result
             status = "success" if result.exit_code == 0 else "error"

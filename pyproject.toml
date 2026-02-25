@@ -8,6 +8,7 @@ dependencies = [
     "aiohttp==3.12.15",
     "anyio==4.10.0",
     "beautifulsoup4==4.13.5",
+    "chardet>=5.2.0,<6",
     "colorama==0.4.6",
     "crawl4ai==0.7.6",
     "httpx==0.28.1",

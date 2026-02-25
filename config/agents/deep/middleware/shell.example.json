@@ -1,8 +1,8 @@
 {
   "_comment": "Shell middleware configuration for persistent shell sessions",
   "enabled": true,
-  "workspace_root": ".",
-  "_workspace_root_comment": "Working directory for shell commands. Use '.' for current directory or absolute path",
+  "workspace_root": "auto",
+  "_workspace_root_comment": "Working directory for shell commands. Use 'auto' for project directory, or an absolute/relative path (relative paths resolve from project directory when available)",
 
   "shell_type": "cmd",
   "_shell_type_comment": "Shell executable type: 'cmd', 'powershell' (Windows), 'bash' (Linux/Mac)",

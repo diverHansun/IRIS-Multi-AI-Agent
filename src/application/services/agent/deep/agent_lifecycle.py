@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple
 
 from src.agents.deepagents.managers import deep_agent_manager
-from src.core.providers import deepagents_provider_registry
+from src.application.services.agent.deep.middleware.shell_service import ShellMiddlewareService
 from src.components.shared.memory import DeepAgentCheckpointer
+from src.core.providers import deepagents_provider_registry
 
 
 def _agent_config(ctx) -> Dict[str, Any]:
@@ -50,16 +51,30 @@ async def _instantiate_agent(
         else:
             resolved_model = model
 
+    project_context = getattr(ctx, "project_context", None)
     deep_checkpointer = getattr(ctx, "deep_checkpointer", None) or DeepAgentCheckpointer(
-        project_context=getattr(ctx, "project_context", None),
+        project_context=project_context,
         metadata_manager=getattr(ctx, "metadata_manager", None),
     )
+
+    middleware_cfg = deepagents_provider_registry.get_middleware_config()
+    if isinstance(middleware_cfg, dict) and project_context is not None:
+        shell_raw = middleware_cfg.get("shell", {})
+        if isinstance(shell_raw, dict):
+            middleware_cfg = {
+                **middleware_cfg,
+                "shell": ShellMiddlewareService.resolve_workspace(
+                    shell_raw,
+                    project_root=getattr(project_context, "project_path", None),
+                ),
+            }
 
     agent = await deep_agent_manager.create_deep_agent(
         provider=resolved_provider,
         model=resolved_model,
         deep_checkpointer=deep_checkpointer,
         function_type=function_type,
+        middleware_config=middleware_cfg if isinstance(middleware_cfg, dict) else None,
     )
 
     setattr(agent, "deep_checkpointer", deep_checkpointer)

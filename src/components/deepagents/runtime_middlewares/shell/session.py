@@ -236,6 +236,22 @@ class PersistentShellSession:
 
             duration = time.perf_counter() - start_time
 
+            # If we exited before seeing the completion marker, buffered output from the
+            # unfinished command may pollute the next command. Reset the session so the
+            # middleware can create a fresh shell on the next tool call.
+            if (timed_out or truncated_by_lines or truncated_by_bytes) and self.is_alive():
+                logger.warning(
+                    "Resetting shell session after incomplete command "
+                    "(timeout=%s, truncated_lines=%s, truncated_bytes=%s)",
+                    timed_out,
+                    truncated_by_lines,
+                    truncated_by_bytes,
+                )
+                try:
+                    self.stop(timeout=1.0)
+                except Exception as exc:  # pragma: no cover - defensive cleanup
+                    logger.warning("Failed to reset shell session after incomplete command: %s", exc)
+
             # Combine stdout and stderr
             all_output = output_lines + stderr_lines
             output_text = "\n".join(all_output)

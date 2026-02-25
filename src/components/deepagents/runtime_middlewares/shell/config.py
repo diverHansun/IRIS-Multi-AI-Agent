@@ -52,21 +52,69 @@ class ShellConfig:
         return ["/bin/bash", "--norc", "--noprofile"]
 
 
-def build_shell_config(config_dict: Dict[str, Any]) -> ShellConfig:
+def _normalize_project_root(project_root: Path | str | None) -> Path | None:
+    """Normalize optional project root input to Path."""
+    if project_root is None:
+        return None
+    return project_root if isinstance(project_root, Path) else Path(project_root)
+
+
+def _resolve_workspace_root(
+    workspace_root: Any,
+    project_root: Path | str | None = None,
+) -> Path:
+    """
+    Resolve workspace_root with project-aware semantics.
+
+    Semantics:
+    - "auto"/"."/missing -> project_root when available, else Path.cwd()
+    - relative path -> resolved relative to project_root when available
+    - absolute path -> resolved as-is
+    """
+    normalized_project_root = _normalize_project_root(project_root)
+
+    if workspace_root in (None, "", "auto", "."):
+        return (
+            normalized_project_root.resolve()
+            if normalized_project_root is not None
+            else Path.cwd()
+        )
+
+    if isinstance(workspace_root, Path):
+        candidate = workspace_root
+    elif isinstance(workspace_root, str):
+        candidate = Path(workspace_root)
+    else:
+        return (
+            normalized_project_root.resolve()
+            if normalized_project_root is not None
+            else Path.cwd()
+        )
+
+    if not candidate.is_absolute() and normalized_project_root is not None:
+        candidate = normalized_project_root / candidate
+
+    return candidate.resolve()
+
+
+def build_shell_config(
+    config_dict: Dict[str, Any],
+    project_root: Path | str | None = None,
+) -> ShellConfig:
     """
     Build ShellConfig from configuration dictionary.
 
     Args:
         config_dict: Configuration dictionary
+        project_root: Optional project root for resolving "auto" and relative paths
 
     Returns:
         ShellConfig instance
     """
-    workspace_root = config_dict.get("workspace_root", ".")
-    if isinstance(workspace_root, str):
-        workspace_root = Path(workspace_root).resolve()
-    elif not isinstance(workspace_root, Path):
-        workspace_root = Path.cwd()
+    workspace_root = _resolve_workspace_root(
+        config_dict.get("workspace_root", "auto"),
+        project_root=project_root,
+    )
 
     shell_type = config_dict.get("shell_type", "cmd" if os.name == "nt" else "bash")
     environment = config_dict.get("environment", {})

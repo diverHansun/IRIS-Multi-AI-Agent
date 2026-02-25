@@ -80,7 +80,11 @@ class BaseDeepAgentFactory(ABC):
         )
 
         # Inject shell tool if enabled (only for main agent, not subagents)
-        tools, shell_middleware = self._inject_shell_tool(tools, resolved_middleware)
+        tools, shell_middleware = self._inject_shell_tool(
+            tools,
+            resolved_middleware,
+            project_context=project_context,
+        )
 
         tool_names = [tool.name if hasattr(tool, 'name') else tool.__name__ for tool in tools] if tools else []
 
@@ -406,7 +410,7 @@ class BaseDeepAgentFactory(ABC):
 
         return updated_tools or tools, middlewares
 
-    def _inject_shell_tool(self, tools, middleware_config):
+    def _inject_shell_tool(self, tools, middleware_config, project_context=None):
         """Inject shell tool if enabled and return shell middleware."""
         shell_config = middleware_config.get("shell", {})
 
@@ -420,7 +424,8 @@ class BaseDeepAgentFactory(ABC):
                     build_shell_config,
                 )
 
-                config = build_shell_config(shell_config)
+                project_root = getattr(project_context, "project_path", None)
+                config = build_shell_config(shell_config, project_root=project_root)
                 shell_middleware = ShellToolMiddleware(config=config)
                 shell_tools = shell_middleware.get_tools()
                 if shell_tools:
