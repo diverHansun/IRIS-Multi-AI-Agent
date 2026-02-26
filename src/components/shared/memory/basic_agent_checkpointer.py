@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -15,6 +15,7 @@ from langgraph.checkpoint.base import (
 )
 
 from src.core.project import ProjectContext, MetadataManager
+from .message_sequence_utils import dedup_identity_key, trim_messages_by_atomic_groups
 from ..storage.session_storage import SessionStorage
 
 logger = logging.getLogger(__name__)
@@ -224,14 +225,14 @@ class BasicAgentCheckpointer(BaseCheckpointSaver[int]):
     def _filter_messages(self, messages: List[Any]) -> List[BaseMessage]:
         """Keep only conversational messages."""
         flattened = self._flatten_messages(messages)
-        return [m for m in flattened if isinstance(m, (HumanMessage, AIMessage))]
+        return [m for m in flattened if isinstance(m, (HumanMessage, AIMessage, ToolMessage))]
 
     def _deduplicate_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
         """Remove duplicates while keeping order."""
         seen = set()
         deduped: List[BaseMessage] = []
         for msg in messages:
-            key = (type(msg).__name__, msg.content if hasattr(msg, "content") else "")
+            key = dedup_identity_key(msg)
             if key in seen:
                 continue
             seen.add(key)
@@ -269,9 +270,7 @@ class BasicAgentCheckpointer(BaseCheckpointSaver[int]):
 
     def _trim_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
         """Trim history to max_messages if needed."""
-        if self.max_messages and len(messages) > self.max_messages:
-            return messages[-self.max_messages :]
-        return messages
+        return trim_messages_by_atomic_groups(messages, self.max_messages)
 
     def _make_checkpoint_id(self, length: int) -> str:
         """Create a monotonic checkpoint id based on message count."""

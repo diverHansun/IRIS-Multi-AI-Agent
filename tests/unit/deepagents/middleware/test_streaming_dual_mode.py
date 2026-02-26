@@ -235,7 +235,7 @@ class TestEventHandlerDualMode(unittest.TestCase):
         tool_msg = Mock(spec=ToolMessage)
         tool_msg.name = "shell"
         tool_msg.status = "error"
-        tool_msg.content = "Command failed"
+        tool_msg.content = "Error: Command failed"
         tool_msg.tool_call_id = "call-456"
 
         self.handler._process_tool_message(tool_msg)

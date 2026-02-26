@@ -204,6 +204,26 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     pending_input: Any = runtime_input
     timed_out = False
     final_state: Optional[Dict[str, Any]] = None
+    last_step_persist_marker: Optional[str] = None
+
+    def _runtime_checkpoint_marker() -> Optional[str]:
+        if runtime_checkpointer is None:
+            return None
+        try:
+            checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("Failed to inspect runtime checkpoint marker: %s", exc)
+            return None
+        if not checkpoint_tuple:
+            return None
+        cfg = checkpoint_tuple.config.get("configurable", {}) if isinstance(checkpoint_tuple.config, dict) else {}
+        checkpoint_id = cfg.get("checkpoint_id")
+        if checkpoint_id:
+            return str(checkpoint_id)
+        checkpoint_payload = checkpoint_tuple.checkpoint if hasattr(checkpoint_tuple, "checkpoint") else {}
+        if isinstance(checkpoint_payload, dict) and checkpoint_payload.get("id") is not None:
+            return str(checkpoint_payload.get("id"))
+        return None
 
     try:
         while True:
@@ -216,13 +236,32 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                     config=runtime_config,
                     stream_mode=["messages", "updates"],
                     subgraphs=True,
-                    durability="exit",
                 ):
                     result = event_handler.handle_event(event)
 
                     # Capture interrupts but don't process them yet
                     if result.interrupts:
                         captured_interrupts = result.interrupts
+
+                    if result.step_completed:
+                        marker_before_persist = _runtime_checkpoint_marker()
+                        if marker_before_persist and marker_before_persist == last_step_persist_marker:
+                            logger.debug(
+                                "[CONVERSATION] Skip duplicate per-step persist for marker=%s",
+                                marker_before_persist,
+                            )
+                        else:
+                            try:
+                                deep_checkpointer.persist_from_runtime(
+                                    session_id,
+                                    runtime_checkpointer,
+                                    runtime_config,
+                                    agent_state=None,
+                                )
+                                if marker_before_persist:
+                                    last_step_persist_marker = marker_before_persist
+                            except Exception as exc:
+                                logger.warning("Per-step persistence failed: %s", exc)
 
                     if deadline is not None and time.perf_counter() > deadline:
                         timed_out = True

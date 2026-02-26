@@ -27,6 +27,7 @@ class EventProcessingResult:
 
     interrupts: Tuple[Interrupt, ...] = ()
     final_state: Optional[Dict[str, Any]] = None
+    step_completed: bool = False
 
 
 class DeepAgentEventHandler:
@@ -111,6 +112,7 @@ class DeepAgentEventHandler:
     def _handle_updates_stream(self, data: Dict[str, Any]) -> EventProcessingResult:
         """Handle updates stream mode data."""
         interrupts: Tuple[Interrupt, ...] = ()
+        step_completed = False
 
         if "__interrupt__" in data:
             value = data.get("__interrupt__", ())
@@ -121,9 +123,22 @@ class DeepAgentEventHandler:
             if node in {"__interrupt__", "__metadata__"}:
                 continue
             self._render_update(node, payload)
+            if self._is_tool_step_completion(payload):
+                step_completed = True
 
         result_state = self._last_agent_state
-        return EventProcessingResult(interrupts=interrupts, final_state=result_state)
+        return EventProcessingResult(
+            interrupts=interrupts,
+            final_state=result_state,
+            step_completed=step_completed,
+        )
+
+    def _is_tool_step_completion(self, payload: Any) -> bool:
+        """Return True when an updates payload ends with a ToolMessage."""
+        if not isinstance(payload, dict) or "messages" not in payload:
+            return False
+        messages = self._coerce_messages(payload.get("messages", []))
+        return bool(messages) and isinstance(messages[-1], ToolMessage)
 
     def _process_tool_message(self, message: ToolMessage) -> None:
         """Process tool completion messages and handle errors."""

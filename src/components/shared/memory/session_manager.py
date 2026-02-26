@@ -90,12 +90,16 @@ class SessionManager:
         recent_session = self.get_most_recent_session()
         if recent_session:
             session_id = recent_session["session_id"]
+            turn_count = recent_session.get("turn_count")
             msg_count = recent_session.get("message_count", 0)
             created_time = recent_session.get("created_at", "")[:19] if recent_session.get("created_at") else "Unknown"
 
             console.print("[yellow]Found recent session:[/]")
             console.print(f"[dim]  Session ID: {session_id}[/]")
-            console.print(f"[dim]  Messages: {msg_count}[/]")
+            if turn_count is not None:
+                console.print(f"[dim]  Turns: {turn_count} (messages: {msg_count})[/]")
+            else:
+                console.print(f"[dim]  Messages: {msg_count}[/]")
             console.print(f"[dim]  Created: {created_time}[/]")
 
             try:
@@ -148,6 +152,8 @@ class SessionManager:
         info = self._resolve_storage(self.mode).get_session_info(self.current_session_id)
         if not info:
             return "No conversation history"
+        if "turn_count" in info:
+            return f"Turns: {info.get('turn_count', 0)} (messages: {info.get('message_count', 0)})"
         return f"Messages: {info.get('message_count', 0)}"
 
     def clear_current_session(self) -> bool:

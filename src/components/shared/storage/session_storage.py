@@ -4,12 +4,11 @@ Session Storage Manager
 Provides persistent storage and retrieval of session data.
 
 Design Principles Applied:
-- YAGNI: Only persist HumanMessage and AIMessage (real conversations)
+- Pragmatic persistence: keep enough message structure for context restoration
 - SRP: Single responsibility - manage session file I/O
 - KISS: Simple JSON serialization without complex transformations
 """
 
-import os
 import json
 import logging
 from datetime import datetime
@@ -18,6 +17,9 @@ from pathlib import Path
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 
 logger = logging.getLogger(__name__)
+
+MAX_TOOL_CONTENT_LENGTH = 500
+TOOL_CONTENT_TRUNCATION_SUFFIX = "\n... [truncated, {original_length} chars total]"
 
 
 class SessionStorage:
@@ -55,26 +57,112 @@ class SessionStorage:
                 json.dump(self.sessions_index, f, ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f"Failed to save session index: {e}")
-    
+
+    @staticmethod
+    def _make_json_safe(value: Any) -> Any:
+        """Convert values to JSON-safe structures while preserving common types."""
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, list):
+            return [SessionStorage._make_json_safe(item) for item in value]
+        if isinstance(value, tuple):
+            return [SessionStorage._make_json_safe(item) for item in value]
+        if isinstance(value, dict):
+            return {str(k): SessionStorage._make_json_safe(v) for k, v in value.items()}
+        return str(value)
+
+    @staticmethod
+    def _count_turns(messages: List[Any]) -> int:
+        """Count conversational turns using HumanMessage boundaries."""
+        turn_count = 0
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                turn_count += 1
+            elif isinstance(msg, dict) and msg.get("type") == "HumanMessage":
+                turn_count += 1
+        return turn_count
+
+    @staticmethod
+    def _count_tool_messages(messages: List[Any]) -> int:
+        tool_count = 0
+        for msg in messages:
+            if isinstance(msg, ToolMessage):
+                tool_count += 1
+            elif isinstance(msg, dict) and msg.get("type") == "ToolMessage":
+                tool_count += 1
+        return tool_count
+
+    @staticmethod
+    def _serialize_tool_calls(tool_calls: Any) -> List[Dict[str, Any]]:
+        serialized: List[Dict[str, Any]] = []
+        if not isinstance(tool_calls, list):
+            return serialized
+        for call in tool_calls:
+            if not isinstance(call, dict):
+                continue
+            item: Dict[str, Any] = {}
+            if "name" in call:
+                item["name"] = str(call.get("name") or "")
+            if "args" in call:
+                item["args"] = SessionStorage._make_json_safe(call.get("args"))
+            if "id" in call:
+                item["id"] = str(call.get("id") or "")
+            # Keep minimal additional fields when present for compatibility.
+            for key in ("type", "index"):
+                if key in call and key not in item:
+                    item[key] = SessionStorage._make_json_safe(call.get(key))
+            serialized.append(item)
+        return serialized
+
+    @staticmethod
+    def _serialize_tool_content(content: Any) -> tuple[Any, Optional[Dict[str, Any]]]:
+        """Serialize ToolMessage content with truncation metadata for large text."""
+        if isinstance(content, str):
+            if len(content) <= MAX_TOOL_CONTENT_LENGTH:
+                return content, None
+            suffix = TOOL_CONTENT_TRUNCATION_SUFFIX.format(original_length=len(content))
+            truncated = content[:MAX_TOOL_CONTENT_LENGTH] + suffix
+            return truncated, {
+                "truncated": True,
+                "original_length": len(content),
+                "stored_length": len(truncated),
+            }
+        return SessionStorage._make_json_safe(content), None
+
     def _message_to_dict(self, message: BaseMessage) -> Dict[str, Any]:
         """Convert message object to dictionary."""
-        return {
+        payload: Dict[str, Any] = {
             "type": message.__class__.__name__,
-            "content": message.content,
+            "content": self._make_json_safe(getattr(message, "content", "")),
             "timestamp": datetime.now().isoformat()
         }
+
+        if isinstance(message, AIMessage):
+            tool_calls = self._serialize_tool_calls(getattr(message, "tool_calls", None))
+            if tool_calls:
+                payload["tool_calls"] = tool_calls
+            return payload
+
+        if isinstance(message, ToolMessage):
+            tool_content, tool_meta = self._serialize_tool_content(message.content)
+            payload["content"] = tool_content
+            payload["tool_call_id"] = str(getattr(message, "tool_call_id", "") or "")
+            payload["name"] = str(getattr(message, "name", "") or "")
+            status = getattr(message, "status", None)
+            if status not in (None, ""):
+                payload["status"] = str(status)
+            if tool_meta:
+                payload["tool_content_meta"] = tool_meta
+            return payload
+
+        return payload
     
     def _dict_to_message(self, msg_dict: Dict[str, Any]) -> BaseMessage:
         """
         Convert dictionary to message object.
 
-        YAGNI Principle: Only deserialize conversational message types (Human/AI).
-        SystemMessage and ToolMessage should never be persisted in the first place,
-        but we handle them gracefully for backward compatibility.
-
-        Note: ToolMessage and SystemMessage types in old session data are intentionally
-        converted to HumanMessage for backward compatibility.
-        New sessions should only contain HumanMessage and AIMessage.
+        Deserialize persisted messages into LangChain message objects.
+        Supports backward-compatible loading of older session formats.
         """
         msg_type = msg_dict.get("type", "HumanMessage")
         content = msg_dict.get("content", "")
@@ -82,7 +170,10 @@ class SessionStorage:
         if msg_type == "HumanMessage":
             return HumanMessage(content=content)
         elif msg_type == "AIMessage":
-            return AIMessage(content=content)
+            tool_calls = msg_dict.get("tool_calls", [])
+            if not isinstance(tool_calls, list):
+                tool_calls = []
+            return AIMessage(content=content, tool_calls=tool_calls)
         elif msg_type == "SystemMessage":
             # SystemMessage should not be persisted, but handle gracefully
             logger.warning(
@@ -91,12 +182,18 @@ class SessionStorage:
             )
             return HumanMessage(content=content)
         elif msg_type == "ToolMessage":
-            # ToolMessage should not be persisted, but handle gracefully
-            logger.warning(
-                f"Found ToolMessage in persisted data (should not happen). "
-                f"Converting to HumanMessage for compatibility."
+            tool_call_id = str(msg_dict.get("tool_call_id", "") or "")
+            name = str(msg_dict.get("name", "") or "")
+            status = msg_dict.get("status")
+            additional_kwargs: Dict[str, Any] = {}
+            if status not in (None, ""):
+                additional_kwargs["status"] = status
+            return ToolMessage(
+                content=content,
+                tool_call_id=tool_call_id,
+                name=name,
+                **additional_kwargs,
             )
-            return HumanMessage(content=content)
         else:
             # Unknown message type - convert to HumanMessage for backward compatibility
             logger.debug(f"Converting unknown message type '{msg_type}' to HumanMessage")
@@ -115,11 +212,16 @@ class SessionStorage:
             True if successful
         """
         try:
+            message_count = len(messages)
+            turn_count = self._count_turns(messages)
+            tool_message_count = self._count_tool_messages(messages)
             # Prepare session data
             session_data = {
                 "session_id": session_id,
                 "messages": [self._message_to_dict(msg) for msg in messages],
-                "message_count": len(messages),
+                "message_count": message_count,
+                "turn_count": turn_count,
+                "tool_message_count": tool_message_count,
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
                 "metadata": metadata or {}
@@ -137,7 +239,9 @@ class SessionStorage:
             # Update index
             self.sessions_index[session_id] = {
                 "session_id": session_id,
-                "message_count": len(messages),
+                "message_count": message_count,
+                "turn_count": turn_count,
+                "tool_message_count": tool_message_count,
                 "created_at": session_data["created_at"],
                 "updated_at": session_data["updated_at"],
                 "file_path": str(session_file)
@@ -167,6 +271,8 @@ class SessionStorage:
                 "session_id": session_id,
                 "messages": [],
                 "message_count": 0,
+                "turn_count": 0,
+                "tool_message_count": 0,
                 "created_at": datetime.now().isoformat(),
                 "updated_at": datetime.now().isoformat(),
                 "metadata": {}
@@ -181,6 +287,8 @@ class SessionStorage:
             self.sessions_index[session_id] = {
                 "session_id": session_id,
                 "message_count": 0,
+                "turn_count": 0,
+                "tool_message_count": 0,
                 "created_at": session_data["created_at"],
                 "updated_at": session_data["updated_at"],
                 "file_path": str(session_file)
@@ -221,6 +329,11 @@ class SessionStorage:
                 self.sessions_index[session_id] = {
                     "session_id": session_id,
                     "message_count": session_data.get("message_count", len(session_data.get("messages", []))),
+                    "turn_count": session_data.get("turn_count", self._count_turns(session_data.get("messages", []))),
+                    "tool_message_count": session_data.get(
+                        "tool_message_count",
+                        self._count_tool_messages(session_data.get("messages", [])),
+                    ),
                     "created_at": session_data.get("created_at", datetime.now().isoformat()),
                     "updated_at": session_data.get("updated_at", datetime.now().isoformat()),
                     "file_path": str(session_file)

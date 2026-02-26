@@ -317,13 +317,15 @@ def render_sessions(
     table = Table(title="Sessions")
     table.add_column("Active", style=TABLE_COLUMN_STYLES["status"], justify="center", width=8)
     table.add_column("Session ID", style=TABLE_COLUMN_STYLES["id"], no_wrap=True)
-    table.add_column("Messages", style=TABLE_COLUMN_STYLES["count"], justify="right", width=10)
+    table.add_column("Turns", style=TABLE_COLUMN_STYLES["count"], justify="right", width=10)
     table.add_column("Created At", style=TABLE_COLUMN_STYLES["time"], no_wrap=True)
     table.add_column("Updated At", style=TABLE_COLUMN_STYLES["time"], no_wrap=True)
 
     for session in sessions:
         session_id = session.get("session_id", session.get("id", ""))
+        turn_count = session.get("turn_count")
         message_count = session.get("message_count", 0)
+        display_count = turn_count if turn_count is not None else message_count
         created_at = session.get("created_at", "")
         updated_at = session.get("updated_at", "")
         
@@ -334,7 +336,7 @@ def render_sessions(
             updated_at = updated_at.split("T")[0] + " " + updated_at.split("T")[1][:8]
         
         active_marker = "*" if session_id == current_session_id else ""
-        table.add_row(active_marker, session_id, str(message_count), created_at, updated_at)
+        table.add_row(active_marker, session_id, str(display_count), created_at, updated_at)
 
     console.print(table)
 

@@ -17,7 +17,7 @@ class DummyConsole:
         for item in inputs or []:
             self._inputs.put(item)
 
-    def print(self, message, *args, **kwargs):
+    def print(self, message="", *args, **kwargs):
         self.outputs.append(str(message))
 
     def input(self, prompt):

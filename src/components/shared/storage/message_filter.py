@@ -104,11 +104,11 @@ class MessageFilter:
             message: Message object to check
 
         Returns:
-            True if it is a system notification (SystemMessage or ToolMessage)
+            True if it is a system notification (SystemMessage only)
         """
-        # System notifications are represented by SystemMessage or ToolMessage
-        # KISS: Type checking is simpler and more reliable than content matching
-        return isinstance(message, (SystemMessage, ToolMessage))
+        # System notifications are represented by SystemMessage only.
+        # ToolMessage contains execution context and should remain in history.
+        return isinstance(message, SystemMessage)
 
     def is_system_notification_legacy(self, content: str) -> bool:
         """
@@ -137,9 +137,9 @@ class MessageFilter:
         SRP Principle: This method has single responsibility - filter non-conversational messages.
 
         Filtering Rules:
-        1. Remove SystemMessage and ToolMessage (system notifications)
+        1. Remove SystemMessage (system notifications)
         2. Remove HumanMessage that are system commands
-        3. Keep HumanMessage and AIMessage pairs for real conversations
+        3. Keep HumanMessage / AIMessage / ToolMessage for real conversations
 
         Args:
             messages: Message history list
@@ -155,6 +155,11 @@ class MessageFilter:
 
             # KISS: Skip system notifications by type checking (simpler than content matching)
             if self.is_system_notification(message):
+                i += 1
+                continue
+
+            if isinstance(message, ToolMessage):
+                filtered_messages.append(message)
                 i += 1
                 continue
 

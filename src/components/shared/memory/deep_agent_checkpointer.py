@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -16,6 +16,11 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.core.project import ProjectContext, MetadataManager
+from .message_sequence_utils import (
+    are_consecutive_duplicates,
+    extract_recent_turns,
+    trim_messages_by_atomic_groups,
+)
 from ..storage.session_storage import SessionStorage
 
 logger = logging.getLogger(__name__)
@@ -57,7 +62,7 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
         try:
             stored = self.storage.load_session(session_id)
             if stored:
-                messages = stored[-max_history:]
+                messages = extract_recent_turns(stored, max_turns=max_history)
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to load history for session %s: %s", session_id, exc)
 
@@ -106,9 +111,6 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
         logger.debug("[PERSIST] After filtering: %d conversational messages", len(filtered))
         for idx, msg in enumerate(filtered[:5]):
             logger.debug("[PERSIST]   [%d] %s: %s...", idx, type(msg).__name__, msg.content[:50])
-
-        existing = self.storage.load_session(session_id) or []
-        logger.debug("[PERSIST] Existing session messages: %d", len(existing))
 
         deduplicated = self._deduplicate_messages(filtered)
         logger.debug("[PERSIST] After deduplication: %d messages (no merge, direct replacement)", len(deduplicated))
@@ -256,19 +258,21 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
         return channel_values.get("messages", []) or []
 
     def _filter_messages(self, messages: List[Any]) -> List[BaseMessage]:
-        """Keep only conversational messages (HumanMessage and AIMessage only)."""
+        """Keep only conversational messages (Human/AI/Tool)."""
         flattened = self._flatten_messages(messages)
-        filtered = [m for m in flattened if isinstance(m, (HumanMessage, AIMessage))]
+        filtered = [m for m in flattened if isinstance(m, (HumanMessage, AIMessage, ToolMessage))]
 
         human_count = sum(1 for m in filtered if isinstance(m, HumanMessage))
         ai_count = sum(1 for m in filtered if isinstance(m, AIMessage))
+        tool_count = sum(1 for m in filtered if isinstance(m, ToolMessage))
         logger.debug(
-            "[FILTER] Input: %d messages, Flattened: %d, Filtered: %d (Human: %d, AI: %d)",
+            "[FILTER] Input: %d messages, Flattened: %d, Filtered: %d (Human: %d, AI: %d, Tool: %d)",
             len(messages),
             len(flattened),
             len(filtered),
             human_count,
             ai_count,
+            tool_count,
         )
 
         return filtered
@@ -287,7 +291,7 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
 
         for msg in messages[1:]:
             prev = deduped[-1]
-            if (type(msg).__name__ == type(prev).__name__ and msg.content == prev.content):
+            if are_consecutive_duplicates(prev, msg):
                 duplicates_removed += 1
                 logger.debug(
                     "[DEDUP] Removing consecutive duplicate: %s: %s...",
@@ -334,9 +338,7 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
 
     def _trim_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
         """Trim history to max_messages if needed."""
-        if self.max_messages and len(messages) > self.max_messages:
-            return messages[-self.max_messages :]
-        return messages
+        return trim_messages_by_atomic_groups(messages, self.max_messages)
 
     def _make_checkpoint_id(self, length: int) -> str:
         """Create a monotonic checkpoint id based on message count."""
