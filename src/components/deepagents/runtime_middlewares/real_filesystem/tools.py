@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
 import subprocess
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -31,7 +29,6 @@ from .utils import (
     DEFAULT_READ_LIMIT,
     DEFAULT_READ_OFFSET,
     EMPTY_CONTENT_WARNING,
-    MAX_CAPTURED_OUTPUT,
     compute_text_diff,
     count_lines,
     encode_size,
@@ -46,7 +43,6 @@ WRITE_TOOL_NAME = "write_real_file"
 EDIT_TOOL_NAME = "edit_real_file"
 GLOB_TOOL_NAME = "glob_real_files"
 GREP_TOOL_NAME = "grep_real_files"
-EXECUTE_SHELL_TOOL_NAME = "execute_shell"
 
 LIST_PROMPT = """List files from the host machine within the configured allowlist.
 
@@ -88,47 +84,11 @@ Usage guidelines:
 - context_lines adds lines before/after each match for additional context.
 - Large files beyond configured limits are skipped automatically."""
 
-EXECUTE_SHELL_PROMPT = """Execute a shell command within the project workspace.
-
-Usage guidelines:
-- Commands run from the project root with a filtered environment.
-- Potentially destructive commands (rm, sudo, shutdown, etc.) are blocked.
-- Avoid chaining commands or redirections; submit a single safe command.
-- Execution is limited by a configurable timeout (default 60 seconds)."""
-
-
 @dataclass(slots=True)
 class RealFilesystemToolFactory:
     """Factory for constructing real filesystem tools."""
 
     options: RealFilesystemOptions
-    _COMMAND_BLACKLIST = {
-        "rm",
-        "sudo",
-        "poweroff",
-        "shutdown",
-        "reboot",
-        "halt",
-        "mkfs",
-        "dd",
-        "chmod",
-        "chown",
-    }
-    _COMMAND_PATTERN_BLACKLIST = (
-        re.compile(r"rm\s+-rf\s+/"),
-        re.compile(r"rm\s+-rf\s+~"),
-        re.compile(r":\s*\(\)\s*{\s*:\s*\|\s*:\s*;\s*}\s*;"),  # fork bomb
-    )
-    _UNSAFE_TOKENS = (";", "&&", "||", "|", ">", ">>", "<", "<<", "`", "$(")
-    _SENSITIVE_ENV_KEYWORDS = (
-        "API_KEY",
-        "SECRET",
-        "TOKEN",
-        "PASSWORD",
-        "PASS",
-        "AUTH",
-        "PRIVATE_KEY",
-    )
 
     # ------------------------------------------------------------------ helper utilities
     def _is_allowed_file(self, path: Path, *, include_hidden: bool) -> bool:
@@ -224,72 +184,6 @@ class RealFilesystemToolFactory:
         if replace_all:
             return content.replace(old_string, new_string), occurrences
         return content.replace(old_string, new_string, 1), 1
-
-    def _split_command(self, command: str) -> List[str]:
-        """Parse a shell command into arguments with safety validation."""
-        if not command or not command.strip():
-            raise ValueError("Command must not be empty.")
-        lowered = command.lower()
-        for pattern in self._COMMAND_PATTERN_BLACKLIST:
-            if pattern.search(lowered):
-                raise ValueError("Command pattern is not permitted for safety reasons.")
-        for token in self._UNSAFE_TOKENS:
-            if token in command:
-                raise ValueError("Command chaining, redirection, and substitutions are not permitted.")
-        try:
-            return shlex.split(command, posix=os.name != "nt")
-        except ValueError as exc:
-            raise ValueError(f"Failed to parse command: {exc}") from exc
-
-    def _validate_command(self, tokens: List[str]) -> None:
-        """Validate command tokens against blacklist and path rules."""
-        if not tokens:
-            raise ValueError("Parsed command must contain at least one token.")
-        command_name = tokens[0].lower()
-        if command_name in self._COMMAND_BLACKLIST:
-            raise ValueError(f"Command '{command_name}' is not permitted.")
-
-    def _validate_paths_in_tokens(self, tokens: List[str]) -> None:
-        """Ensure all detected path arguments remain within the allowlist."""
-        for token in tokens[1:]:
-            if not token or token.startswith("-"):
-                continue
-            if any(sep in token for sep in ("/", "\\")) or token.startswith("."):
-                candidate = Path(token)
-                if not candidate.is_absolute():
-                    candidate = (self.options.project_root / candidate).resolve()
-                parent = candidate if candidate.is_dir() else candidate.parent
-                try:
-                    ensure_directory_access(parent, self.options)
-                except PathValidationError as exc:
-                    raise PathValidationError(
-                        f"Command argument '{token}' is outside the allowed directories."
-                    ) from exc
-
-    def _build_environment(self, overrides: Dict[str, Any] | None = None) -> Dict[str, str]:
-        """Return a filtered environment for shell execution."""
-        env = dict(os.environ)
-        for key in list(env.keys()):
-            upper_key = key.upper()
-            if any(marker in upper_key for marker in self._SENSITIVE_ENV_KEYWORDS):
-                env.pop(key, None)
-        env["PWD"] = str(self.options.project_root)
-        if overrides:
-            for key, value in overrides.items():
-                if not isinstance(key, str) or not isinstance(value, str):
-                    raise ValueError("Environment overrides must use string keys and values.")
-                env[key] = value
-        return env
-
-    @staticmethod
-    def _truncate_output(text: str) -> tuple[str, bool]:
-        """Trim command output to the configured maximum."""
-        encoded = text.encode("utf-8")
-        if len(encoded) <= MAX_CAPTURED_OUTPUT:
-            return text, False
-        truncated = encoded[:MAX_CAPTURED_OUTPUT]
-        safe_text = truncated.decode("utf-8", errors="replace")
-        return f"{safe_text}\n... (output truncated to {MAX_CAPTURED_OUTPUT} bytes)", True
 
     def _try_ripgrep_search(
         self,
@@ -846,97 +740,6 @@ class RealFilesystemToolFactory:
 
         return grep_real_files
 
-    # ------------------------------------------------------------------ execute shell tool
-    def build_execute_shell_tool(self, description: str | None = None) -> BaseTool:
-        prompt = description or EXECUTE_SHELL_PROMPT
-
-        @tool(EXECUTE_SHELL_TOOL_NAME, description=prompt)
-        def execute_shell(
-            command: str,
-            timeout: float | int | None = None,
-            env: Dict[str, str] | None = None,
-        ) -> Dict[str, Any] | str:
-            raw_command = (command or "").strip()
-            if not raw_command:
-                return "Command must not be empty."
-
-            if timeout is None:
-                timeout_value = 60.0
-            else:
-                try:
-                    timeout_value = float(timeout)
-                except (TypeError, ValueError):
-                    return "timeout must be a numeric value in seconds."
-                if timeout_value <= 0:
-                    return "timeout must be greater than zero."
-
-            if env is not None and not isinstance(env, dict):
-                return "env must be a mapping of string keys to string values."
-
-            try:
-                tokens = self._split_command(raw_command)
-                self._validate_command(tokens)
-                self._validate_paths_in_tokens(tokens)
-                environment = self._build_environment(env)
-            except (ValueError, PathValidationError) as exc:
-                return str(exc)
-
-            cwd = self.options.project_root
-            start = time.perf_counter()
-            try:
-                completed = subprocess.run(
-                    tokens,
-                    cwd=str(cwd),
-                    env=environment,
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    timeout=timeout_value,
-                )
-                duration = time.perf_counter() - start
-            except subprocess.TimeoutExpired as exc:
-                duration = time.perf_counter() - start
-                stdout, stdout_truncated = self._truncate_output(exc.stdout or "")
-                stderr, stderr_truncated = self._truncate_output(exc.stderr or "")
-                result: Dict[str, Any] = {
-                    "status": "timeout",
-                    "command": raw_command,
-                    "cwd": str(cwd),
-                    "timeout": timeout_value,
-                    "duration": duration,
-                    "stdout": stdout,
-                    "stderr": stderr,
-                }
-                if stdout_truncated or stderr_truncated:
-                    result["output_truncated"] = True
-                return result
-            except OSError as exc:
-                return f"Failed to execute command: {exc}"
-
-            stdout, stdout_truncated = self._truncate_output(completed.stdout or "")
-            stderr, stderr_truncated = self._truncate_output(completed.stderr or "")
-
-            status = "success" if completed.returncode == 0 else "error"
-            result = {
-                "status": status,
-                "command": raw_command,
-                "cwd": str(cwd),
-                "returncode": completed.returncode,
-                "timeout": timeout_value,
-                "duration": duration,
-                "stdout": stdout,
-                "stderr": stderr,
-            }
-            if stdout_truncated or stderr_truncated:
-                result["output_truncated"] = True
-
-            # TODO: persist operation details for session auditing once storage is available.
-
-            return result
-
-        return execute_shell
-
     # ------------------------------------------------------------------ factory helper
     def build_all(self) -> List[BaseTool]:
         return [
@@ -946,5 +749,4 @@ class RealFilesystemToolFactory:
             self.build_edit_tool(),
             self.build_glob_tool(),
             self.build_grep_tool(),
-            self.build_execute_shell_tool(),
         ]

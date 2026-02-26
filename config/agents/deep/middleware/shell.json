@@ -8,5 +8,8 @@
   "max_output_lines": 100,
   "max_output_bytes": 1048576,
   "environment": {},
-  "startup_commands": []
+  "startup_commands": [],
+  "security_policy": {
+    "enabled": false
+  }
 }

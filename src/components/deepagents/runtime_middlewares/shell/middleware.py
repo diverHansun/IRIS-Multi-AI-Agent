@@ -14,6 +14,7 @@ from langgraph.types import Command
 from typing_extensions import Annotated, NotRequired
 
 from .config import ShellConfig
+from .security import STRICT_POLICY
 from .session import PersistentShellSession
 from .tool import ShellTool
 
@@ -207,6 +208,7 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
             startup_timeout=self.config.startup_timeout,
             max_output_lines=self.config.max_output_lines,
             max_output_bytes=self.config.max_output_bytes,
+            policy=STRICT_POLICY if self.config.security_policy.enabled else None,
         )
 
         new_session.start()
@@ -216,7 +218,8 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
             logger.info("Running %d startup commands", len(self.config.startup_commands))
             for cmd in self.config.startup_commands:
                 try:
-                    result = new_session.execute(cmd)
+                    # Startup commands are trusted configuration, not agent-generated input.
+                    result = new_session.execute(cmd, enforce_policy=False)
                     logger.debug("Startup command result: %s", result.output[:200])
                 except Exception as exc:
                     logger.warning("Startup command failed: %s", exc)
@@ -269,21 +272,20 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
 
         logger.info("Executing shell command: %s", command[:100])
 
-        original_timeout = session._command_timeout
         try:
-            # Apply timeout override if provided
-            if timeout_override and timeout_override > 0:
-                session._command_timeout = timeout_override
-
-            try:
-                result = session.execute(command)
-            finally:
-                session._command_timeout = original_timeout
+            result = session.execute(
+                command,
+                timeout_override=timeout_override if timeout_override and timeout_override > 0 else None,
+            )
 
             # Format result
-            status = "success" if result.exit_code == 0 else "error"
-            if result.timed_out:
+            is_blocked = bool(getattr(result, "blocked", False))
+            if is_blocked:
+                status = "blocked"
+            elif result.timed_out:
                 status = "timeout"
+            else:
+                status = "success" if result.exit_code == 0 else "error"
 
             response = {
                 "status": status,
@@ -297,6 +299,8 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
                 response["timeout"] = True
             if result.truncated_by_lines or result.truncated_by_bytes:
                 response["truncated"] = True
+            if is_blocked:
+                response["blocked"] = True
 
             logger.info(
                 "Command completed (status=%s, exit_code=%s, duration=%.3fs)",
@@ -325,5 +329,6 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
             "command_timeout": self.config.command_timeout,
             "max_output_lines": self.config.max_output_lines,
             "max_output_bytes": self.config.max_output_bytes,
+            "security_policy_enabled": self.config.security_policy.enabled,
             "tools": ["shell"],
         }

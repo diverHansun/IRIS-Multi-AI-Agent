@@ -29,5 +29,10 @@
   "_environment_comment": "Environment variables to set in shell session (optional)",
 
   "startup_commands": [],
-  "_startup_commands_comment": "Commands to run when shell starts (e.g., ['cd /workspace', 'source .env'])"
+  "_startup_commands_comment": "Commands to run when shell starts (e.g., ['cd /workspace', 'source .env'])",
+
+  "security_policy": {
+    "enabled": false
+  },
+  "_security_policy_comment": "Optional shell command filtering (disabled by default for backward compatibility)"
 }

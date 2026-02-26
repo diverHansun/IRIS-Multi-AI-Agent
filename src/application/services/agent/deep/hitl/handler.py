@@ -28,6 +28,7 @@ async def handle_hitl_interrupt(
     interrupts: Sequence[Interrupt],
     hitl_manager: SessionHITLManager,
     hitl_config: Optional[Dict[str, Any]] = None,
+    shell_workspace: str | None = None,
 ) -> List[InterruptPayload]:
     """
     Prompt the user to approve or reject pending tool executions.
@@ -55,6 +56,7 @@ async def handle_hitl_interrupt(
                 request,
                 config,
                 hitl_manager,
+                shell_workspace=shell_workspace,
             )
             decisions.append(decision)
 
@@ -74,6 +76,7 @@ async def _resolve_decision(
     request: Dict[str, Any],
     config: Optional[Dict[str, Any]],
     hitl_manager: SessionHITLManager,
+    shell_workspace: str | None = None,
 ) -> Decision:
     tool_name = str(request.get("name", "unknown"))
     args = request.get("args", {})
@@ -111,7 +114,11 @@ async def _resolve_decision(
 
     # Try file_ops preview first (for write_real_file, edit_real_file)
     # Fall back to shell preview (for shell)
-    preview = build_file_preview(tool_name, args) or build_shell_preview(tool_name, args)
+    preview = build_file_preview(tool_name, args) or build_shell_preview(
+        tool_name,
+        args,
+        shell_workspace=shell_workspace,
+    )
     if preview:
         header_lines.append("")
         header_lines.append(f"  Preview: {escape(preview.title)}")

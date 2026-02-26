@@ -426,6 +426,12 @@ class BaseDeepAgentFactory(ABC):
 
                 project_root = getattr(project_context, "project_path", None)
                 config = build_shell_config(shell_config, project_root=project_root)
+                # Preserve the runtime-resolved shell workspace for downstream metadata consumers
+                # (e.g., HITL preview), without mutating shared provider registry config dicts.
+                middleware_config["shell"] = {
+                    **shell_config,
+                    "resolved_workspace_root": str(config.workspace_root),
+                }
                 shell_middleware = ShellToolMiddleware(config=config)
                 shell_tools = shell_middleware.get_tools()
                 if shell_tools:

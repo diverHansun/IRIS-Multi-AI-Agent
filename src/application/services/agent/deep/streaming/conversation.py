@@ -39,6 +39,65 @@ def _ensure_hitl_manager(ctx, hitl_config: Optional[Dict[str, Any]]) -> SessionH
     return manager
 
 
+def _is_shell_security_policy_enabled(metadata: Optional[Dict[str, Any]]) -> bool:
+    middleware_cfg = (metadata or {}).get("middleware", {})
+    if not isinstance(middleware_cfg, dict):
+        return False
+    shell_cfg = middleware_cfg.get("shell", {})
+    if not isinstance(shell_cfg, dict):
+        return False
+    security_cfg = shell_cfg.get("security_policy", {})
+    return isinstance(security_cfg, dict) and bool(security_cfg.get("enabled", False))
+
+
+def _resolve_shell_workspace_for_preview(metadata: Optional[Dict[str, Any]]) -> Optional[str]:
+    middleware_cfg = (metadata or {}).get("middleware", {})
+    if not isinstance(middleware_cfg, dict):
+        return None
+    shell_cfg = middleware_cfg.get("shell", {})
+    if not isinstance(shell_cfg, dict):
+        return None
+    resolved_workspace = shell_cfg.get("resolved_workspace_root")
+    if resolved_workspace not in (None, ""):
+        return str(resolved_workspace)
+    workspace = shell_cfg.get("workspace_root")
+    if workspace in (None, "", "auto", "."):
+        return None
+    return str(workspace)
+
+
+def _build_effective_hitl_config(
+    metadata: Optional[Dict[str, Any]],
+    hitl_config: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Apply runtime HITL adjustments based on active shell middleware configuration."""
+    if not isinstance(hitl_config, dict):
+        return {}
+
+    effective = dict(hitl_config)
+    tools_cfg = hitl_config.get("tools", {})
+    effective_tools: Dict[str, Any] = {}
+    if isinstance(tools_cfg, dict):
+        for key, value in tools_cfg.items():
+            effective_tools[str(key)] = dict(value) if isinstance(value, dict) else value
+
+    dangerous_tools = list(hitl_config.get("dangerous_tools", []) or [])
+
+    if _is_shell_security_policy_enabled(metadata):
+        dangerous_tools = [tool for tool in dangerous_tools if str(tool) != "shell"]
+        shell_settings = effective_tools.get("shell")
+        if not isinstance(shell_settings, dict):
+            shell_settings = {}
+        else:
+            shell_settings = dict(shell_settings)
+        shell_settings["allow_auto_approve"] = True
+        effective_tools["shell"] = shell_settings
+
+    effective["dangerous_tools"] = dangerous_tools
+    effective["tools"] = effective_tools
+    return effective
+
+
 def _resolve_streaming_options(metadata: Dict[str, Any]) -> Dict[str, Any]:
     streaming = metadata.get("streaming", {}) if metadata else {}
     return {
@@ -75,8 +134,10 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     metadata = getattr(agent, "metadata", {}) or {}
     streaming_opts = _resolve_streaming_options(metadata)
     safety_opts = _resolve_safety(metadata)
-    hitl_config = metadata.get("hitl_config", {})
+    raw_hitl_config = metadata.get("hitl_config", {})
+    hitl_config = _build_effective_hitl_config(metadata, raw_hitl_config)
     hitl_manager = _ensure_hitl_manager(ctx, hitl_config)
+    shell_workspace_for_preview = _resolve_shell_workspace_for_preview(metadata)
 
     # Create file operation tracker for this query
     file_tracker = FileOpTracker()
@@ -269,6 +330,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                         captured_interrupts,
                         hitl_manager,
                         hitl_config,
+                        shell_workspace=shell_workspace_for_preview,
                     )
                     resume_data: Any
                     if len(resume_payloads) == 1:

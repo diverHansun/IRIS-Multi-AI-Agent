@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import logging
 import os
-import queue
-import subprocess
-import threading
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
+
+from .security import DirectExecutor, PolicyViolationError, SecurityPolicy, ShellExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +28,7 @@ class CommandResult:
     truncated_by_lines: bool
     truncated_by_bytes: bool
     duration: float
+    blocked: bool = False
 
 
 class PersistentShellSession:
@@ -49,6 +49,9 @@ class PersistentShellSession:
         startup_timeout: float,
         max_output_lines: int,
         max_output_bytes: int,
+        *,
+        executor: ShellExecutor | None = None,
+        policy: SecurityPolicy | None = None,
     ) -> None:
         """
         Initialize persistent shell session.
@@ -56,95 +59,79 @@ class PersistentShellSession:
         Args:
             workspace: Working directory for shell
             shell_command: Command to start shell process
-            environment: Environment variables
+            environment: Environment variables (overrides)
             command_timeout: Timeout for command execution
             startup_timeout: Timeout for shell startup
             max_output_lines: Maximum output lines
             max_output_bytes: Maximum output bytes
+            executor: Optional executor implementation (defaults to DirectExecutor)
+            policy: Optional command filtering policy
         """
         self._workspace = workspace
-        self._shell_command = shell_command
-        self._environment = dict(os.environ)
-        self._environment.update(environment)
+        self._shell_command = list(shell_command)
         self._command_timeout = command_timeout
         self._startup_timeout = startup_timeout
         self._max_output_lines = max_output_lines
         self._max_output_bytes = max_output_bytes
-
-        self._process: Optional[subprocess.Popen[str]] = None
-        self._queue: queue.Queue[tuple[str, str]] = queue.Queue()
-        self._stdout_thread: Optional[threading.Thread] = None
-        self._stderr_thread: Optional[threading.Thread] = None
-        self._terminated = False
+        self._policy = policy
         self._is_windows = os.name == "nt"
 
+        merged_environment = dict(os.environ)
+        merged_environment.update(environment)
+
+        if executor is None:
+            effective_environment = (
+                policy.filter_environment(merged_environment)
+                if policy is not None
+                else merged_environment
+            )
+            self._executor = DirectExecutor(
+                shell_command=self._shell_command,
+                workspace=self._workspace,
+                environment=effective_environment,
+            )
+            self._environment = dict(effective_environment)
+        else:
+            self._executor = executor
+            self._environment = dict(merged_environment)
+
+    @property
+    def workspace(self) -> Path:
+        """Return the configured workspace path."""
+        return self._workspace
+
     def start(self) -> None:
-        """Start the shell subprocess and reader threads."""
-        if self._process and self._process.poll() is None:
+        """Start the shell executor."""
+        if self._executor.is_alive():
             logger.debug("Shell session already running")
             return
 
-        logger.info("Starting shell session: %s", " ".join(self._shell_command))
-
-        try:
-            self._process = subprocess.Popen(
-                self._shell_command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=str(self._workspace),
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                bufsize=1,
-                env=self._environment,
-            )
-        except Exception as exc:
-            raise RuntimeError(f"Failed to start shell process: {exc}") from exc
-
-        if not self._process.stdin or not self._process.stdout or not self._process.stderr:
-            raise RuntimeError("Shell process missing stdin/stdout/stderr")
-
-        # Start reader threads
-        self._stdout_thread = threading.Thread(
-            target=self._read_stream,
-            args=(self._process.stdout, "stdout"),
-            daemon=True,
+        logger.info(
+            "Starting shell session via %s executor: %s",
+            self._executor.executor_type,
+            " ".join(self._shell_command),
         )
-        self._stderr_thread = threading.Thread(
-            target=self._read_stream,
-            args=(self._process.stderr, "stderr"),
-            daemon=True,
-        )
+        self._executor.start()
 
-        self._stdout_thread.start()
-        self._stderr_thread.start()
-
-        logger.info("Shell session started successfully (PID: %s)", self._process.pid)
-
-    def _read_stream(self, stream: Any, stream_name: str) -> None:
-        """Read from stream and put lines into queue."""
-        try:
-            for line in stream:
-                if self._terminated:
-                    break
-                self._queue.put((stream_name, line))
-        except Exception as exc:
-            logger.debug("Stream reader thread error (%s): %s", stream_name, exc)
-        finally:
-            logger.debug("Stream reader thread exiting: %s", stream_name)
-
-    def execute(self, command: str) -> CommandResult:
+    def execute(
+        self,
+        command: str,
+        *,
+        enforce_policy: bool = True,
+        timeout_override: float | None = None,
+    ) -> CommandResult:
         """
         Execute a command in the persistent shell.
 
         Args:
             command: Command string to execute
+            enforce_policy: Whether to apply command security policy
+            timeout_override: Optional per-call timeout override in seconds
 
         Returns:
             CommandResult with output and metadata
         """
-        if not self._process or self._process.poll() is not None:
+        if not self._executor.is_alive():
             raise RuntimeError("Shell session is not running")
 
         if not command or not command.strip():
@@ -157,26 +144,43 @@ class PersistentShellSession:
                 duration=0.0,
             )
 
+        if enforce_policy and self._policy is not None:
+            try:
+                self._policy.validate(command)
+            except PolicyViolationError as exc:
+                logger.info("Command blocked by security policy: %s", exc)
+                return CommandResult(
+                    output=str(exc),
+                    exit_code=None,
+                    timed_out=False,
+                    truncated_by_lines=False,
+                    truncated_by_bytes=False,
+                    duration=0.0,
+                    blocked=True,
+                )
+
         # Generate unique marker for this command
         marker = f"{_DONE_MARKER_PREFIX}_{uuid.uuid4().hex}"
 
         # Construct command with marker
         if self._is_windows:
             # Windows: use echo and errorlevel
-            full_command = f'{command}\necho {marker} %ERRORLEVEL%\n'
+            full_command = f"{command}\necho {marker} %ERRORLEVEL%\n"
         else:
             # Unix: use echo and $?
-            full_command = f'{command}\necho {marker} $?\n'
+            full_command = f"{command}\necho {marker} $?\n"
+
+        effective_timeout = (
+            float(timeout_override)
+            if isinstance(timeout_override, (int, float)) and timeout_override > 0
+            else self._command_timeout
+        )
 
         start_time = time.perf_counter()
 
         try:
             # Send command to shell
-            if not self._process.stdin:
-                raise RuntimeError("Shell stdin is closed")
-
-            self._process.stdin.write(full_command)
-            self._process.stdin.flush()
+            self._executor.send_command(full_command)
 
             # Collect output until marker appears
             output_lines: list[str] = []
@@ -187,23 +191,24 @@ class PersistentShellSession:
             truncated_by_bytes = False
             timed_out = False
 
-            deadline = start_time + self._command_timeout
+            deadline = start_time + effective_timeout
 
             while True:
                 remaining = deadline - time.perf_counter()
                 if remaining <= 0:
                     timed_out = True
-                    logger.warning("Command timed out after %s seconds", self._command_timeout)
+                    logger.warning("Command timed out after %s seconds", effective_timeout)
                     break
 
-                try:
-                    stream_name, line = self._queue.get(timeout=min(remaining, 0.1))
-                except queue.Empty:
+                line_item = self._executor.read_output(timeout=min(remaining, 0.1))
+                if line_item is None:
                     # Check if process died
-                    if self._process.poll() is not None:
+                    if not self._executor.is_alive():
                         logger.warning("Shell process terminated unexpectedly")
                         break
                     continue
+
+                stream_name, line = line_item
 
                 # Check for completion marker
                 if marker in line:
@@ -262,7 +267,7 @@ class PersistentShellSession:
                 output_text += f"\n... (output truncated at {self._max_output_lines} lines)"
 
             if timed_out:
-                output_text += f"\n... (command timed out after {self._command_timeout} seconds)"
+                output_text += f"\n... (command timed out after {effective_timeout} seconds)"
 
             return CommandResult(
                 output=output_text,
@@ -292,38 +297,8 @@ class PersistentShellSession:
         Args:
             timeout: Timeout for graceful termination
         """
-        if not self._process:
-            return
-
-        self._terminated = True
-
-        try:
-            # Try graceful termination first
-            if self._process.poll() is None:
-                if self._process.stdin:
-                    try:
-                        self._process.stdin.write("exit\n")
-                        self._process.stdin.flush()
-                    except Exception as exc:
-                        logger.debug("Failed to send exit command: %s", exc)
-
-                try:
-                    self._process.wait(timeout=timeout)
-                except subprocess.TimeoutExpired:
-                    logger.warning("Shell did not exit gracefully, terminating")
-                    self._process.terminate()
-                    try:
-                        self._process.wait(timeout=2.0)
-                    except subprocess.TimeoutExpired:
-                        logger.warning("Shell did not terminate, killing")
-                        self._process.kill()
-
-        except Exception as exc:
-            logger.error("Error stopping shell session: %s", exc)
-        finally:
-            self._process = None
-            logger.info("Shell session stopped")
+        self._executor.stop(timeout=timeout)
 
     def is_alive(self) -> bool:
         """Check if shell session is running."""
-        return self._process is not None and self._process.poll() is None
+        return self._executor.is_alive()

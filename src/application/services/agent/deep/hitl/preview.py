@@ -178,15 +178,29 @@ def _build_edit_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
 
 
 def _build_shell_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
+    return _build_shell_preview_with_workspace(args)
+
+
+def _build_shell_preview_with_workspace(
+    args: Dict[str, Any],
+    shell_workspace: str | Path | None = None,
+) -> ApprovalPreview | None:
     command = str(args.get("command") or args.get("input") or "")
     if not command:
         return None
     timeout = args.get("timeout")
     env_overrides = args.get("env") or {}
+    if shell_workspace is None:
+        workspace_display = str(Path.cwd())
+    else:
+        workspace_path = (
+            shell_workspace if isinstance(shell_workspace, Path) else Path(shell_workspace)
+        )
+        workspace_display = str(workspace_path.resolve())
 
     details = [
         f"Command: {command}",
-        f"Working directory: {Path.cwd()}",
+        f"Working directory: {workspace_display}",
     ]
     if timeout:
         details.append(f"Timeout: {timeout} seconds")
@@ -200,7 +214,12 @@ def _build_shell_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
     )
 
 
-def build_approval_preview(tool_name: str, args: Dict[str, Any] | None) -> ApprovalPreview | None:
+def build_approval_preview(
+    tool_name: str,
+    args: Dict[str, Any] | None,
+    *,
+    shell_workspace: str | Path | None = None,
+) -> ApprovalPreview | None:
     """Return a HITL preview for supported tools."""
     if not args:
         return None
@@ -209,5 +228,5 @@ def build_approval_preview(tool_name: str, args: Dict[str, Any] | None) -> Appro
     if tool_name == "edit_real_file":
         return _build_edit_preview(args)
     if tool_name == "shell":
-        return _build_shell_preview(args)
+        return _build_shell_preview_with_workspace(args, shell_workspace=shell_workspace)
     return None

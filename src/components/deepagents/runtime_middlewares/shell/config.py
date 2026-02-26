@@ -9,6 +9,13 @@ from typing import Any, Dict, List
 
 
 @dataclass(frozen=True)
+class SecurityPolicyConfig:
+    """Configuration for shell command security policy."""
+
+    enabled: bool = False
+
+
+@dataclass(frozen=True)
 class ShellConfig:
     """Configuration for persistent shell middleware."""
 
@@ -22,6 +29,7 @@ class ShellConfig:
     max_output_bytes: int = 1048576
     environment: Dict[str, str] = field(default_factory=dict)
     startup_commands: List[str] = field(default_factory=list)
+    security_policy: SecurityPolicyConfig = field(default_factory=SecurityPolicyConfig)
 
     def __post_init__(self) -> None:
         """Validate configuration values."""
@@ -125,6 +133,13 @@ def build_shell_config(
     if not isinstance(startup_commands, list):
         startup_commands = []
 
+    security_policy_dict = config_dict.get("security_policy", {})
+    if not isinstance(security_policy_dict, dict):
+        security_policy_dict = {}
+    security_policy = SecurityPolicyConfig(
+        enabled=bool(security_policy_dict.get("enabled", False))
+    )
+
     return ShellConfig(
         enabled=bool(config_dict.get("enabled", True)),
         workspace_root=workspace_root,
@@ -136,4 +151,5 @@ def build_shell_config(
         max_output_bytes=int(config_dict.get("max_output_bytes", 1048576)),
         environment=environment,
         startup_commands=startup_commands,
+        security_policy=security_policy,
     )
