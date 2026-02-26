@@ -255,6 +255,4 @@ deepagents_cli-0.0.7/
 
 # DeepAgents (子仓库，但保留 src/components/deepagents/)
 # 原仓库忽略 deepagents 子项目；保留我们自己的实现
-deepagents/
-!src/components/deepagents/
-!src/agents/deepagents/**
+/deepagents/
