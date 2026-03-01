@@ -38,6 +38,7 @@ class FileOperationRecord:
     file_path: str
     physical_path: Optional[Path]
     args: Dict[str, Any] = field(default_factory=dict)
+    encoding: str = "utf-8"
     status: FileOpStatus = "pending"
     error: Optional[str] = None
 
@@ -58,12 +59,27 @@ class ApprovalPreview:
     error: Optional[str] = None
 
 
-def _safe_read(path: Path) -> Optional[str]:
-    """Read file content safely, return None on failure."""
-    try:
-        return path.read_text(encoding='utf-8')
-    except (OSError, UnicodeDecodeError):
-        return None
+def _safe_read(path: Path, encoding: str = "utf-8") -> Optional[str]:
+    """Read file content safely, return None on failure.
+
+    Tries the requested *encoding* first, then falls back to common
+    alternatives so that files written with a different encoding (e.g.
+    GB18030 on Chinese Windows) can still be read back for diff
+    calculation.
+    """
+    candidates = [encoding]
+    for fallback in ("utf-8", "utf-8-sig", "gb18030", "latin-1"):
+        if fallback not in candidates:
+            candidates.append(fallback)
+
+    for enc in candidates:
+        try:
+            return path.read_text(encoding=enc)
+        except UnicodeDecodeError:
+            continue
+        except OSError:
+            return None
+    return None
 
 
 def _count_lines(text: str) -> int:
@@ -115,11 +131,16 @@ def compute_unified_diff(
     return "\n".join(diff_lines)
 
 
-def resolve_physical_path(path_str: Optional[str]) -> Optional[Path]:
+def resolve_physical_path(
+    path_str: Optional[str],
+    base_dir: Optional[Path] = None,
+) -> Optional[Path]:
     """Convert file path to absolute physical path.
 
     Args:
         path_str: File path string (relative or absolute)
+        base_dir: Base directory for resolving relative paths.
+                  Falls back to ``Path.cwd()`` when *None*.
 
     Returns:
         Resolved absolute Path object, or None on error
@@ -131,7 +152,8 @@ def resolve_physical_path(path_str: Optional[str]) -> Optional[Path]:
         path = Path(path_str)
         if path.is_absolute():
             return path.resolve()
-        return (Path.cwd() / path).resolve()
+        root = base_dir if base_dir is not None else Path.cwd()
+        return (root / path).resolve()
     except (OSError, ValueError):
         return None
 
@@ -160,12 +182,14 @@ def format_display_path(path_str: Optional[str]) -> str:
 def build_approval_preview(
     tool_name: str,
     args: Dict[str, Any],
+    project_root: Optional[Path] = None,
 ) -> Optional[ApprovalPreview]:
     """Build preview for HITL approval.
 
     Args:
         tool_name: Name of the tool (write_real_file, edit_real_file)
         args: Tool arguments
+        project_root: Base directory for resolving relative file paths.
 
     Returns:
         ApprovalPreview object with diff and details, or None if not applicable
@@ -175,11 +199,12 @@ def build_approval_preview(
 
     path_str = str(args.get("file_path") or args.get("path") or "")
     display_path = format_display_path(path_str)
-    physical_path = resolve_physical_path(path_str)
+    physical_path = resolve_physical_path(path_str, project_root)
+    encoding = str(args.get("encoding", "utf-8"))
 
     if tool_name == "write_real_file":
         content = str(args.get("content", ""))
-        before = _safe_read(physical_path) if physical_path and physical_path.exists() else ""
+        before = _safe_read(physical_path, encoding) if physical_path and physical_path.exists() else ""
         after = content
 
         diff = compute_unified_diff(before or "", after, display_path, max_lines=None)
@@ -216,7 +241,7 @@ def build_approval_preview(
                 error="Unable to resolve file path.",
             )
 
-        before = _safe_read(physical_path)
+        before = _safe_read(physical_path, encoding)
         if before is None:
             return ApprovalPreview(
                 title=f"Update {display_path}",
@@ -277,7 +302,8 @@ def build_approval_preview(
 class FileOpTracker:
     """Track file operations during agent execution."""
 
-    def __init__(self) -> None:
+    def __init__(self, project_root: Optional[Path] = None) -> None:
+        self.project_root = project_root
         self.active: Dict[Optional[str], FileOperationRecord] = {}
         self.completed: List[FileOperationRecord] = []
 
@@ -298,8 +324,10 @@ class FileOpTracker:
             return
 
         path_str = str(args.get("file_path") or args.get("path") or "")
-        physical_path = resolve_physical_path(path_str)
+        physical_path = resolve_physical_path(path_str, self.project_root)
         display_path = format_display_path(path_str)
+
+        encoding = str(args.get("encoding", "utf-8"))
 
         record = FileOperationRecord(
             tool_name=tool_name,
@@ -307,11 +335,12 @@ class FileOpTracker:
             file_path=path_str,
             physical_path=physical_path,
             args=args,
+            encoding=encoding,
         )
 
         # Capture before_content for write/edit operations
         if tool_name in {"write_real_file", "edit_real_file"} and physical_path:
-            record.before_content = _safe_read(physical_path) or ""
+            record.before_content = _safe_read(physical_path, encoding) or ""
 
         self.active[tool_call_id] = record
 
@@ -357,7 +386,7 @@ class FileOpTracker:
 
         # For write/edit operations, calculate diff and metrics
         if record.physical_path:
-            record.after_content = _safe_read(record.physical_path)
+            record.after_content = _safe_read(record.physical_path, record.encoding)
 
             if record.after_content is None:
                 record.status = "error"
@@ -392,7 +421,10 @@ class FileOpTracker:
             elif record.tool_name == "write_real_file" and (record.before_content or "") == "":
                 record.metrics.lines_added = record.metrics.lines_written
 
-            record.metrics.bytes_written = len(record.after_content.encode("utf-8"))
+            try:
+                record.metrics.bytes_written = len(record.after_content.encode(record.encoding))
+            except (UnicodeEncodeError, LookupError):
+                record.metrics.bytes_written = len(record.after_content.encode("utf-8", errors="replace"))
 
             if record.diff is None and before_lines != record.metrics.lines_written:
                 record.metrics.lines_added = max(

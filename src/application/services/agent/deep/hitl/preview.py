@@ -27,11 +27,12 @@ class ApprovalPreview:
     error: Optional[str] = None
 
 
-def _resolve_path(path_str: str) -> Path:
+def _resolve_path(path_str: str, base_dir: Path | None = None) -> Path:
     candidate = Path(path_str)
     if candidate.is_absolute():
         return candidate
-    return (Path.cwd() / candidate).resolve()
+    root = base_dir if base_dir is not None else Path.cwd()
+    return (root / candidate).resolve()
 
 
 def _read_text(path: Path, encoding: str) -> str | str:
@@ -66,14 +67,17 @@ def _perform_string_replacement(
     return content.replace(old_string, new_string, 1), 1
 
 
-def _build_write_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
+def _build_write_preview(
+    args: Dict[str, Any],
+    project_root: Path | None = None,
+) -> ApprovalPreview | None:
     file_path = str(args.get("file_path") or "")
     if not file_path:
         return None
     encoding = str(args.get("encoding") or "utf-8")
     content = str(args.get("content", ""))
 
-    physical_path = _resolve_path(file_path)
+    physical_path = _resolve_path(file_path, project_root)
     existing_content = _read_text(physical_path, encoding)
     if isinstance(existing_content, str) and existing_content.startswith("Failed to read"):
         return ApprovalPreview(
@@ -95,7 +99,7 @@ def _build_write_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
         )
 
     previous = "" if existing_content is None else str(existing_content)
-    display_path = relative_display_path(physical_path, Path.cwd())
+    display_path = relative_display_path(physical_path, project_root or Path.cwd())
     diff_info = compute_text_diff(previous, content, display_path)
     details = [
         f"File: {file_path}",
@@ -116,7 +120,10 @@ def _build_write_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
     return preview
 
 
-def _build_edit_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
+def _build_edit_preview(
+    args: Dict[str, Any],
+    project_root: Path | None = None,
+) -> ApprovalPreview | None:
     file_path = str(args.get("file_path") or "")
     if not file_path:
         return None
@@ -125,7 +132,7 @@ def _build_edit_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
     new_string = str(args.get("new_string", ""))
     replace_all = bool(args.get("replace_all", False))
 
-    physical_path = _resolve_path(file_path)
+    physical_path = _resolve_path(file_path, project_root)
     existing_content = _read_text(physical_path, encoding)
     if isinstance(existing_content, str) and existing_content.startswith("Failed to read"):
         return ApprovalPreview(
@@ -156,7 +163,7 @@ def _build_edit_preview(args: Dict[str, Any]) -> ApprovalPreview | None:
         )
 
     updated_content, occurrences = replacement
-    display_path = relative_display_path(physical_path, Path.cwd())
+    display_path = relative_display_path(physical_path, project_root or Path.cwd())
     diff_info = compute_text_diff(previous, updated_content, display_path)
 
     details = [
@@ -219,14 +226,15 @@ def build_approval_preview(
     args: Dict[str, Any] | None,
     *,
     shell_workspace: str | Path | None = None,
+    project_root: Path | None = None,
 ) -> ApprovalPreview | None:
     """Return a HITL preview for supported tools."""
     if not args:
         return None
     if tool_name == "write_real_file":
-        return _build_write_preview(args)
+        return _build_write_preview(args, project_root=project_root)
     if tool_name == "edit_real_file":
-        return _build_edit_preview(args)
+        return _build_edit_preview(args, project_root=project_root)
     if tool_name == "shell":
         return _build_shell_preview_with_workspace(args, shell_workspace=shell_workspace)
     return None

@@ -405,6 +405,14 @@ class BaseDeepAgentFactory(ABC):
                     updated_tools.extend(rs_tools)
                     logger.info("Injected %d real filesystem tools", len(rs_tools))
                 middlewares.append(real_middleware)
+                # Preserve the runtime-resolved project root for downstream
+                # consumers (e.g., FileOpTracker, HITL preview).
+                fs_config = middleware_config.get("filesystem")
+                if isinstance(fs_config, dict):
+                    fs_config["real"] = {
+                        **real_config,
+                        "resolved_project_root": str(real_middleware.options.project_root),
+                    }
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("Failed to inject real filesystem tools: %s", exc, exc_info=True)
 

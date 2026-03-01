@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from rich.markup import escape
@@ -29,6 +30,7 @@ async def handle_hitl_interrupt(
     hitl_manager: SessionHITLManager,
     hitl_config: Optional[Dict[str, Any]] = None,
     shell_workspace: str | None = None,
+    project_root: Path | None = None,
 ) -> List[InterruptPayload]:
     """
     Prompt the user to approve or reject pending tool executions.
@@ -57,6 +59,7 @@ async def handle_hitl_interrupt(
                 config,
                 hitl_manager,
                 shell_workspace=shell_workspace,
+                project_root=project_root,
             )
             decisions.append(decision)
 
@@ -77,6 +80,7 @@ async def _resolve_decision(
     config: Optional[Dict[str, Any]],
     hitl_manager: SessionHITLManager,
     shell_workspace: str | None = None,
+    project_root: Path | None = None,
 ) -> Decision:
     tool_name = str(request.get("name", "unknown"))
     args = request.get("args", {})
@@ -114,7 +118,7 @@ async def _resolve_decision(
 
     # Try file_ops preview first (for write_real_file, edit_real_file)
     # Fall back to shell preview (for shell)
-    preview = build_file_preview(tool_name, args) or build_shell_preview(
+    preview = build_file_preview(tool_name, args, project_root) or build_shell_preview(
         tool_name,
         args,
         shell_workspace=shell_workspace,

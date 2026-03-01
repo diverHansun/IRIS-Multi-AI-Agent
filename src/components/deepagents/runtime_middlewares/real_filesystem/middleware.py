@@ -15,7 +15,8 @@ REAL_FILESYSTEM_PROMPT = """You can access and modify the host project files usi
 Key rules:
 - **Read operations**: Unrestricted. Use list, read, glob, grep freely to explore the codebase.
 - **Write/Edit operations**: Automatic approval workflow. System will pause, show diff preview, and wait for user confirmation.
-- Only paths within the configured allowlist and allowed extensions are accessible.
+- Paths within the project root and user home directory are accessible. Use absolute paths for locations outside project root.
+- Only files with allowed extensions can be read or written.
 - Use pagination (offset/limit) when reading large files to avoid context overflow.
 
 Available tools:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from rich.markup import escape
@@ -64,6 +65,23 @@ def _resolve_shell_workspace_for_preview(metadata: Optional[Dict[str, Any]]) -> 
     if workspace in (None, "", "auto", "."):
         return None
     return str(workspace)
+
+
+def _resolve_filesystem_project_root(metadata: Optional[Dict[str, Any]]) -> Optional[Path]:
+    """Extract the resolved project root from the real filesystem middleware config."""
+    middleware_cfg = (metadata or {}).get("middleware", {})
+    if not isinstance(middleware_cfg, dict):
+        return None
+    fs_cfg = middleware_cfg.get("filesystem", {})
+    if not isinstance(fs_cfg, dict):
+        return None
+    real_cfg = fs_cfg.get("real", {})
+    if not isinstance(real_cfg, dict):
+        return None
+    resolved = real_cfg.get("resolved_project_root")
+    if resolved in (None, ""):
+        return None
+    return Path(str(resolved))
 
 
 def _build_effective_hitl_config(
@@ -138,9 +156,10 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     hitl_config = _build_effective_hitl_config(metadata, raw_hitl_config)
     hitl_manager = _ensure_hitl_manager(ctx, hitl_config)
     shell_workspace_for_preview = _resolve_shell_workspace_for_preview(metadata)
+    filesystem_project_root = _resolve_filesystem_project_root(metadata)
 
     # Create file operation tracker for this query
-    file_tracker = FileOpTracker()
+    file_tracker = FileOpTracker(project_root=filesystem_project_root)
 
     # Pass file_tracker to event_handler for result display
     event_handler = DeepAgentEventHandler(
@@ -370,6 +389,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                         hitl_manager,
                         hitl_config,
                         shell_workspace=shell_workspace_for_preview,
+                        project_root=filesystem_project_root,
                     )
                     resume_data: Any
                     if len(resume_payloads) == 1:

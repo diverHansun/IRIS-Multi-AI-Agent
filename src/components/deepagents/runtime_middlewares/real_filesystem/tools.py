@@ -61,11 +61,15 @@ Usage guidelines:
 
 WRITE_PROMPT = """Write text content to a file on the host machine.
 
-Triggers approval workflow with diff preview. Paths must stay within allowlist and use permitted extensions."""
+Triggers approval workflow with diff preview. Paths must stay within allowlist and use permitted extensions.
+- Relative paths resolve against the project root (default write location).
+- Use absolute paths to write to other allowed directories (e.g. user home)."""
 
 EDIT_PROMPT = """Apply find-and-replace edits to a file on the host machine.
 
-Triggers approval workflow with diff preview. Always read the file first to ensure old_string matches exactly."""
+Triggers approval workflow with diff preview. Always read the file first to ensure old_string matches exactly.
+- Relative paths resolve against the project root.
+- Use absolute paths to edit files in other allowed directories."""
 
 GLOB_PROMPT = """Search for files on the host machine using glob patterns.
 

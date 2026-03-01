@@ -13,9 +13,8 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import MemorySaver
-
 from src.core.project import ProjectContext, MetadataManager
+from .safe_memory_saver import SafeMemorySaver
 from .message_sequence_utils import (
     are_consecutive_duplicates,
     extract_recent_turns,
@@ -32,7 +31,7 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
     def __init__(
         self,
         storage_dir: Optional[str] = None,
-        runtime_checkpointer: MemorySaver | None = None,
+        runtime_checkpointer: SafeMemorySaver | None = None,
         max_messages: int = 100,
         project_context: Optional[ProjectContext] = None,
         metadata_manager: Optional[MetadataManager] = None,
@@ -48,7 +47,7 @@ class DeepAgentCheckpointer(BaseCheckpointSaver[int]):
             resolved_dir = str(self.project_context.get_storage_dir("deep"))
 
         self.storage = SessionStorage(resolved_dir)
-        self.runtime_checkpointer = runtime_checkpointer or MemorySaver()
+        self.runtime_checkpointer = runtime_checkpointer or SafeMemorySaver()
         self.max_messages = max_messages
 
     def enhance_runtime_input(

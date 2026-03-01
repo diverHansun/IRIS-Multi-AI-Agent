@@ -1,5 +1,7 @@
 """Unit tests for file operation tracking and diff preview."""
 
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -74,6 +76,23 @@ class TestPathHandling(unittest.TestCase):
         """Test handling None input."""
         result = resolve_physical_path(None)
         self.assertIsNone(result)
+
+    def test_resolve_physical_path_with_base_dir(self):
+        """Test resolving relative path against explicit base_dir."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            result = resolve_physical_path("report.md", base_dir=base)
+            self.assertIsNotNone(result)
+            self.assertTrue(result.is_absolute())
+            self.assertEqual(result, (base / "report.md").resolve())
+
+    def test_resolve_physical_path_absolute_ignores_base_dir(self):
+        """Absolute paths are not affected by base_dir."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            abs_path = str(Path(tmpdir) / "abs.txt")
+            result = resolve_physical_path(abs_path, base_dir=Path("/other"))
+            self.assertIsNotNone(result)
+            self.assertEqual(result.name, "abs.txt")
 
     def test_format_display_path(self):
         """Test path formatting for display."""
@@ -296,6 +315,135 @@ class TestFileOpTracker(unittest.TestCase):
         self.assertIsNotNone(record)
         self.assertEqual(record.status, "success")
         self.assertIsNone(record.diff)
+
+
+class TestEncodingHandling(unittest.TestCase):
+    """Test encoding-aware file reading and tracking."""
+
+    def test_safe_read_utf8_default(self):
+        """_safe_read works with default UTF-8 content."""
+        from src.application.services.agent.deep.hitl.file_ops import _safe_read
+
+        with NamedTemporaryFile(mode="w", delete=False, suffix=".txt", encoding="utf-8") as f:
+            f.write("Hello 你好世界")
+            temp_path = f.name
+
+        try:
+            result = _safe_read(Path(temp_path))
+            self.assertEqual(result, "Hello 你好世界")
+        finally:
+            Path(temp_path).unlink()
+
+    def test_safe_read_gb18030_with_fallback(self):
+        """_safe_read falls back to GB18030 for Chinese-encoded files."""
+        from src.application.services.agent.deep.hitl.file_ops import _safe_read
+
+        with NamedTemporaryFile(mode="wb", delete=False, suffix=".txt") as f:
+            f.write("你好世界".encode("gb18030"))
+            temp_path = f.name
+
+        try:
+            # Reading with utf-8 would fail, but fallback to gb18030 should work
+            result = _safe_read(Path(temp_path), encoding="utf-8")
+            self.assertIsNotNone(result)
+            self.assertIn("你好世界", result)
+        finally:
+            Path(temp_path).unlink()
+
+    def test_safe_read_explicit_encoding(self):
+        """_safe_read uses the explicit encoding first."""
+        from src.application.services.agent.deep.hitl.file_ops import _safe_read
+
+        with NamedTemporaryFile(mode="wb", delete=False, suffix=".txt") as f:
+            f.write("你好世界".encode("gb18030"))
+            temp_path = f.name
+
+        try:
+            result = _safe_read(Path(temp_path), encoding="gb18030")
+            self.assertEqual(result, "你好世界")
+        finally:
+            Path(temp_path).unlink()
+
+    def test_tracker_stores_encoding_from_args(self):
+        """FileOpTracker should store encoding from tool args."""
+        tracker = FileOpTracker()
+        args = {"file_path": "test.txt", "content": "data", "encoding": "gb18030"}
+
+        tracker.start_operation("write_real_file", args, "call-enc")
+
+        record = tracker.active["call-enc"]
+        self.assertEqual(record.encoding, "gb18030")
+
+    def test_tracker_defaults_encoding_to_utf8(self):
+        """FileOpTracker should default encoding to utf-8."""
+        tracker = FileOpTracker()
+        args = {"file_path": "test.txt", "content": "data"}
+
+        tracker.start_operation("write_real_file", args, "call-def")
+
+        record = tracker.active["call-def"]
+        self.assertEqual(record.encoding, "utf-8")
+
+    def test_complete_with_chinese_content(self):
+        """Tracker should read back Chinese content after write."""
+        with NamedTemporaryFile(mode="w", delete=False, suffix=".md", encoding="utf-8") as f:
+            temp_path = f.name
+
+        try:
+            tracker = FileOpTracker()
+            chinese_content = "# 南京信息工程大学\n\n这是一份报告。"
+            args = {"file_path": temp_path, "content": chinese_content}
+            tracker.start_operation("write_real_file", args, "call-cn")
+
+            # Simulate the write tool completing
+            Path(temp_path).write_text(chinese_content, encoding="utf-8")
+
+            tool_msg = Mock()
+            tool_msg.tool_call_id = "call-cn"
+            tool_msg.content = "File written successfully"
+            tool_msg.status = "success"
+
+            record = tracker.complete_with_message(tool_msg)
+
+            self.assertIsNotNone(record)
+            self.assertEqual(record.status, "success")
+            self.assertIsNotNone(record.after_content)
+            self.assertIn("南京信息工程大学", record.after_content)
+        finally:
+            Path(temp_path).unlink()
+
+    def test_tracker_project_root_resolves_relative_paths(self):
+        """Tracker with project_root should resolve relative paths against it, not CWD."""
+        with tempfile.TemporaryDirectory() as project_dir:
+            project_root = Path(project_dir)
+            target_file = project_root / "report.md"
+            content = "# Report\nSome content."
+
+            # Write file in project_root
+            target_file.write_text(content, encoding="utf-8")
+
+            # Create tracker with project_root (simulates real scenario where
+            # CWD != project_root)
+            tracker = FileOpTracker(project_root=project_root)
+            args = {"file_path": "report.md", "content": content}
+            tracker.start_operation("write_real_file", args, "call-pr")
+
+            tool_msg = Mock()
+            tool_msg.tool_call_id = "call-pr"
+            tool_msg.content = "File written successfully"
+            tool_msg.status = "success"
+
+            record = tracker.complete_with_message(tool_msg)
+
+            self.assertIsNotNone(record)
+            self.assertEqual(record.status, "success")
+            self.assertIsNotNone(record.after_content)
+            self.assertIn("# Report", record.after_content)
+
+    def test_tracker_without_project_root_falls_back_to_cwd(self):
+        """Tracker without project_root resolves relative paths against CWD."""
+        tracker = FileOpTracker()
+        self.assertIsNone(tracker.project_root)
 
 
 if __name__ == "__main__":
