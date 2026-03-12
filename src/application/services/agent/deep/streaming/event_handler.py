@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from rich.markup import escape
+from rich.text import Text
 
 from src.application.cli.theme import COLORS
 
@@ -62,6 +63,8 @@ class DeepAgentEventHandler:
         self._displayed_tool_ids: set[str] = set()
         self._pending_text: str = ""
         self._file_tracker = file_tracker
+        self._last_flushed_text: str = ""
+        self._last_flush_kind: Optional[str] = None
 
         self._spinner_active: bool = False
         self._has_responded: bool = False
@@ -165,7 +168,7 @@ class DeepAgentEventHandler:
 
         # Handle bash errors
         if tool_name == "bash" and tool_status != "success":
-            self._flush_text_buffer(final=True)
+            self._flush_text_buffer(final=True, flush_kind="tool_call")
             if tool_content:
                 self._stop_spinner()
                 self.console.print()
@@ -176,7 +179,7 @@ class DeepAgentEventHandler:
         # Display file operation results (only for write/edit, skip read operations)
         if record and tool_name in {"write_real_file", "edit_real_file"}:
             from ..hitl.file_ops import render_file_operation
-            self._flush_text_buffer(final=True)
+            self._flush_text_buffer(final=True, flush_kind="tool_call")
             self._stop_spinner()
             render_file_operation(record, self.console)
             return
@@ -200,7 +203,7 @@ class DeepAgentEventHandler:
         if tool_content and isinstance(tool_content, str):
             stripped = tool_content.lstrip()
             if stripped.lower().startswith("error"):
-                self._flush_text_buffer(final=True)
+                self._flush_text_buffer(final=True, flush_kind="tool_call")
                 self._stop_spinner()
                 self.console.print()
                 self.console.print(tool_content, style=COLORS["error"], markup=False)
@@ -210,10 +213,13 @@ class DeepAgentEventHandler:
         """Process content_blocks from AIMessage/AIMessageChunk."""
         has_content_blocks = hasattr(message, "content_blocks")
         has_tool_calls = hasattr(message, "tool_calls") and message.tool_calls
+        saw_tool_block = False
 
         # Process content_blocks if available
         if has_content_blocks:
             for block in message.content_blocks:
+                if not isinstance(block, dict):
+                    continue
                 block_type = block.get("type")
 
                 if block_type == "text":
@@ -221,16 +227,20 @@ class DeepAgentEventHandler:
                 elif block_type == "reasoning":
                     pass
                 elif block_type == "tool_call_chunk":
+                    saw_tool_block = True
                     self._handle_tool_call_chunk(block)
+                elif block_type == "tool_call":
+                    saw_tool_block = True
+                    self._process_direct_tool_call(block)
 
-            if getattr(message, "chunk_position", None) == "last":
-                self._flush_text_buffer(final=True)
-
-        # IMPORTANT: Also process tool_calls directly if present
-        # This handles cases where AIMessage has tool_calls but they're not in content_blocks
-        if has_tool_calls:
+        # Fallback for providers that expose tool calls directly on the message
+        # without corresponding tool_call/tool_call_chunk content blocks.
+        if has_tool_calls and not saw_tool_block:
             for tool_call in message.tool_calls:
                 self._process_direct_tool_call(tool_call)
+
+        if getattr(message, "chunk_position", None) == "last":
+            self._flush_text_buffer(final=True, flush_kind="message_end")
 
     def _process_direct_tool_call(self, tool_call: Dict[str, Any]) -> None:
         """Process a complete tool call from AIMessage.tool_calls."""
@@ -244,6 +254,11 @@ class DeepAgentEventHandler:
         # Skip if already displayed
         if tool_id and tool_id in self._displayed_tool_ids:
             return
+
+        self._flush_text_buffer(final=True, flush_kind="tool_call")
+
+        if not isinstance(tool_args, dict):
+            tool_args = {"value": tool_args}
 
         # Register with file tracker
         if tool_id:
@@ -325,7 +340,7 @@ class DeepAgentEventHandler:
         if not isinstance(parsed_args, dict):
             parsed_args = {"value": parsed_args}
 
-        self._flush_text_buffer(final=True)
+        self._flush_text_buffer(final=True, flush_kind="tool_call")
 
         if buffer_id is not None:
             self._displayed_tool_ids.add(buffer_id)
@@ -402,20 +417,27 @@ class DeepAgentEventHandler:
         args_str = args_str[:160] if len(args_str) > 160 else args_str
         return f"{tool_name}({args_str})"
 
-    def _flush_text_buffer(self, *, final: bool = False) -> None:
+    def _flush_text_buffer(
+        self, *, final: bool = False, flush_kind: str = "message_end"
+    ) -> None:
         """Flush accumulated assistant text when appropriate."""
         if not final or not self._pending_text.strip():
             return
 
         self._stop_spinner()
+        text = self._pending_text.rstrip()
+        self._last_flushed_text = text
+        self._last_flush_kind = flush_kind
 
-        if not self._has_responded:
-            self.console.print("Agent:", style=f"bold {COLORS['agent']}", markup=False)
-            self._has_responded = True
+        text_style = "dim" if flush_kind == "tool_call" else COLORS["text_primary"]
+        self._has_responded = True
 
         self.console.print(
-            escape(self._pending_text.rstrip()),
-            style=COLORS["text_primary"],
+            Text.assemble(
+                ("DeepAgent >", f"bold {COLORS['agent']}"),
+                (" ", ""),
+                (text, text_style),
+            )
         )
         self._pending_text = ""
 
@@ -487,7 +509,9 @@ class DeepAgentEventHandler:
                 messages.append(AIMessage(content=content))
         return messages
 
-    def _describe_messages(self, node: str, messages: Sequence[BaseMessage]) -> str:
+    def _describe_messages(
+        self, node: str, messages: Sequence[BaseMessage]
+    ) -> Optional[str]:
         """Generate description for messages."""
         if not messages:
             return f"{node}: (no messages)"
@@ -505,14 +529,19 @@ class DeepAgentEventHandler:
             return f"{node}: Tool '{tool_name}' completed."
 
         if isinstance(last_message, AIMessage):
-            content_snippet = self._truncate(str(last_message.content))
-            if last_message.tool_calls and self.show_tool_calls:
-                tool_names = {
-                    call.get("name", "unknown") for call in last_message.tool_calls
-                }
-                tools = ", ".join(sorted(tool_names))
-                return f"{node}: Calling tools [{tools}]"
-            return f"{node}: {content_snippet}"
+            if last_message.tool_calls:
+                if self.show_tool_calls:
+                    tool_names = {
+                        call.get("name", "unknown") for call in last_message.tool_calls
+                    }
+                    tools = ", ".join(sorted(tool_names))
+                    return f"{node}: Calling tools [{tools}]"
+                return f"{node}: Thinking"
+
+            content = self._visible_text_content(last_message.content).strip()
+            if not content:
+                return None
+            return f"{node}: Thinking"
 
         return f"{node}: {self._truncate(str(last_message.content))}"
 
@@ -576,7 +605,29 @@ class DeepAgentEventHandler:
             "subagent_calls": list(self._subagent_calls),
         }
 
+    def has_streamed_answer(self, answer: str) -> bool:
+        """Return whether the final answer has already been streamed."""
+        return (
+            self._last_flush_kind == "message_end"
+            and self._last_flushed_text.strip() == answer.strip()
+        )
+
     @staticmethod
     def _truncate(text: str, limit: int = 160) -> str:
         """Truncate text to specified limit."""
         return text if len(text) <= limit else text[: limit - 3] + "..."
+
+    @staticmethod
+    def _visible_text_content(content: Any) -> str:
+        """Extract visible text content from message payloads."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(str(item.get("text", "")))
+            return "".join(parts)
+        return str(content) if content is not None else ""

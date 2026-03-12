@@ -252,6 +252,7 @@ class TestEventHandlerDualMode(unittest.TestCase):
         self.handler._flush_text_buffer(final=True)
         self.assertEqual(self.handler._pending_text, "")
         self.console.print.assert_called()
+        self.assertTrue(self.handler.has_streamed_answer("test text"))
 
     def test_chunk_position_last_flushes_buffer(self):
         """Test that chunk_position=last flushes text buffer."""
@@ -262,6 +263,54 @@ class TestEventHandlerDualMode(unittest.TestCase):
         self.handler._process_ai_message_content_blocks(message)
 
         self.assertEqual(self.handler._pending_text, "")
+        self.assertTrue(self.handler.has_streamed_answer("final text"))
+
+    def test_describe_messages_uses_thinking_for_plain_text_ai(self):
+        """Test Step rows no longer leak AI text content."""
+        message = AIMessage(content="This should not appear in the Step row")
+
+        description = self.handler._describe_messages("model", [message])
+
+        self.assertEqual(description, "model: Thinking")
+
+    def test_describe_messages_uses_thinking_when_tool_calls_hidden(self):
+        """Test tool-call updates still render a status when tool display is disabled."""
+        self.handler.show_tool_calls = False
+        message = AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "web_search", "args": {"query": "demo"}, "id": "call-1"}
+            ],
+        )
+
+        description = self.handler._describe_messages("model", [message])
+
+        self.assertEqual(description, "model: Thinking")
+
+    def test_direct_tool_call_flush_does_not_mark_final_answer_streamed(self):
+        """Test direct tool calls flush pending text as intermediate output."""
+        self.handler._pending_text = "Let me search first"
+
+        self.handler._process_direct_tool_call(
+            {"name": "web_search", "args": {"query": "demo"}, "id": "call-1"}
+        )
+
+        self.assertEqual(self.handler._pending_text, "")
+        self.assertFalse(self.handler.has_streamed_answer("Let me search first"))
+
+    def test_message_end_after_direct_tool_call_does_not_override_intermediate_flush(self):
+        """Test message_end runs after direct tool handling without misclassifying text."""
+        message = Mock(spec=AIMessageChunk)
+        message.content_blocks = [{"type": "text", "text": "Need to inspect this"}]
+        message.tool_calls = [
+            {"name": "web_search", "args": {"query": "demo"}, "id": "call-2"}
+        ]
+        message.chunk_position = "last"
+
+        self.handler._process_ai_message_content_blocks(message)
+
+        self.assertEqual(self.handler._last_flush_kind, "tool_call")
+        self.assertFalse(self.handler.has_streamed_answer("Need to inspect this"))
 
     def test_format_tool_display_read_file(self):
         """Test tool display formatting for read_file."""

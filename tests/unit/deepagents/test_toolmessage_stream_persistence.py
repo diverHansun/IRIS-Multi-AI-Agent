@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any, AsyncIterator
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 
 from src.application.services.agent.deep.streaming.conversation import handle_deep_agent_query
 from src.application.services.agent.deep.streaming.event_handler import DeepAgentEventHandler
@@ -57,21 +57,32 @@ class _DeepCheckpointerStub:
 
 
 class _RuntimeStub:
-    def __init__(self) -> None:
+    def __init__(self, events: list[Any] | None = None) -> None:
         self.astream_kwargs: dict[str, Any] | None = None
+        self.events = events or [
+            (("tools",), "updates", {"tools": {"messages": [ToolMessage(content="files", tool_call_id="c1", name="shell")]}}),
+            (("agent",), "updates", {"agent": {"messages": [AIMessage(content="All done")]}}),
+        ]
 
     async def astream(self, pending_input: Any, **kwargs: Any) -> AsyncIterator[Any]:  # noqa: ARG002
         self.astream_kwargs = dict(kwargs)
-        yield (("tools",), "updates", {"tools": {"messages": [ToolMessage(content="files", tool_call_id="c1", name="shell")]}})
-        yield (("agent",), "updates", {"agent": {"messages": [AIMessage(content="All done")]}})
+        for event in self.events:
+            yield event
 
 
 class _AgentStub:
-    def __init__(self) -> None:
-        self.metadata = {"hitl_config": {}, "streaming": {"show_reasoning_steps": False}}
-        self.runtime = _RuntimeStub()
+    def __init__(
+        self,
+        *,
+        runtime: _RuntimeStub | None = None,
+        output: str = "All done",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.metadata = metadata or {"hitl_config": {}, "streaming": {"show_reasoning_steps": False}}
+        self.runtime = runtime or _RuntimeStub()
         self.runtime_checkpointer = _RuntimeCheckpointerStub()
         self.deep_checkpointer = _DeepCheckpointerStub()
+        self.output = output
 
     def create_runtime_config(self, session_id: str) -> dict:
         return {"configurable": {"thread_id": session_id, "checkpoint_ns": ""}}
@@ -82,7 +93,7 @@ class _AgentStub:
     def prepare_stream_result(self, query: str, session_id: str, final_state: dict, *, tool_stats: dict | None = None) -> dict:  # noqa: ARG002
         return {
             "success": True,
-            "output": "All done",
+            "output": self.output,
             "messages": final_state.get("messages", []),
             "tool_calls": (tool_stats or {}).get("tool_calls", 0),
             "tool_names": (tool_stats or {}).get("tool_names", []),
@@ -117,3 +128,74 @@ async def test_handle_deep_agent_query_persists_per_step_and_uses_async_durabili
     # one per-step persist + one final persist
     assert agent.deep_checkpointer.persist_calls >= 2
 
+
+@pytest.mark.asyncio
+async def test_handle_deep_agent_query_skips_duplicate_final_output_when_streamed() -> None:
+    runtime = _RuntimeStub(
+        events=[
+            (
+                ("agent",),
+                "messages",
+                (
+                    AIMessageChunk(content="All done", chunk_position="last"),
+                    {},
+                ),
+            ),
+            (("agent",), "updates", {"agent": {"messages": [AIMessage(content="All done")]}}),
+        ]
+    )
+    agent = _AgentStub(runtime=runtime, output="All done")
+    ctx = _CtxStub(agent)
+
+    answer = await handle_deep_agent_query(ctx, "stream final")
+
+    assert answer == "All done"
+    deepagent_lines = [line for line in ctx.console.outputs if "DeepAgent >" in line]
+    assert len(deepagent_lines) == 1
+    assert "All done" in deepagent_lines[0]
+
+
+@pytest.mark.asyncio
+async def test_handle_deep_agent_query_falls_back_when_only_intermediate_text_streamed() -> None:
+    runtime = _RuntimeStub(
+        events=[
+            (
+                ("agent",),
+                "messages",
+                (
+                    AIMessageChunk(content="Let me search first"),
+                    {},
+                ),
+            ),
+            (
+                ("agent",),
+                "messages",
+                (
+                    AIMessageChunk(
+                        content="",
+                        tool_call_chunks=[
+                            {
+                                "name": "web_search",
+                                "args": '{"query":"demo"}',
+                                "id": "call-1",
+                                "index": 0,
+                                "type": "tool_call_chunk",
+                            }
+                        ],
+                    ),
+                    {},
+                ),
+            ),
+            (("agent",), "updates", {"agent": {"messages": [AIMessage(content="All done")]}}),
+        ]
+    )
+    agent = _AgentStub(runtime=runtime, output="All done")
+    ctx = _CtxStub(agent)
+
+    answer = await handle_deep_agent_query(ctx, "stream intermediate only")
+
+    assert answer == "All done"
+    deepagent_lines = [line for line in ctx.console.outputs if "DeepAgent >" in line]
+    assert len(deepagent_lines) == 2
+    assert any("Let me search first" in line for line in deepagent_lines)
+    assert any("All done" in line for line in deepagent_lines)

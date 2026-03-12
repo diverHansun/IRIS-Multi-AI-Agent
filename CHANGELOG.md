@@ -2,6 +2,25 @@
 
 本文档记录了项目的所有版本更新历史。
 
+## v0.1.2 (2026-03-01)
+
+- **Shell 安全策略**: 2026-02-17 至 2026-03-01，新增 `SecurityPolicy` / `ShellExecutor` 抽象，支持运行时动态 HITL 优化；安全策略默认关闭，向后兼容
+- **记忆持久化**: `ToolMessage` 每步写入、原子消息组修剪，新增 `SafeMemorySaver` 过滤不可序列化的 `__pregel_tasks/Send` 对象
+- **文件系统多路径与编码容错**: `allowed_paths` 扩展支持 `${HOME}` 及任意路径，`case_sensitive` 默认 `false`，`_safe_read` 新增 GB18030 编码回退链
+- **Bug 修复**: 修复 `workspace_root` 和 `FileOpTracker` 路径解析错误，将 `project_root` 贯穿整个 HITL 链
+- **测试基础设施**: 重写 `run_tests.py` 引入命名套件系统，新增约 25 个单元测试文件
+
+## v0.1.1 (2026-02-17)
+
+- **Skills 系统**: 2026-02-13 至 2026-02-17，新增完整的 Skills 注册/加载/中间件架构，支持项目级与用户级 `.iris/skills/` 目录；新增 reload 命令、资源扫描和模板简化功能
+- **流式输出与 MCP 优化**: 修复 Deep Agent 流式渲染异常，重命名 MCP 配置键以统一命名规范
+- **测试覆盖**: 新增项目核心模块的全面单元测试套件
+- **打包文档**: 更新包命名和安装说明，适配 `uv tool install` 工作流
+
+## v0.1.0 (2026-01-21)
+
+- **首个可发布版本**: 基于 v5.0.0 特性集，完成 `uv tool install` 打包配置（hatchling 构建后端、`iris` CLI 入口点、`config/` 目录打包），支持全局安装与任意目录运行
+
 ## v5.0.0 (2026-01-21)
 
 - **配置系统全面重构**: 实现多层级配置管理架构

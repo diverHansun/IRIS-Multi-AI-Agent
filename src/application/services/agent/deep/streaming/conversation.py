@@ -487,7 +487,8 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         return ""
 
     answer = result.get("output", "No response generated.")
-    ctx.console.print(f"[bold blue]DeepAgent >[/] {escape(answer)}")
+    if not event_handler.has_streamed_answer(answer):
+        ctx.console.print(f"[bold blue]DeepAgent >[/] {escape(answer)}")
 
     tool_calls = result.get("tool_calls", 0)
     tool_names = result.get("tool_names") or []
