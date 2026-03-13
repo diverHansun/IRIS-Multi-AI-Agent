@@ -13,7 +13,7 @@ from rich.markup import escape
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command, Interrupt
 
-from src.application.cli.renderers import DeepTranscriptRenderer
+from src.application.cli.renderers import DeepTranscriptRenderer, SpinnerStatusController
 from src.components.deepagents.runtime_middlewares.timeout import ExecutionTimeoutError
 from .event_handler import DeepAgentEventHandler
 from ..hitl.handler import handle_hitl_interrupt, HITLDecisionError
@@ -165,10 +165,12 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         show_elapsed_time=streaming_opts.get("show_elapsed_time", True),
         show_subagent_delegations=streaming_opts.get("show_subagent_delegations", True),
     )
+    spinner_controller = SpinnerStatusController(on_change=renderer.update_spinner_state)
 
     # Pass file_tracker to event_handler for result display
     event_handler = DeepAgentEventHandler(
         renderer,
+        spinner_controller=spinner_controller,
         file_tracker=file_tracker,
         **streaming_opts
     )
@@ -351,7 +353,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 return "[Timeout occurred - please retry or rephrase your request]"
 
             except ExecutionTimeoutError as exc:
-                # Max execution time exceeded (方案B: middleware raises exception)
+                # Max execution time exceeded via middleware-raised timeout
                 logger.warning(f"Max execution time exceeded: {exc}")
 
                 _stop_spinner()

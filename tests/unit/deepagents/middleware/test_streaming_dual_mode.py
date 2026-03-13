@@ -13,6 +13,7 @@ from src.application.services.agent.deep.streaming.event_handler import (
     DeepAgentEventHandler,
     EventProcessingResult,
 )
+from src.application.cli.renderers import SpinnerStatusController
 from src.application.services.agent.deep.hitl.file_ops import (
     FileOpTracker,
 )
@@ -362,20 +363,20 @@ class TestEventHandlerDualMode(unittest.TestCase):
 
     def test_spinner_status_text_includes_elapsed_runtime(self):
         """Test spinner label includes elapsed runtime in minutes and seconds."""
-        self.handler._start_time -= 125.0
+        self.handler.renderer._start_time -= 125.0
 
         text = self.handler._build_spinner_status_text()
 
-        self.assertEqual(text, "[dim]Deep agent reasoning... (2 min 05s)[/]")
+        self.assertEqual(text, "[dim]Thinking... (2 min 05s)[/]")
 
     def test_spinner_status_text_can_hide_elapsed_runtime(self):
         """Test spinner label respects show_elapsed_time setting."""
         self.handler.show_elapsed_time = False
-        self.handler._start_time -= 42.0
+        self.handler.renderer._start_time -= 42.0
 
         text = self.handler._build_spinner_status_text()
 
-        self.assertEqual(text, "[dim]Deep agent reasoning...[/]")
+        self.assertEqual(text, "[dim]Thinking...[/]")
 
     def test_describe_messages_uses_thinking_when_tool_calls_hidden(self):
         """Test tool-call updates still render a status when tool display is disabled."""
@@ -415,6 +416,47 @@ class TestEventHandlerDualMode(unittest.TestCase):
 
         self.assertEqual(self.handler._last_flush_kind, "tool_call")
         self.assertFalse(self.handler.has_streamed_answer("Need to inspect this"))
+
+    def test_task_tool_call_switches_spinner_to_subagent_running(self):
+        """Test task delegations update spinner state with subagent context."""
+        spinner_controller = MagicMock(spec=SpinnerStatusController)
+        handler = DeepAgentEventHandler(
+            self.console,
+            spinner_controller=spinner_controller,
+            file_tracker=FileOpTracker(),
+        )
+
+        handler._process_direct_tool_call(
+            {
+                "name": "task",
+                "args": {
+                    "subagent_type": "coding",
+                    "description": "Implement the feature",
+                },
+                "id": "task-1",
+            }
+        )
+
+        spinner_controller.set_subagent_running.assert_called_once_with("coding")
+
+    def test_non_task_tool_call_switches_spinner_to_tool_calling(self):
+        """Test non-task tools set a generic tool-calling spinner state."""
+        spinner_controller = MagicMock(spec=SpinnerStatusController)
+        handler = DeepAgentEventHandler(
+            self.console,
+            spinner_controller=spinner_controller,
+            file_tracker=FileOpTracker(),
+        )
+
+        handler._process_direct_tool_call(
+            {
+                "name": "web_search",
+                "args": {"query": "langgraph"},
+                "id": "call-1",
+            }
+        )
+
+        spinner_controller.set_tool_calling.assert_called_once_with("web_search")
 
     def test_format_tool_display_read_file(self):
         """Test tool display formatting for read_file."""

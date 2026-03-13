@@ -12,6 +12,7 @@ from rich.text import Text
 from src.application.cli.theme import COLORS
 from .base import BaseTranscriptRenderer
 from .events import TranscriptEvent
+from .spinner import SpinnerState
 
 
 class DeepTranscriptRenderer(BaseTranscriptRenderer):
@@ -34,6 +35,7 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
         self._spinner_update_thread: threading.Thread | None = None
         self._spinner_stop_event = threading.Event()
         self._has_responded = False
+        self._spinner_state = SpinnerState.idle()
 
     def emit(self, event: TranscriptEvent) -> None:
         kind = event.kind
@@ -77,9 +79,28 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
             return
 
     def start_spinner(self) -> None:
+        self.update_spinner_state(SpinnerState.thinking())
+
+    def stop_spinner(self) -> None:
+        self.update_spinner_state(SpinnerState.idle())
+
+    def update_spinner_state(self, state: SpinnerState) -> None:
+        self._spinner_state = state
+        if not state.visible:
+            self._deactivate_spinner()
+            return
+        if not self._spinner_active:
+            self._activate_spinner()
+            return
+        self._refresh_spinner_text()
+
+    def build_spinner_status_text(self) -> str:
+        """Return the current spinner status label."""
+        return self._build_spinner_status_text()
+
+    def _activate_spinner(self) -> None:
         if self._spinner_active:
             return
-
         self._spinner_active = True
         self._spinner_stop_event.clear()
         status_factory = getattr(self.console, "status", None)
@@ -106,7 +127,7 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
         except Exception:
             self._spinner_status = None
 
-    def stop_spinner(self) -> None:
+    def _deactivate_spinner(self) -> None:
         if not self._spinner_active:
             return
 
@@ -151,8 +172,17 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
                 except Exception:
                     break
 
+    def _refresh_spinner_text(self) -> None:
+        spinner_status = self._spinner_status
+        update = getattr(spinner_status, "update", None) if spinner_status else None
+        if callable(update):
+            try:
+                update(self._build_spinner_status_text())
+            except Exception:
+                pass
+
     def _build_spinner_status_text(self) -> str:
-        base = "Deep agent reasoning..."
+        base = self._spinner_state.label or "Thinking..."
         if not self.show_elapsed_time:
             return f"[dim]{base}[/]"
         return f"[dim]{base} ({self._format_runtime_duration(self.elapsed_time)})[/]"
@@ -186,7 +216,6 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
             style=f"dim {COLORS['tool']}",
             markup=False,
         )
-        self.start_spinner()
 
     def _render_tool_error(self, text: str) -> None:
         if not text:
@@ -195,14 +224,12 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
         self.console.print()
         self.console.print(text, style=COLORS["error"], markup=False)
         self.console.print()
-        self.start_spinner()
 
     def _render_file_operation(self, record: Any) -> None:
         from src.application.services.agent.deep.hitl.file_ops import render_file_operation
 
         self.stop_spinner()
         render_file_operation(record, self.console)
-        self.start_spinner()
 
     def _render_elapsed(self, elapsed_time: float) -> None:
         if not self.show_elapsed_time:

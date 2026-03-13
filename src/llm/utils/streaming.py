@@ -18,7 +18,7 @@ Usage:
 import asyncio
 import logging
 import time
-from typing import AsyncGenerator, Dict, Any, Optional, Union, Callable, Literal
+from typing import AsyncGenerator, Dict, Any, Optional, Callable
 from abc import ABC, abstractmethod
 from functools import wraps
 from rich.console import Console
@@ -27,15 +27,15 @@ from rich.panel import Panel
 from rich.text import Text
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
-from langchain_core.callbacks import AsyncCallbackHandler, BaseCallbackHandler
+from langchain_core.callbacks import AsyncCallbackHandler
 from src.core.providers.utils import OllamaClient
 from src.application.cli.theme import COLORS, PANEL_DEFAULTS
 
-# 导入配置
+# Import runtime settings.
 try:
     from src.core.config import settings
 except ImportError:
-    # 如果作为独立模块运行，创建一个简单的配置
+    # Provide a minimal fallback when this module runs standalone.
     class Settings:
         streaming_display_refresh_rate = 10
         streaming_delay_ms = 50
@@ -66,21 +66,21 @@ def for_llm_only(func):
 # ========== Streaming Callback Handler ==========
 
 class StreamingCallbackHandler(AsyncCallbackHandler):
-    """流式输出回调处理器"""
+    """Collect tokens from LangChain streaming callbacks."""
     
     def __init__(self, on_token: Optional[Callable[[str], None]] = None):
         """
-        初始化流式回调处理器
-        
+        Initialise the streaming callback handler.
+
         Args:
-            on_token: 接收到新token时的回调函数
+            on_token: Optional callback invoked for each new token.
         """
         self.on_token = on_token
         self.tokens = []
         self.current_text = ""
     
     async def on_llm_new_token(self, token: str, **kwargs) -> None:
-        """处理新的token"""
+        """Handle a newly streamed token."""
         try:
             self.tokens.append(token)
             self.current_text += token
@@ -88,26 +88,26 @@ class StreamingCallbackHandler(AsyncCallbackHandler):
             if self.on_token:
                 self.on_token(token)
         except Exception as e:
-            logger.error(f"流式回调处理失败: {e}")
+            logger.error("Streaming callback handler failed: %s", e)
     
     def get_full_text(self) -> str:
-        """获取完整文本"""
+        """Return the accumulated text."""
         return self.current_text
     
     def clear(self):
-        """清除累积的文本"""
+        """Reset the accumulated token buffer."""
         self.tokens.clear()
         self.current_text = ""
 
 class StreamingDisplay:
-    """流式显示管理器"""
+    """Manage a standalone Rich live display for streamed content."""
     
-    def __init__(self, title: str = "AI 回复"):
+    def __init__(self, title: str = "AI Response"):
         """
-        初始化流式显示
-        
+        Initialise the live streaming display.
+
         Args:
-            title: 显示面板标题
+            title: Title used for the output panel.
         """
         self.title = title
         self.content = ""
@@ -115,7 +115,7 @@ class StreamingDisplay:
         self.console = Console()
     
     def start(self):
-        """开始流式显示"""
+        """Start the live display."""
         try:
             self.live = Live(
                 self._create_panel(),
@@ -125,29 +125,29 @@ class StreamingDisplay:
             )
             self.live.start()
         except Exception as e:
-            logger.error(f"启动流式显示失败: {e}")
+            logger.error("Failed to start streaming display: %s", e)
     
     def update(self, new_content: str):
-        """更新显示内容"""
+        """Append new content to the live display."""
         try:
             self.content += new_content
             if self.live:
                 self.live.update(self._create_panel())
         except Exception as e:
-            logger.error(f"更新流式显示失败: {e}")
+            logger.error("Failed to update streaming display: %s", e)
     
     def stop(self):
-        """停止流式显示"""
+        """Stop the live display."""
         try:
             if self.live:
                 self.live.stop()
                 self.live = None
         except Exception as e:
-            logger.error(f"停止流式显示失败: {e}")
+            logger.error("Failed to stop streaming display: %s", e)
     
     def _create_panel(self) -> Panel:
-        """创建显示面板"""
-        # 添加光标效果
+        """Create the current Rich panel payload."""
+        # Add a cursor glyph to make the stream feel active.
         display_content = self.content + "▊"
 
         return Panel(
@@ -158,7 +158,7 @@ class StreamingDisplay:
         )
     
     def get_content(self) -> str:
-        """获取当前内容"""
+        """Return the current buffered content."""
         return self.content
 
 class StreamingLLM(ABC):
@@ -218,12 +218,12 @@ class ZhipuStreamingLLM(StreamingLLM):
         prompt: str,
         on_token: Optional[Callable[[str], None]] = None
     ) -> AsyncGenerator[str, None]:
-        """实现智谱AI的流式生成"""
+        """Stream tokens from a Zhipu model."""
         try:
-            # 创建流式回调处理器
+            # Create a callback handler for token-level bookkeeping.
             callback_handler = StreamingCallbackHandler(on_token)
 
-            # 使用流式接口
+            # Consume the model via LangChain's streaming interface.
             async for chunk in self.llm.astream(
                 [HumanMessage(content=prompt)],
                 config={"callbacks": [callback_handler]}
@@ -231,11 +231,11 @@ class ZhipuStreamingLLM(StreamingLLM):
                 if hasattr(chunk, 'content') and chunk.content:
                     yield chunk.content
         except (KeyboardInterrupt, asyncio.CancelledError):
-            # 允许中断传播，确保生成器正确清理
+            # Allow cooperative cancellation without wrapping the exception.
             return
         except Exception as e:
-            logger.error(f"智谱AI流式生成失败: {e}")
-            yield f"流式生成错误: {str(e)}"
+            logger.error("Zhipu streaming generation failed: %s", e)
+            yield f"Streaming generation error: {str(e)}"
 
 class OpenAIStreamingLLM(StreamingLLM):
     """
@@ -249,12 +249,12 @@ class OpenAIStreamingLLM(StreamingLLM):
         prompt: str, 
         on_token: Optional[Callable[[str], None]] = None
     ) -> AsyncGenerator[str, None]:
-        """实现OpenAI的流式生成"""
+        """Stream tokens from an OpenAI-compatible model."""
         try:
-            # 创建流式回调处理器
+            # Create a callback handler for token-level bookkeeping.
             callback_handler = StreamingCallbackHandler(on_token)
             
-            # 使用流式接口
+            # Consume the model via LangChain's streaming interface.
             async for chunk in self.llm.astream(
                 [HumanMessage(content=prompt)],
                 config={"callbacks": [callback_handler]}
@@ -262,11 +262,11 @@ class OpenAIStreamingLLM(StreamingLLM):
                 if hasattr(chunk, 'content') and chunk.content:
                     yield chunk.content
         except (KeyboardInterrupt, asyncio.CancelledError):
-            # 允许中断传播，确保生成器正确清理
+            # Allow cooperative cancellation without wrapping the exception.
             return
         except Exception as e:
-            logger.error(f"OpenAI流式生成失败: {e}")
-            yield f"流式生成错误: {str(e)}"
+            logger.error("OpenAI streaming generation failed: %s", e)
+            yield f"Streaming generation error: {str(e)}"
 
 class OllamaStreamingLLM(StreamingLLM):
     """
@@ -281,19 +281,19 @@ class OllamaStreamingLLM(StreamingLLM):
         prompt: str, 
         on_token: Optional[Callable[[str], None]] = None
     ) -> AsyncGenerator[str, None]:
-        """实现Ollama的流式生成"""
+        """Stream tokens from Ollama with HTTP fallback support."""
         try:
-            # 调试输出
-            logger.info(f"[DEBUG] OllamaStreamingLLM开始流式生成")
-            logger.info(f"[DEBUG] 提示长度: {len(prompt)} 字符")
-            logger.info(f"[DEBUG] 提示预览: {prompt[:200]}...")
-            logger.info(f"[DEBUG] LLM类型: {type(self.llm)}")
+            # Emit detailed diagnostics for local model debugging.
+            logger.info("[DEBUG] OllamaStreamingLLM starting stream generation")
+            logger.info("[DEBUG] Prompt length: %s characters", len(prompt))
+            logger.info("[DEBUG] Prompt preview: %s...", prompt[:200])
+            logger.info("[DEBUG] LLM type: %s", type(self.llm))
             
-            # 创建流式回调处理器
+            # Create a callback handler for token-level bookkeeping.
             callback_handler = StreamingCallbackHandler(on_token)
             
-            # 使用流式接口 - 添加异步锁防止并发问题
-            logger.info(f"[DEBUG] 开始调用self.llm.astream()")
+            # Start normal streaming first. Additional fallbacks live below.
+            logger.info("[DEBUG] Starting self.llm.astream()")
             chunk_count = 0
             
             try:
@@ -303,29 +303,29 @@ class OllamaStreamingLLM(StreamingLLM):
                 ):
                     if hasattr(chunk, 'content') and chunk.content:
                         chunk_count += 1
-                        logger.debug(f"[DEBUG] 收到chunk #{chunk_count}: {chunk.content[:50]}...")
+                        logger.debug("[DEBUG] Received chunk #%s: %s...", chunk_count, chunk.content[:50])
                         yield chunk.content
                 
-                logger.info(f"[DEBUG] 流式生成完成，共 {chunk_count} 个chunks")
+                logger.info("[DEBUG] Stream generation completed with %s chunks", chunk_count)
                 
             except (KeyboardInterrupt, asyncio.CancelledError):
-                # 允许中断传播，确保生成器正确清理
+                # Allow cooperative cancellation without wrapping the exception.
                 return
             except Exception as astream_e:
-                logger.error(f"[DEBUG] astream调用异常: {type(astream_e).__name__}: {astream_e}")
+                logger.error("[DEBUG] astream call failed: %s: %s", type(astream_e).__name__, astream_e)
                 
-                # 详细分析502错误并使用HTTP fallback
+                # Fall back to raw HTTP when the LangChain transport returns 502.
                 if hasattr(astream_e, 'status_code') and astream_e.status_code == 502:
-                    logger.error(f"[DEBUG] 502错误，启用HTTP fallback")
-                    logger.error(f"[DEBUG]   LangChain异常: {type(astream_e).__name__}: {astream_e}")
+                    logger.error("[DEBUG] Received 502, enabling HTTP fallback")
+                    logger.error("[DEBUG]   LangChain exception: %s: %s", type(astream_e).__name__, astream_e)
                     
-                    # 使用直接HTTP客户端作为fallback
+                    # Use a direct HTTP client as the first recovery path.
                     try:
                         base_url = getattr(self.llm, 'base_url', 'http://localhost:11434')
                         model = getattr(self.llm, 'model', 'unknown')
                         temperature = getattr(self.llm, 'temperature', 0.1)
 
-                        logger.error(f"[DEBUG] 使用HTTP fallback: {base_url}, 模型: {model}")
+                        logger.error("[DEBUG] Using HTTP fallback: %s, model: %s", base_url, model)
 
                         http_client = OllamaClient(base_url=base_url, timeout=300)
                         
@@ -335,24 +335,24 @@ class OllamaStreamingLLM(StreamingLLM):
                             logger.debug(f"[DEBUG] HTTP fallback chunk #{chunk_count}: {chunk[:30]}...")
                             yield chunk
                         
-                        logger.info(f"[DEBUG] HTTP fallback成功，共 {chunk_count} chunks")
+                        logger.info("[DEBUG] HTTP fallback succeeded with %s chunks", chunk_count)
                         return
                         
                     except Exception as http_e:
-                        logger.error(f"[DEBUG] HTTP fallback也失败: {http_e}")
-                        # 继续原有的fallback逻辑
+                        logger.error("[DEBUG] HTTP fallback also failed: %s", http_e)
+                        # Continue to the generic fallback path below.
                 
-                # 如果是并发问题，尝试使用同步方法作为fallback
+                # Recover from async generator re-entry with a non-streaming invoke.
                 if "asynchronous generator is already running" in str(astream_e):
-                    logger.warning(f"[DEBUG] 检测到异步生成器并发问题，尝试同步调用作为fallback")
+                    logger.warning("[DEBUG] Detected async generator re-entry, trying ainvoke fallback")
                     
-                    # 使用invoke作为fallback
+                    # Use ainvoke and chunk the final text to mimic streaming.
                     try:
                         result = await self.llm.ainvoke([HumanMessage(content=prompt)])
                         if hasattr(result, 'content') and result.content:
-                            # 将完整结果分块返回以模拟流式
+                            # Split the full result into coarse chunks for compatibility.
                             content = result.content
-                            chunk_size = max(1, len(content) // 10)  # 分成约10个块
+                            chunk_size = max(1, len(content) // 10)
                             for i in range(0, len(content), chunk_size):
                                 chunk = content[i:i+chunk_size]
                                 logger.debug(f"[DEBUG] Fallback chunk: {chunk[:30]}...")
@@ -362,40 +362,40 @@ class OllamaStreamingLLM(StreamingLLM):
                             yield "Fallback response completed"
                             return
                     except Exception as fallback_e:
-                        logger.error(f"[DEBUG] Fallback也失败: {fallback_e}")
+                        logger.error("[DEBUG] Fallback also failed: %s", fallback_e)
                 
                 raise astream_e
 
         except (KeyboardInterrupt, asyncio.CancelledError):
-            # 允许中断传播，确保生成器正确清理
+            # Allow cooperative cancellation without wrapping the exception.
             return
         except Exception as e:
-            logger.error(f"[DEBUG] Ollama流式生成异常: {type(e).__name__}: {e}")
+            logger.error("[DEBUG] Ollama streaming generation failed: %s: %s", type(e).__name__, e)
             if hasattr(e, 'status_code'):
-                logger.error(f"[DEBUG] 状态码: {e.status_code}")
+                logger.error("[DEBUG] Status code: %s", e.status_code)
             if hasattr(e, 'response'):
-                logger.error(f"[DEBUG] 响应内容: {e.response}")
+                logger.error("[DEBUG] Response body: %s", e.response)
             if hasattr(e, 'request'):
-                logger.error(f"[DEBUG] 请求信息: {e.request}")
+                logger.error("[DEBUG] Request metadata: %s", e.request)
             
-            # 添加更多调试信息
-            logger.error(f"[DEBUG] 异常属性: {dir(e)}")
-            logger.error(f"[DEBUG] LLM配置检查:")
-            logger.error(f"[DEBUG]   model: {getattr(self.llm, 'model', 'Unknown')}")
-            logger.error(f"[DEBUG]   base_url: {getattr(self.llm, 'base_url', 'Unknown')}")
-            logger.error(f"[DEBUG]   timeout: {getattr(self.llm, 'timeout', 'Unknown')}")
+            # Log additional diagnostic details for local debugging.
+            logger.error("[DEBUG] Exception attributes: %s", dir(e))
+            logger.error("[DEBUG] LLM configuration check:")
+            logger.error("[DEBUG]   model: %s", getattr(self.llm, "model", "Unknown"))
+            logger.error("[DEBUG]   base_url: %s", getattr(self.llm, "base_url", "Unknown"))
+            logger.error("[DEBUG]   timeout: %s", getattr(self.llm, "timeout", "Unknown"))
             
-            # 测试直接连接
-            logger.error(f"[DEBUG] 测试直接Ollama连接...")
+            # Probe the raw Ollama endpoint to separate transport issues from UI issues.
+            logger.error("[DEBUG] Probing the Ollama endpoint directly...")
             try:
                 import requests
                 base_url = getattr(self.llm, 'base_url', 'http://localhost:11434')
                 response = requests.get(f"{base_url}/api/tags", timeout=10)
-                logger.error(f"[DEBUG] 直接连接状态: {response.status_code}")
+                logger.error("[DEBUG] Direct connection status: %s", response.status_code)
             except Exception as conn_e:
-                logger.error(f"[DEBUG] 直接连接失败: {conn_e}")
+                logger.error("[DEBUG] Direct connection failed: %s", conn_e)
             
-            yield f"流式生成错误: {str(e)}"
+            yield f"Streaming generation error: {str(e)}"
 
 class StreamingManager:
     """
@@ -417,7 +417,7 @@ class StreamingManager:
         3. Register and use immediately
     """
 
-    # Provider class mapping - add new providers here
+    # Provider class mapping. Add new providers here.
     _PROVIDER_MAP = {
         "zhipu": ZhipuStreamingLLM,
         "openai": OpenAIStreamingLLM,
@@ -464,24 +464,24 @@ class StreamingManager:
         self,
         provider: str,
         prompt: str,
-        display_title: str = "AI 回复",
+        display_title: str = "AI Response",
         show_display: bool = True,
         renderer: Any | None = None,
     ) -> Dict[str, Any]:
         """
-        执行流式聊天
-        
+        Execute a streaming chat request.
+
         Args:
-            provider: LLM提供商
-            prompt: 输入提示
-            display_title: 显示标题
-            show_display: 是否显示流式界面
-            
+            provider: Registered LLM provider name.
+            prompt: Prompt text sent to the model.
+            display_title: Display title used by the fallback live UI.
+            show_display: Whether terminal output should be rendered.
+
         Returns:
-            包含回复文本和性能指标的字典
+            A dictionary with the full response and performance metadata.
         """
         if provider not in self.streaming_llms:
-            raise ValueError(f"未注册的流式LLM提供商: {provider}")
+            raise ValueError(f"Unregistered streaming LLM provider: {provider}")
         
         streaming_llm = self.streaming_llms[provider]
         full_response = ""
@@ -489,7 +489,7 @@ class StreamingManager:
         chunk_count = 0
         interrupted = False
         
-        # 初始化显示器
+        # Initialise the optional display surface.
         display = None
         use_renderer = show_display and renderer is not None
         if use_renderer:
@@ -501,12 +501,12 @@ class StreamingManager:
             display.start()
         
         try:
-            # 执行流式生成
+            # Stream the response from the selected provider.
             async for chunk in streaming_llm.stream_generate(prompt):
                 full_response += chunk
                 chunk_count += 1
 
-                # 更新显示
+                # Push each chunk into the active presentation surface.
                 if use_renderer:
                     stream_chunk = getattr(renderer, "stream_chunk", None)
                     if callable(stream_chunk):
@@ -514,7 +514,7 @@ class StreamingManager:
                 elif display:
                     display.update(chunk)
 
-                # 小延迟以提供更好的视觉效果
+                # Keep a small pacing delay for smoother terminal rendering.
                 await asyncio.sleep(settings.streaming_delay_ms / 1000.0)
         except (KeyboardInterrupt, asyncio.CancelledError):
             interrupted = True
@@ -576,17 +576,17 @@ class StreamingManager:
                 "interrupted": True,
             }
         except Exception as e:
-            error_msg = f"流式聊天失败: {str(e)}"
+            error_msg = f"Streaming chat failed: {str(e)}"
             logger.error(error_msg)
             full_response = error_msg
             
-            # 如果是Unicode编码错误，不要误报为网络错误
+            # Do not misclassify local encoding failures as transport errors.
             if "gbk" in str(e) and "can't encode" in str(e):
-                logger.warning("[DEBUG] 检测到Unicode编码问题，这不是网络502错误")
-                full_response = "响应成功，但显示时遇到编码问题"
+                logger.warning("[DEBUG] Detected a Unicode encoding issue, not a transport 502")
+                full_response = "The response succeeded, but rendering hit an encoding issue."
             
         finally:
-            # 停止显示
+            # Finalise the active display surface.
             if not interrupted:
                 elapsed = time.time() - start_time
                 chars_per_second = len(full_response) / elapsed if elapsed > 0 else 0
@@ -602,58 +602,57 @@ class StreamingManager:
                 elif display:
                     display.stop()
                     
-                    # 计算性能指标
-                    # 显示最终结果和性能指标 - 安全处理Unicode
+                    # Render the final response and performance summary safely.
                     try:
                         console.print(
                             Panel(
                                 full_response,
-                                title=f"[bold]{display_title} (完成)[/bold]",
+                                title=f"[bold]{display_title} (Complete)[/bold]",
                                 border_style=COLORS["success"],
                                 **PANEL_DEFAULTS,
                             )
                         )
                     except UnicodeEncodeError as e:
                         logger.warning("Unicode encoding error while displaying final response: %s", e)
-                        # 如果有Unicode问题，使用简化显示
-                        print(f"\n=== {display_title} (完成) ===")
-                        # 尝试安全编码
+                        # Fall back to a plain text dump if Rich cannot encode the response.
+                        print(f"\n=== {display_title} (Complete) ===")
+                        # Apply a conservative encoding fallback before printing.
                         try:
                             safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
                             print(safe_response)
                         except Exception as fallback_e:
                             logger.warning("Failed to encode final response with GBK fallback: %s", fallback_e)
-                            print("[响应内容包含特殊字符，无法完整显示]")
+                            print("[The response contains special characters and could not be fully displayed]")
                         print("=" * 50)
                     
                     if chunk_count > 0:
                         try:
                             console.print(
-                                f"性能: {elapsed:.2f}s | "
-                                f"{len(full_response)} 字符 | "
-                                f"{chars_per_second:.1f} 字符/秒 | "
-                                f"{chunk_count} 数据块",
+                                f"Performance: {elapsed:.2f}s | "
+                                f"{len(full_response)} chars | "
+                                f"{chars_per_second:.1f} chars/s | "
+                                f"{chunk_count} chunks",
                                 style=COLORS["text_dim"],
                             )
                         except UnicodeEncodeError as e:
-                            # 安全的性能显示
+                            # Fallback to a plain text performance summary.
                             logger.warning("Unicode encoding error while displaying performance metrics: %s", e)
-                            print(f"性能: {elapsed:.2f}s | {len(full_response)} 字符 | {chars_per_second:.1f} 字符/秒 | {chunk_count} 数据块")
+                            print(f"Performance: {elapsed:.2f}s | {len(full_response)} chars | {chars_per_second:.1f} chars/s | {chunk_count} chunks")
         
         return {
             "response": full_response,
             "elapsed_time": time.time() - start_time,
             "chunk_count": chunk_count,
             "characters": len(full_response),
-            "success": not full_response.startswith("流式聊天失败"),
+            "success": not full_response.startswith("Streaming chat failed"),
             "interrupted": False,
         }
     
     def get_supported_providers(self) -> list:
-        """获取支持的流式提供商列表"""
+        """Return the list of registered streaming providers."""
         return list(self.streaming_llms.keys())
 
-# 全局流式管理器实例
+# Shared streaming manager instance.
 streaming_manager = StreamingManager()
 
 # ========== Convenience Functions ==========
@@ -712,24 +711,27 @@ async def stream_llm_response(
     return result["response"]
 
 async def demo_streaming():
-    """流式输出演示"""
-    console.print("[bold]流式输出演示[/bold]", style=COLORS["info"])
+    """Run a small standalone streaming demo."""
+    console.print("[bold]Streaming demo[/bold]", style=COLORS["info"])
     
-    # 模拟流式输出
-    demo_text = "这是一个流式输出的演示。我们可以看到文字逐字出现，就像真实的AI对话一样。这种效果可以大大提升用户体验，让用户感觉到AI正在实时思考和回应。"
+    # Simulate a streamed answer character by character.
+    demo_text = (
+        "This is a streaming output demo. Characters appear gradually to mimic "
+        "a live model response and make the interaction feel more immediate."
+    )
     
-    display = StreamingDisplay("演示")
+    display = StreamingDisplay("Demo")
     display.start()
     
     try:
         for char in demo_text:
             display.update(char)
-            await asyncio.sleep(settings.streaming_delay_ms / 1000.0)  # 模拟打字效果
+            await asyncio.sleep(settings.streaming_delay_ms / 1000.0)
             
     finally:
         display.stop()
-        console.print("[bold]演示完成！[/bold]", style=COLORS["success"])
+        console.print("[bold]Demo complete[/bold]", style=COLORS["success"])
 
 if __name__ == "__main__":
-    # 运行演示
+    # Run the standalone demo when executed directly.
     asyncio.run(demo_streaming())

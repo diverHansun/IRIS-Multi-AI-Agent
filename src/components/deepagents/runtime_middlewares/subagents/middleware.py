@@ -12,6 +12,7 @@ Following SOLID principles:
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Sequence, Optional
 
 from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, ModelResponse
@@ -37,6 +38,11 @@ _EXCLUDED_STATE_KEYS = (
     "_runtime_checkpointer",  # Internal: runtime checkpointer reference
     "_runtime_config",        # Internal: runtime config reference
 )
+
+
+def _elapsed_ms(start_time: float) -> float:
+    """Return elapsed time in milliseconds from a perf_counter baseline."""
+    return (time.perf_counter() - start_time) * 1000.0
 
 
 def _prepare_subagent_state(
@@ -395,13 +401,33 @@ class SubAgentMiddleware(AgentMiddleware):
             logger.debug(f"[SubAgent] Task description: {description[:100]}...")
 
             subagent = middleware_self._subagent_runnables[subagent_type]
+            total_started = time.perf_counter()
+            prepare_ms = 0.0
+            ainvoke_ms = 0.0
+            merge_ms = 0.0
+            ainvoke_started: float | None = None
 
             try:
                 # Step 1: Prepare state - copy files, exclude messages/todos (DRY principle)
+                prepare_started = time.perf_counter()
                 subagent_state = _prepare_subagent_state(runtime, description)
+                prepare_ms = _elapsed_ms(prepare_started)
+                logger.debug(
+                    "[SubAgentTiming] type=%s phase=prepare_state duration_ms=%.3f state_keys=%s",
+                    subagent_type,
+                    prepare_ms,
+                    list(subagent_state.keys()),
+                )
 
                 # Step 2: Execute subagent with copied state
+                ainvoke_started = time.perf_counter()
                 result = await subagent.ainvoke(subagent_state)
+                ainvoke_ms = _elapsed_ms(ainvoke_started)
+                logger.debug(
+                    "[SubAgentTiming] type=%s phase=subagent_ainvoke duration_ms=%.3f",
+                    subagent_type,
+                    ainvoke_ms,
+                )
 
                 logger.info(f"[SubAgent] '{subagent_type}' completed successfully")
 
@@ -415,15 +441,72 @@ class SubAgentMiddleware(AgentMiddleware):
                     messages = result.get("messages", [])
                     if messages:
                         last_msg = messages[-1]
+                        total_ms = _elapsed_ms(total_started)
+                        wrapper_ms = max(total_ms - prepare_ms - ainvoke_ms, 0.0)
+                        logger.debug(
+                            "[SubAgentTiming] type=%s tool_call_id=%s total_ms=%.3f prepare_ms=%.3f "
+                            "ainvoke_ms=%.3f merge_ms=%.3f wrapper_ms=%.3f merged_state=%s",
+                            subagent_type,
+                            runtime.tool_call_id,
+                            total_ms,
+                            prepare_ms,
+                            ainvoke_ms,
+                            merge_ms,
+                            wrapper_ms,
+                            False,
+                        )
                         return last_msg.content if hasattr(last_msg, 'content') else str(last_msg)
+                    total_ms = _elapsed_ms(total_started)
+                    wrapper_ms = max(total_ms - prepare_ms - ainvoke_ms, 0.0)
+                    logger.debug(
+                        "[SubAgentTiming] type=%s tool_call_id=%s total_ms=%.3f prepare_ms=%.3f "
+                        "ainvoke_ms=%.3f merge_ms=%.3f wrapper_ms=%.3f merged_state=%s",
+                        subagent_type,
+                        runtime.tool_call_id,
+                        total_ms,
+                        prepare_ms,
+                        ainvoke_ms,
+                        merge_ms,
+                        wrapper_ms,
+                        False,
+                    )
                     return "SubAgent completed but returned no response."
 
                 # Return Command with state updates (SRP: delegate to helper function)
-                return _return_state_update(result, runtime.tool_call_id)
+                merge_started = time.perf_counter()
+                command = _return_state_update(result, runtime.tool_call_id)
+                merge_ms = _elapsed_ms(merge_started)
+                total_ms = _elapsed_ms(total_started)
+                wrapper_ms = max(total_ms - prepare_ms - ainvoke_ms - merge_ms, 0.0)
+                logger.debug(
+                    "[SubAgentTiming] type=%s tool_call_id=%s total_ms=%.3f prepare_ms=%.3f "
+                    "ainvoke_ms=%.3f merge_ms=%.3f wrapper_ms=%.3f merged_state=%s",
+                    subagent_type,
+                    runtime.tool_call_id,
+                    total_ms,
+                    prepare_ms,
+                    ainvoke_ms,
+                    merge_ms,
+                    wrapper_ms,
+                    True,
+                )
+                return command
 
             except TimeoutError as exc:
                 # SubAgent step timeout - persist MainAgent state before returning error
                 logger.warning(f"[SubAgent] '{subagent_type}' step timeout: {exc}")
+                if ainvoke_started is not None and ainvoke_ms == 0.0:
+                    ainvoke_ms = _elapsed_ms(ainvoke_started)
+                logger.debug(
+                    "[SubAgentTiming] type=%s tool_call_id=%s status=step_timeout total_ms=%.3f "
+                    "prepare_ms=%.3f ainvoke_ms=%.3f merge_ms=%.3f",
+                    subagent_type,
+                    runtime.tool_call_id,
+                    _elapsed_ms(total_started),
+                    prepare_ms,
+                    ainvoke_ms,
+                    merge_ms,
+                )
 
                 # Persist MainAgent state to prevent data loss
                 await _persist_main_agent_if_available(
@@ -451,6 +534,18 @@ class SubAgentMiddleware(AgentMiddleware):
                     f"[SubAgent] '{subagent_type}' max_execution_time exceeded: "
                     f"{exc.elapsed_time:.1f}s / {exc.max_execution_time:.0f}s"
                 )
+                if ainvoke_started is not None and ainvoke_ms == 0.0:
+                    ainvoke_ms = _elapsed_ms(ainvoke_started)
+                logger.debug(
+                    "[SubAgentTiming] type=%s tool_call_id=%s status=max_execution_timeout total_ms=%.3f "
+                    "prepare_ms=%.3f ainvoke_ms=%.3f merge_ms=%.3f",
+                    subagent_type,
+                    runtime.tool_call_id,
+                    _elapsed_ms(total_started),
+                    prepare_ms,
+                    ainvoke_ms,
+                    merge_ms,
+                )
 
                 # Persist MainAgent state to prevent data loss
                 await _persist_main_agent_if_available(
@@ -473,6 +568,19 @@ class SubAgentMiddleware(AgentMiddleware):
                 # Generic exception - log and return error
                 error_msg = f"SubAgent execution failed: {exc}"
                 logger.error(f"[SubAgent] '{subagent_type}' failed: {exc}", exc_info=True)
+                if ainvoke_started is not None and ainvoke_ms == 0.0:
+                    ainvoke_ms = _elapsed_ms(ainvoke_started)
+                logger.debug(
+                    "[SubAgentTiming] type=%s tool_call_id=%s status=error total_ms=%.3f "
+                    "prepare_ms=%.3f ainvoke_ms=%.3f merge_ms=%.3f error=%s",
+                    subagent_type,
+                    runtime.tool_call_id,
+                    _elapsed_ms(total_started),
+                    prepare_ms,
+                    ainvoke_ms,
+                    merge_ms,
+                    exc,
+                )
                 return error_msg
 
         # Update docstring with available types

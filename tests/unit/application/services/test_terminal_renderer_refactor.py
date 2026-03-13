@@ -5,7 +5,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.application.cli.renderers import BasicTranscriptRenderer, LLMTranscriptRenderer
+from src.application.cli.renderers import (
+    BasicTranscriptRenderer,
+    LLMTranscriptRenderer,
+    SpinnerState,
+    SpinnerStatusController,
+)
 from src.application.services.dify.streaming import DifyStreaming
 from src.llm.utils.streaming import StreamingManager
 
@@ -37,6 +42,26 @@ def test_llm_transcript_renderer_streams_chunks_with_single_prefix() -> None:
     assert "LLM >" in str(first_call.args[0])
     assert second_call.args[0] == "lo"
     assert third_call.args == ()
+
+
+def test_spinner_state_exposes_semantic_subagent_label() -> None:
+    state = SpinnerState.subagent_running("coding")
+
+    assert state.visible is True
+    assert state.label == "Subagent coding running..."
+
+
+def test_spinner_status_controller_emits_state_transitions() -> None:
+    captured: list[SpinnerState] = []
+    controller = SpinnerStatusController(on_change=captured.append)
+
+    controller.set_subagent_running("research")
+    controller.set_idle()
+
+    assert captured == [
+        SpinnerState.subagent_running("research"),
+        SpinnerState.idle(),
+    ]
 
 
 class _StreamingLLMStub:

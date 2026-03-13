@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from .events import TranscriptEvent
+from .spinner import SpinnerState
 
 
 class BaseTranscriptRenderer(ABC):
@@ -20,6 +21,13 @@ class BaseTranscriptRenderer(ABC):
 
     def stop_spinner(self) -> None:
         """Stop any waiting indicator."""
+
+    def update_spinner_state(self, state: SpinnerState) -> None:
+        """Update the semantic waiting state for the active transcript."""
+        if state.visible:
+            self.start_spinner()
+            return
+        self.stop_spinner()
 
     def emit_assistant_text(self, text: str, *, intermediate: bool = False) -> None:
         self.emit(
@@ -53,4 +61,3 @@ class BaseTranscriptRenderer(ABC):
 
     def emit_error(self, text: str) -> None:
         self.emit(TranscriptEvent(kind="error", text=text))
-

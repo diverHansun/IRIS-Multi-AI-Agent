@@ -7,7 +7,11 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
-from src.application.cli.renderers import BaseTranscriptRenderer, DeepTranscriptRenderer
+from src.application.cli.renderers import (
+    BaseTranscriptRenderer,
+    DeepTranscriptRenderer,
+    SpinnerStatusController,
+)
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
@@ -36,6 +40,7 @@ class DeepAgentEventHandler:
         console_or_renderer,
         *,
         renderer: BaseTranscriptRenderer | None = None,
+        spinner_controller: SpinnerStatusController | None = None,
         file_tracker=None,
         show_reasoning_steps: bool = True,
         show_tool_calls: bool = True,
@@ -52,13 +57,14 @@ class DeepAgentEventHandler:
                 show_subagent_delegations=show_subagent_delegations,
             )
         self.renderer = renderer
+        self._spinner_controller = spinner_controller
         self.show_reasoning_steps = show_reasoning_steps
         self.show_tool_calls = show_tool_calls
         self.show_tool_results = show_tool_results
         self.show_subagent_delegations = show_subagent_delegations
         self._show_elapsed_time = show_elapsed_time
 
-        self._start_time = time.perf_counter()
+        self._start_time = getattr(renderer, "_start_time", time.perf_counter())
         self._step = 0
         self._tool_call_count = 0
         self._tool_names: set[str] = set()
@@ -199,12 +205,14 @@ class DeepAgentEventHandler:
             self._flush_text_buffer(final=True, flush_kind="tool_call")
             if tool_content:
                 self.renderer.emit_tool_error(tool_content)
+            self._resume_spinner_after_tool(tool_name)
             return
 
         # Display file operation results (only for write/edit, skip read operations)
         if record and tool_name in {"write_real_file", "edit_real_file"}:
             self._flush_text_buffer(final=True, flush_kind="tool_call")
             self.renderer.emit_file_operation(record)
+            self._resume_spinner_after_tool(tool_name)
             return
 
         # Skip read operation results - they are internal and don't need to be shown
@@ -228,6 +236,10 @@ class DeepAgentEventHandler:
             if stripped.lower().startswith("error"):
                 self._flush_text_buffer(final=True, flush_kind="tool_call")
                 self.renderer.emit_tool_error(tool_content)
+                self._resume_spinner_after_tool(tool_name)
+                return
+
+        self._resume_spinner_after_tool(tool_name)
 
     def _process_ai_message_content_blocks(
         self,
@@ -316,6 +328,7 @@ class DeepAgentEventHandler:
         # Display the tool call
         if render_output and self.show_tool_calls:
             self._render_tool_call(tool_name, tool_args)
+        self._update_spinner_for_tool_call(tool_name, tool_args)
 
     def _handle_text_block(self, block: Dict[str, Any]) -> None:
         """Accumulate text blocks for buffered rendering."""
@@ -412,6 +425,7 @@ class DeepAgentEventHandler:
 
         if buffer.get("render_output", True) and self.show_tool_calls:
             self._render_tool_call(buffer_name, parsed_args)
+        self._update_spinner_for_tool_call(buffer_name, parsed_args)
 
     def _render_tool_call(self, tool_name: str, tool_args: Dict[str, Any]) -> None:
         """Render a tool call display.
@@ -486,10 +500,16 @@ class DeepAgentEventHandler:
 
     def _start_spinner(self) -> None:
         """Start spinner if not already active."""
+        if self._spinner_controller is not None:
+            self._spinner_controller.set_thinking()
+            return
         self.renderer.start_spinner()
 
     def _stop_spinner(self) -> None:
         """Stop spinner if active."""
+        if self._spinner_controller is not None:
+            self._spinner_controller.set_idle()
+            return
         self.renderer.stop_spinner()
 
     def start_spinner(self) -> None:
@@ -502,7 +522,10 @@ class DeepAgentEventHandler:
 
     def _build_spinner_status_text(self) -> str:
         """Build spinner label with optional elapsed runtime."""
-        base = "Deep agent reasoning..."
+        build = getattr(self.renderer, "build_spinner_status_text", None)
+        if callable(build):
+            return str(build())
+        base = "Thinking..."
         if not self.show_elapsed_time:
             return f"[dim]{base}[/]"
         return f"[dim]{base} ({self._format_runtime_duration(self.elapsed_time)})[/]"
@@ -517,6 +540,29 @@ class DeepAgentEventHandler:
     def _render_update(self, node: str, payload: Any) -> None:
         """Consume node update events without rendering them to the transcript."""
         self._capture_state(node, payload)
+
+    def _update_spinner_for_tool_call(
+        self,
+        tool_name: str,
+        tool_args: Dict[str, Any],
+    ) -> None:
+        """Switch spinner state based on the active tool call."""
+        if self._spinner_controller is None:
+            return
+        if tool_name == "task":
+            subagent_type = str(tool_args.get("subagent_type", "") or "").strip() or None
+            self._spinner_controller.set_subagent_running(subagent_type)
+            return
+        self._spinner_controller.set_tool_calling(tool_name)
+
+    def _resume_spinner_after_tool(self, tool_name: str) -> None:
+        """Restore a generic waiting state after tool completion."""
+        if self._spinner_controller is None:
+            return
+        if tool_name == "task":
+            self._spinner_controller.set_thinking()
+            return
+        self._spinner_controller.set_thinking()
 
     def _describe_update(self, node: str, payload: Any) -> Optional[str]:
         """Generate description for a node update."""
@@ -721,6 +767,9 @@ class DeepAgentEventHandler:
     @property
     def elapsed_time(self) -> float:
         """Return the total elapsed wall-clock time since handler creation."""
+        renderer_elapsed = getattr(self.renderer, "elapsed_time", None)
+        if isinstance(renderer_elapsed, (int, float)):
+            return float(renderer_elapsed)
         return time.perf_counter() - self._start_time
 
     @property
