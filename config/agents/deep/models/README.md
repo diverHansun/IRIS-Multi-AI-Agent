@@ -1,5 +1,11 @@
 # DeepAgents 配置参数说明
 
+> 兼容性说明:
+> 目前 canonical bundled 路径已经迁移到 `config/agents/deep/` 根层。
+> `models/` 目录保留为 legacy 兼容镜像。新的代码、文档和配置初始化逻辑
+> 应优先使用 `config/agents/deep/mainagents*.json` 与
+> `config/agents/deep/subagents*.json`。
+
 本文档详细说明 MainAgent 和 SubAgent 的各项配置参数及其作用。
 
 ---

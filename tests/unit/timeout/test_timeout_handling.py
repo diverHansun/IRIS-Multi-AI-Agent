@@ -47,7 +47,7 @@ def test_timeout_config_values():
     import json
     
     # Read MainAgent config
-    config_path = "config/agents/deep/models/mainagents.json"
+    config_path = "config/agents/deep/mainagents.example.json"
     with open(config_path, 'r', encoding='utf-8') as f:
         main_config = json.load(f)
     

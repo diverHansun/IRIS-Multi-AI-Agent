@@ -242,6 +242,8 @@ config/llm/models/providers.json
 config/agents/basic/models/providers.json
 
 # DeepAgents configuration files with sensitive API keys
+config/agents/deep/mainagents.json
+config/agents/deep/subagents.json
 config/agents/deep/models/mainagents.json
 config/agents/deep/models/subagents.json
 

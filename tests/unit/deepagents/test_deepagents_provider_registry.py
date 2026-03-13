@@ -365,6 +365,38 @@ class TestDeepAgentsProviderRegistry(unittest.TestCase):
         # Display streaming should be true (for UI)
         self.assertEqual(display_config["streaming_enabled"], True)
 
+    def test_base_path_prefers_canonical_root_files_over_legacy_models(self):
+        """Test canonical root config under base_path wins over legacy models/ files."""
+        root_config = {
+            "openai": {
+                "description": "Root config should win",
+                "default_model": "gpt-4.1",
+                "api_config": {"base_url": "https://api.openai.com/v1"},
+                "models": {
+                    "gpt-4.1": {
+                        "llm_params": {"temperature": 0.1, "max_tokens": 1024, "streaming": False},
+                        "runtime_config": {"recursion_limit": 99, "step_timeout": 30, "stream_mode": "updates"},
+                        "middleware_config": {},
+                        "display_config": {"streaming_enabled": True},
+                        "safety_config": {},
+                        "metadata": {},
+                    }
+                },
+            }
+        }
+
+        with open(Path(self.temp_dir) / "mainagents.json", "w", encoding="utf-8") as f:
+            json.dump(root_config, f)
+
+        self.registry.reload()
+
+        providers = self.registry.get_available_providers()
+        self.assertEqual(providers, ["openai"])
+        self.assertEqual(
+            self.registry.get_api_config("openai")["base_url"],
+            "https://api.openai.com/v1",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

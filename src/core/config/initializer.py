@@ -178,6 +178,10 @@ class ConfigInitializer:
             return copied
 
         allowed_suffixes = {".json", ".toml", ".yaml", ".yml"}
+        skipped_legacy_files = {
+            Path("agents/deep/models/mainagents.json"),
+            Path("agents/deep/models/subagents.json"),
+        }
         for src_path in self._config_dir.rglob("*"):
             if not src_path.is_file():
                 continue
@@ -187,6 +191,8 @@ class ConfigInitializer:
                 continue
 
             rel = src_path.relative_to(self._config_dir)
+            if rel in skipped_legacy_files:
+                continue
             dst_path = self._share_dir / rel
 
             if dst_path.exists():

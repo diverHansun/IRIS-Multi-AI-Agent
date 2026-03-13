@@ -287,19 +287,60 @@ class ConfigLoader:
         config: Dict[str, Any] = {}
 
         # 用户级配置
-        user_file = self._user_config_dir / rel_path
+        user_file = self._resolve_json_scope_path(self._user_config_dir, rel_path)
         user_config = _load_json_file(user_file)
         if user_config:
             config = _deep_merge(config, user_config)
 
         # 项目级配置
         if merge_project and self._project_config_dir:
-            project_file = self._project_config_dir / rel_path
+            project_file = self._resolve_json_scope_path(
+                self._project_config_dir,
+                rel_path,
+            )
             project_config = _load_json_file(project_file)
             if project_config:
                 config = _deep_merge(config, project_config)
 
         return config if config else None
+
+    @staticmethod
+    def _legacy_json_relatives(relative_path: str) -> list[str]:
+        """Return legacy fallback paths for config assets with renamed layout."""
+        if relative_path == "agents/deep/mainagents.json":
+            return ["agents/deep/models/mainagents.json"]
+        if relative_path == "agents/deep/subagents.json":
+            return ["agents/deep/models/subagents.json"]
+        return []
+
+    def _resolve_json_scope_path(
+        self,
+        base_dir: Optional[Path],
+        relative_path: str,
+    ) -> Path:
+        """Resolve the canonical JSON file for one config scope.
+
+        Canonical root-level deep agent files take precedence. Legacy
+        ``models/`` files are only used when the canonical file is absent.
+        """
+        if base_dir is None:
+            return Path(relative_path)
+
+        canonical = base_dir / relative_path
+        if canonical.exists():
+            return canonical
+
+        for legacy_relative in self._legacy_json_relatives(relative_path):
+            legacy = base_dir / legacy_relative
+            if legacy.exists():
+                logger.debug(
+                    "Using legacy config path %s for %s",
+                    legacy,
+                    relative_path,
+                )
+                return legacy
+
+        return canonical
 
     def load_providers_config(self) -> Optional[Dict[str, Any]]:
         """加载 LLM providers 配置"""
@@ -355,6 +396,20 @@ class ConfigLoader:
         fallback_path = self.resolve_config_path(relative_path, project_first=merge_project)
         if fallback_path and fallback_path.exists():
             return _load_json_file(fallback_path)
+
+        rel_path = _normalize_relative_path(relative_path)
+        for legacy_relative in self._legacy_json_relatives(rel_path):
+            fallback_path = self.resolve_config_path(
+                legacy_relative,
+                project_first=merge_project,
+            )
+            if fallback_path and fallback_path.exists():
+                logger.debug(
+                    "Using bundled legacy config path %s for %s",
+                    fallback_path,
+                    rel_path,
+                )
+                return _load_json_file(fallback_path)
         return None
 
 

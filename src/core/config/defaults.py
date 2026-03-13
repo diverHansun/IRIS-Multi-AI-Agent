@@ -170,6 +170,8 @@ NOTION_TOKEN=your_notion_token_here
 CONFIG_MIGRATION_MAPPING: Dict[str, str] = {
     "config/llm/models/providers.json": "llm/providers.json",
     "config/agents/basic/models/providers.json": "agents/basic/providers.json",
+    "config/agents/deep/subagents.example.json": "agents/deep/subagents.json",
+    "config/agents/deep/mainagents.example.json": "agents/deep/mainagents.json",
     "config/agents/deep/models/subagents.json": "agents/deep/subagents.json",
     "config/agents/deep/models/mainagents.json": "agents/deep/mainagents.json",
     "config/agents/deep/middleware/filesystem/real_filesystem.json": "agents/deep/middleware/filesystem/real_filesystem.json",

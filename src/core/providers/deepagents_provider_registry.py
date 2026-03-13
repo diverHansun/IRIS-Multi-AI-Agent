@@ -300,11 +300,11 @@ class DeepAgentsProviderRegistry:
 
         # 回退到显式 base_path
         if self.base_path:
-            primary_path = self.base_path / "models" / "mainagents.json"
-            fallback_path = self.base_path / "models" / "mainagents.example.json"
-            if primary_path.exists():
-                return self._load_json(primary_path, use_cache=use_cache)
-            return self._load_json(fallback_path, use_cache=use_cache)
+            return self._load_deep_json_from_base_path(
+                canonical_name="mainagents.json",
+                example_name="mainagents.example.json",
+                use_cache=use_cache,
+            )
 
         return {}
 
@@ -317,9 +317,32 @@ class DeepAgentsProviderRegistry:
             return config
 
         if self.base_path:
-            return self._load_json(
-                self.base_path / "models" / "subagents.json", use_cache=use_cache
+            return self._load_deep_json_from_base_path(
+                canonical_name="subagents.json",
+                example_name="subagents.example.json",
+                use_cache=use_cache,
             )
+        return {}
+
+    def _load_deep_json_from_base_path(
+        self,
+        *,
+        canonical_name: str,
+        example_name: str,
+        use_cache: bool,
+    ) -> Dict[str, Any]:
+        """Load deep-agent config from canonical base path with legacy fallback."""
+        assert self.base_path is not None
+
+        candidates = [
+            self.base_path / canonical_name,
+            self.base_path / example_name,
+            self.base_path / "models" / canonical_name,
+            self.base_path / "models" / example_name,
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return self._load_json(candidate, use_cache=use_cache)
         return {}
 
     def _load_middleware_config(self, *, use_cache: bool = True) -> Dict[str, Any]:

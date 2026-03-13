@@ -56,12 +56,14 @@ class SubAgentsProviderRegistry:
     def _load_from_config(self) -> None:
         """Load subagent configurations from JSON file."""
         try:
-            config_data = self._config_loader.load_shared_json(
-                "agents/deep/subagents.json"
-            )
-            if not config_data and self._custom_config_path:
+            config_data = None
+            if self._custom_config_path:
                 with open(self._custom_config_path, "r", encoding="utf-8") as f:
                     config_data = json.load(f)
+            else:
+                config_data = self._config_loader.load_shared_json(
+                    "agents/deep/subagents.json"
+                )
 
             self._configs = config_data or {}
             logger.info(
