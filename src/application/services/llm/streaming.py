@@ -11,6 +11,7 @@ async def stream_response(
     llm: Any,
     display_title: str | None = None,
     show_display: bool = True,
+    renderer: Any | None = None,
 ) -> str:
     return await stream_llm_response(
         provider=provider,
@@ -18,6 +19,7 @@ async def stream_response(
         llm=llm,
         display_title=display_title,
         show_display=show_display,
+        renderer=renderer,
     )
 
 

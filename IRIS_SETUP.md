@@ -12,7 +12,6 @@ This guide shows how to package and use the `iris` command globally, while keepi
 Run in the project root:
 ```powershell
 .venv\Scripts\activate
-uv tool uninstall muti-ai-agent 2>$null
 uv tool uninstall iris-muti-ai-agent 2>$null
 uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall --refresh --no-cache .
 ```

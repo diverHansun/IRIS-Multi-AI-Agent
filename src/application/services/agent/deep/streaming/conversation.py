@@ -9,18 +9,17 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from rich.markup import escape
-from rich.text import Text
 
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command, Interrupt
 
+from src.application.cli.renderers import DeepTranscriptRenderer
 from src.components.deepagents.runtime_middlewares.timeout import ExecutionTimeoutError
 from .event_handler import DeepAgentEventHandler
 from ..hitl.handler import handle_hitl_interrupt, HITLDecisionError
 from ..hitl.session_manager import SessionHITLManager
 from ..hitl.file_ops import FileOpTracker
 from src.components.shared.memory import DeepAgentCheckpointer
-from src.application.cli.theme import COLORS
 
 logger = logging.getLogger(__name__)
 
@@ -161,10 +160,15 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
     # Create file operation tracker for this query
     file_tracker = FileOpTracker(project_root=filesystem_project_root)
+    renderer = DeepTranscriptRenderer(
+        ctx.console,
+        show_elapsed_time=streaming_opts.get("show_elapsed_time", True),
+        show_subagent_delegations=streaming_opts.get("show_subagent_delegations", True),
+    )
 
     # Pass file_tracker to event_handler for result display
     event_handler = DeepAgentEventHandler(
-        ctx.console,
+        renderer,
         file_tracker=file_tracker,
         **streaming_opts
     )
@@ -302,15 +306,15 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 raise
             except GraphRecursionError as exc:
                 _stop_spinner()
-                ctx.console.print(f"[bold red]Recursion limit exceeded:[/] {escape(str(exc))}")
+                renderer.emit_error(f"Recursion limit exceeded: {escape(str(exc))}")
                 return ""
             except TimeoutError as exc:
                 # Step timeout - persist state and notify agent
                 logger.warning(f"Step timeout occurred in Deep Agent: {exc}")
 
                 _stop_spinner()
-                ctx.console.print(
-                    f"[yellow]TIMEOUT: The agent took longer than expected for this step.[/]"
+                renderer.emit_warning(
+                    "TIMEOUT: The agent took longer than expected for this step."
                 )
 
                 checkpoint_tuple = runtime_checkpointer.get_tuple(runtime_config) if runtime_checkpointer else None
@@ -324,7 +328,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 )
 
                 # Notify agent using SystemMessage (won't be persisted)
-                ctx.console.print(f"[dim]Informing agent about timeout...[/]")
+                renderer.emit_info("Informing agent about timeout...")
                 try:
                     from langchain_core.messages import SystemMessage
                     await agent.runtime.aupdate_state(
@@ -338,11 +342,11 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                             ]
                         },
                     )
-                    ctx.console.print(f"[dim]Agent notified. You can continue the conversation.[/]")
+                    renderer.emit_info("Agent notified. You can continue the conversation.")
                     logger.info("Agent notified about step timeout via SystemMessage")
                 except Exception as update_exc:
                     logger.error(f"Failed to update agent state: {update_exc}")
-                    ctx.console.print(f"[yellow]Warning: Could not notify agent[/]")
+                    renderer.emit_warning("Warning: Could not notify agent")
 
                 return "[Timeout occurred - please retry or rephrase your request]"
 
@@ -351,9 +355,9 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 logger.warning(f"Max execution time exceeded: {exc}")
 
                 _stop_spinner()
-                ctx.console.print(
-                    f"[yellow]EXECUTION TIMEOUT: Agent exceeded maximum execution time "
-                    f"({exc.elapsed_time:.1f}s / {exc.max_execution_time:.1f}s)[/]"
+                renderer.emit_warning(
+                    "EXECUTION TIMEOUT: Agent exceeded maximum execution time "
+                    f"({exc.elapsed_time:.1f}s / {exc.max_execution_time:.1f}s)"
                 )
 
                 deep_checkpointer.persist_from_runtime(
@@ -364,7 +368,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 )
 
                 # Notify agent using SystemMessage
-                ctx.console.print(f"[dim]Informing agent about execution timeout...[/]")
+                renderer.emit_info("Informing agent about execution timeout...")
                 try:
                     from langchain_core.messages import SystemMessage
                     await agent.runtime.aupdate_state(
@@ -379,17 +383,19 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                             ]
                         },
                     )
-                    ctx.console.print(f"[dim]Agent notified. Conversation saved.[/]")
+                    renderer.emit_info("Agent notified. Conversation saved.")
                     logger.info("Agent notified about max_execution_time via SystemMessage")
                 except Exception as update_exc:
                     logger.error(f"Failed to update agent state: {update_exc}")
-                    ctx.console.print(f"[yellow]Warning: Could not notify agent[/]")
+                    renderer.emit_warning("Warning: Could not notify agent")
 
                 return "[Execution time limit exceeded - conversation saved]"
             except Exception as exc:
                 logger.error(f"Unexpected error in agent streaming: {exc}", exc_info=True)
                 _stop_spinner()
-                ctx.console.print(f"[bold red]Unexpected error in agent streaming:[/] {escape(str(exc))}")
+                renderer.emit_error(
+                    f"Unexpected error in agent streaming: {escape(str(exc))}"
+                )
                 return ""
 
             if timed_out:
@@ -416,21 +422,20 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                     # Continue while loop to resume
                 except HITLDecisionError as exc:
                     _stop_spinner()
-                    ctx.console.print(f"[bold red]HITL approval failed:[/] {escape(str(exc))}")
+                    renderer.emit_error(f"HITL approval failed: {escape(str(exc))}")
                     return ""
                 except Exception as exc:
                     _stop_spinner()
-                    ctx.console.print(f"[bold red]Unexpected error during HITL processing:[/] {escape(str(exc))}")
+                    renderer.emit_error(
+                        f"Unexpected error during HITL processing: {escape(str(exc))}"
+                    )
                     return ""
             else:
                 # No interrupts - normal completion
                 break
     except (KeyboardInterrupt, asyncio.CancelledError):
         _stop_spinner()
-        ctx.console.print(
-            "\nExecution interrupted by user.",
-            style=COLORS["warning"],
-        )
+        renderer.emit_warning("\nExecution interrupted by user.")
 
         try:
             # NOTE: Do NOT use event_handler.last_agent_state here!
@@ -444,7 +449,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         except Exception as exc:
             logger.warning("Failed to persist conversation on interrupt: %s", exc)
 
-        ctx.console.print("Updating agent state...", style=COLORS["text_dim"])
+        renderer.emit_info("Updating agent state...")
         try:
             from langchain_core.messages import SystemMessage
 
@@ -458,20 +463,17 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                     ]
                 },
             )
-            ctx.console.print("Ready for next command.", style=COLORS["text_dim"])
+            renderer.emit_info("Ready for next command.")
             logger.info("Agent notified about user interrupt via SystemMessage")
         except Exception as update_exc:
             logger.error("Failed to update agent state: %s", update_exc)
-            ctx.console.print(
-                "Warning: Could not notify agent",
-                style=COLORS["warning"],
-            )
+            renderer.emit_warning("Warning: Could not notify agent")
 
         return ""
 
     if timed_out:
         _stop_spinner()
-        ctx.console.print("[bold red]Deep agent execution timed out.[/]")
+        renderer.emit_error("Deep agent execution timed out.")
         return ""
 
     # Normal completion - persist
@@ -490,7 +492,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     final_state = event_handler.last_agent_state
     if not final_state:
         _stop_spinner()
-        ctx.console.print("[bold red]Deep agent failed to produce a response.[/]")
+        renderer.emit_error("Deep agent failed to produce a response.")
         return ""
 
     result = agent.prepare_stream_result(
@@ -502,28 +504,18 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
 
     if not result.get("success"):
         _stop_spinner()
-        ctx.console.print(
-            f"[bold red]Deep Agent Error:[/] {escape(result.get('output', 'Unknown error.'))}"
+        renderer.emit_error(
+            f"Deep Agent Error: {escape(result.get('output', 'Unknown error.'))}"
         )
         return ""
 
     _stop_spinner()
     answer = result.get("output", "No response generated.")
     if not event_handler.has_streamed_answer(answer):
-        ctx.console.print(
-            Text.assemble(
-                ("DeepAgent >", f"bold {COLORS['agent']}"),
-                (" ", ""),
-                (answer, COLORS["text_primary"]),
-            )
-        )
+        renderer.emit_assistant_text(answer)
 
     if streaming_opts.get("show_elapsed_time", True):
-        ctx.console.print()
-        ctx.console.print(
-            f"Elapsed: {event_handler.elapsed_time:0.1f}s",
-            style=COLORS["text_dim"],
-        )
+        renderer.emit_elapsed(event_handler.elapsed_time)
 
     event_handler.render_summary()
     return answer

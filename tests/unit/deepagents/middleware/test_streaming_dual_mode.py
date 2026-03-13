@@ -360,6 +360,23 @@ class TestEventHandlerDualMode(unittest.TestCase):
 
         self.assertEqual(description, "model: Thinking")
 
+    def test_spinner_status_text_includes_elapsed_runtime(self):
+        """Test spinner label includes elapsed runtime in minutes and seconds."""
+        self.handler._start_time -= 125.0
+
+        text = self.handler._build_spinner_status_text()
+
+        self.assertEqual(text, "[dim]Deep agent reasoning... (2 min 05s)[/]")
+
+    def test_spinner_status_text_can_hide_elapsed_runtime(self):
+        """Test spinner label respects show_elapsed_time setting."""
+        self.handler.show_elapsed_time = False
+        self.handler._start_time -= 42.0
+
+        text = self.handler._build_spinner_status_text()
+
+        self.assertEqual(text, "[dim]Deep agent reasoning...[/]")
+
     def test_describe_messages_uses_thinking_when_tool_calls_hidden(self):
         """Test tool-call updates still render a status when tool display is disabled."""
         self.handler.show_tool_calls = False

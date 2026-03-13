@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from langchain_core.messages import HumanMessage
 
+from src.application.cli.renderers import LLMTranscriptRenderer
 from src.application.services.llm.streaming import stream_response
 
 
@@ -33,21 +34,23 @@ async def handle_llm_query(
     if context_messages:
         context_text = _build_context(context_messages)
         prompt = f"History:\n{context_text}\n\nCurrent Question: {query}"
+    renderer = LLMTranscriptRenderer(ctx.console)
 
     if streaming:
-        ctx.console.print("[dim]LLM streaming generation...[/]")
         answer = await stream_response(
             provider=provider,
             prompt=prompt,
             llm=llm,
             display_title=f"LLM Response ({provider})",
             show_display=True,
+            renderer=renderer,
         )
     else:
-        with ctx.console.status("[dim]LLM thinking...[/]"):
-            response = await llm.ainvoke([HumanMessage(content=prompt)])
+        renderer.start_spinner()
+        response = await llm.ainvoke([HumanMessage(content=prompt)])
+        renderer.stop_spinner()
         answer = response.content if hasattr(response, "content") else str(response)
-        ctx.console.print(f"[bold green]LLM >[/] {answer}")
+        renderer.emit_assistant_text(answer)
 
     if llm_memory and ctx.session_id:
         llm_memory.add_conversation(ctx.session_id, query, answer)

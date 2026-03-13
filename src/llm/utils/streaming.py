@@ -461,11 +461,12 @@ class StreamingManager:
             raise
     
     async def stream_chat(
-        self, 
-        provider: str, 
+        self,
+        provider: str,
         prompt: str,
         display_title: str = "AI 回复",
-        show_display: bool = True
+        show_display: bool = True,
+        renderer: Any | None = None,
     ) -> Dict[str, Any]:
         """
         执行流式聊天
@@ -490,7 +491,12 @@ class StreamingManager:
         
         # 初始化显示器
         display = None
-        if show_display:
+        use_renderer = show_display and renderer is not None
+        if use_renderer:
+            start_spinner = getattr(renderer, "start_spinner", None)
+            if callable(start_spinner):
+                start_spinner()
+        elif show_display:
             display = StreamingDisplay(display_title)
             display.start()
         
@@ -501,7 +507,11 @@ class StreamingManager:
                 chunk_count += 1
 
                 # 更新显示
-                if display:
+                if use_renderer:
+                    stream_chunk = getattr(renderer, "stream_chunk", None)
+                    if callable(stream_chunk):
+                        stream_chunk(chunk)
+                elif display:
                     display.update(chunk)
 
                 # 小延迟以提供更好的视觉效果
@@ -510,39 +520,52 @@ class StreamingManager:
             interrupted = True
             logger.info("Streaming interrupted by user after %s characters", len(full_response))
 
-            if display:
-                display.stop()
-
-            console.print(
-                "\nResponse interrupted by user",
-                style=COLORS["warning"],
-            )
+            if use_renderer:
+                stop_spinner = getattr(renderer, "stop_spinner", None)
+                if callable(stop_spinner):
+                    stop_spinner()
+                emit_warning = getattr(renderer, "emit_warning", None)
+                if callable(emit_warning):
+                    emit_warning("\nResponse interrupted by user")
+            else:
+                if display:
+                    display.stop()
+                console.print(
+                    "\nResponse interrupted by user",
+                    style=COLORS["warning"],
+                )
 
             if full_response:
-                try:
-                    console.print(
-                        Panel(
-                            full_response,
-                            title=f"[bold]{display_title} (Interrupted)[/bold]",
-                            border_style=COLORS["warning"],
-                            **PANEL_DEFAULTS,
-                        )
-                    )
-                except UnicodeEncodeError as e:
-                    logger.warning("Unicode encoding error while displaying interrupted response: %s", e)
-                    print(f"\n=== {display_title} (Interrupted) ===")
+                if not use_renderer:
                     try:
-                        safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
-                        print(safe_response)
-                    except Exception as fallback_e:
-                        logger.warning("Failed to encode response with GBK fallback: %s", fallback_e)
-                        print("[Response contains special characters, cannot display completely]")
-                    print("=" * 50)
+                        console.print(
+                            Panel(
+                                full_response,
+                                title=f"[bold]{display_title} (Interrupted)[/bold]",
+                                border_style=COLORS["warning"],
+                                **PANEL_DEFAULTS,
+                            )
+                        )
+                    except UnicodeEncodeError as e:
+                        logger.warning("Unicode encoding error while displaying interrupted response: %s", e)
+                        print(f"\n=== {display_title} (Interrupted) ===")
+                        try:
+                            safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
+                            print(safe_response)
+                        except Exception as fallback_e:
+                            logger.warning("Failed to encode response with GBK fallback: %s", fallback_e)
+                            print("[Response contains special characters, cannot display completely]")
+                        print("=" * 50)
             else:
-                console.print(
-                    "No content received before interruption",
-                    style=COLORS["text_dim"],
-                )
+                if use_renderer:
+                    emit_info = getattr(renderer, "emit_info", None)
+                    if callable(emit_info):
+                        emit_info("No content received before interruption")
+                else:
+                    console.print(
+                        "No content received before interruption",
+                        style=COLORS["text_dim"],
+                    )
 
             return {
                 "response": full_response,
@@ -564,49 +587,58 @@ class StreamingManager:
             
         finally:
             # 停止显示
-            if display and not interrupted:
-                display.stop()
-                
-                # 计算性能指标
+            if not interrupted:
                 elapsed = time.time() - start_time
                 chars_per_second = len(full_response) / elapsed if elapsed > 0 else 0
-                
-                # 显示最终结果和性能指标 - 安全处理Unicode
-                try:
-                    console.print(
-                        Panel(
-                            full_response,
-                            title=f"[bold]{display_title} (完成)[/bold]",
-                            border_style=COLORS["success"],
-                            **PANEL_DEFAULTS,
-                        )
-                    )
-                except UnicodeEncodeError as e:
-                    logger.warning("Unicode encoding error while displaying final response: %s", e)
-                    # 如果有Unicode问题，使用简化显示
-                    print(f"\n=== {display_title} (完成) ===")
-                    # 尝试安全编码
-                    try:
-                        safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
-                        print(safe_response)
-                    except Exception as fallback_e:
-                        logger.warning("Failed to encode final response with GBK fallback: %s", fallback_e)
-                        print("[响应内容包含特殊字符，无法完整显示]")
-                    print("=" * 50)
-                
-                if chunk_count > 0:
+
+                if use_renderer:
+                    finish_stream = getattr(renderer, "finish_stream", None)
+                    if callable(finish_stream):
+                        finish_stream()
+                    else:
+                        stop_spinner = getattr(renderer, "stop_spinner", None)
+                        if callable(stop_spinner):
+                            stop_spinner()
+                elif display:
+                    display.stop()
+                    
+                    # 计算性能指标
+                    # 显示最终结果和性能指标 - 安全处理Unicode
                     try:
                         console.print(
-                            f"性能: {elapsed:.2f}s | "
-                            f"{len(full_response)} 字符 | "
-                            f"{chars_per_second:.1f} 字符/秒 | "
-                            f"{chunk_count} 数据块",
-                            style=COLORS["text_dim"],
+                            Panel(
+                                full_response,
+                                title=f"[bold]{display_title} (完成)[/bold]",
+                                border_style=COLORS["success"],
+                                **PANEL_DEFAULTS,
+                            )
                         )
                     except UnicodeEncodeError as e:
-                        # 安全的性能显示
-                        logger.warning("Unicode encoding error while displaying performance metrics: %s", e)
-                        print(f"性能: {elapsed:.2f}s | {len(full_response)} 字符 | {chars_per_second:.1f} 字符/秒 | {chunk_count} 数据块")
+                        logger.warning("Unicode encoding error while displaying final response: %s", e)
+                        # 如果有Unicode问题，使用简化显示
+                        print(f"\n=== {display_title} (完成) ===")
+                        # 尝试安全编码
+                        try:
+                            safe_response = full_response.encode('gbk', errors='replace').decode('gbk')
+                            print(safe_response)
+                        except Exception as fallback_e:
+                            logger.warning("Failed to encode final response with GBK fallback: %s", fallback_e)
+                            print("[响应内容包含特殊字符，无法完整显示]")
+                        print("=" * 50)
+                    
+                    if chunk_count > 0:
+                        try:
+                            console.print(
+                                f"性能: {elapsed:.2f}s | "
+                                f"{len(full_response)} 字符 | "
+                                f"{chars_per_second:.1f} 字符/秒 | "
+                                f"{chunk_count} 数据块",
+                                style=COLORS["text_dim"],
+                            )
+                        except UnicodeEncodeError as e:
+                            # 安全的性能显示
+                            logger.warning("Unicode encoding error while displaying performance metrics: %s", e)
+                            print(f"性能: {elapsed:.2f}s | {len(full_response)} 字符 | {chars_per_second:.1f} 字符/秒 | {chunk_count} 数据块")
         
         return {
             "response": full_response,
@@ -632,7 +664,8 @@ async def stream_llm_response(
     prompt: str,
     llm: Optional[BaseChatModel] = None,
     display_title: str = "AI Response",
-    show_display: bool = True
+    show_display: bool = True,
+    renderer: Any | None = None,
 ) -> str:
     """
     Convenience function for streaming LLM response.
@@ -669,7 +702,8 @@ async def stream_llm_response(
             provider=provider,
             prompt=prompt,
             display_title=display_title,
-            show_display=show_display
+            show_display=show_display,
+            renderer=renderer,
         )
     except KeyboardInterrupt:
         logger.info("LLM streaming interrupted, propagating to caller")

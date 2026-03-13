@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 from rich.console import Console
 
+from src.application.cli.renderers import DifyTranscriptRenderer
 from src.application.services.base import BaseEngineService
 from src.application.services.dify.client import DifyClient, DifyClientError
 from src.application.services.dify.streaming import DifyStreaming
@@ -39,6 +40,7 @@ class _DifyRuntime:
         self, console: Console, config_path: Optional[str] = None
     ) -> None:
         self.console = console
+        self.renderer = DifyTranscriptRenderer(console)
         self.config_path = config_path
         self.config_data: Optional[Dict[str, Any]] = None
         self.client: Optional[DifyClient] = None
@@ -82,7 +84,7 @@ class _DifyRuntime:
             streaming_timeout=self.config_data.get("streaming_timeout", 300),
         )
 
-        self.streaming = DifyStreaming(self.console)
+        self.streaming = DifyStreaming(self.console, renderer=self.renderer)
         self.streaming.buffer_size = self.config_data.get("buffer_size", 200)
         self.streaming.delay_ms = self.config_data.get("delay_ms", 10)
         self.streaming.max_content_length = self.config_data.get(
@@ -197,9 +199,8 @@ class _DifyRuntime:
 
                 # Display file usage info on first attempt
                 if attempt == 0 and files_count > 0:
-                    self.console.print(
-                        f"Using {files_count} file(s). Files cleared after this request.",
-                        style=COLORS["text_dim"],
+                    self.renderer.emit_info(
+                        f"Using {files_count} file(s). Files cleared after this request."
                     )
 
                 # Process stream
@@ -219,11 +220,10 @@ class _DifyRuntime:
                 )
 
                 if attempt < retry_attempts - 1:
-                    self.console.print(
-                        f"Attempt {attempt + 1}/{retry_attempts} failed: {type(exc).__name__}",
-                        style=COLORS["warning"],
+                    self.renderer.emit_warning(
+                        f"Attempt {attempt + 1}/{retry_attempts} failed: {type(exc).__name__}"
                     )
-                    self.console.print(f"Retrying in {retry_delay}s...", style=COLORS["warning"])
+                    self.renderer.emit_warning(f"Retrying in {retry_delay}s...")
                     await asyncio.sleep(retry_delay)
                 else:
                     # All attempts failed
@@ -235,7 +235,7 @@ class _DifyRuntime:
                             "\nNote: Uploaded files were cleared. "
                             "Please re-upload if needed."
                         )
-                    self.console.print(error_msg, style=COLORS["error"])
+                    self.renderer.emit_error(error_msg)
                     return {"type": "error", "message": error_msg}
 
             except DifyClientError as exc:
@@ -488,16 +488,23 @@ class DifyService(BaseEngineService):
 
     async def handle_query(self, ctx, query: str) -> str:
         runtime = self._get_runtime(ctx)
+        renderer = getattr(runtime, "renderer", None)
         if not runtime.initialized:
             init_result = await runtime.initialize()
             if init_result["type"] == "error":
-                ctx.console.print(init_result["message"], style=COLORS["error"])
+                if renderer is not None:
+                    renderer.emit_error(init_result["message"])
+                else:
+                    ctx.console.print(init_result["message"], style=COLORS["error"])
                 return ""
         result = await runtime.handle_query(
             query, user_id=ctx.session_id or "default_user"
         )
         if result["type"] == "error":
-            ctx.console.print(result["message"], style=COLORS["error"])
+            if renderer is not None:
+                renderer.emit_error(result["message"])
+            else:
+                ctx.console.print(result["message"], style=COLORS["error"])
         return ""
 
     async def switch_model(

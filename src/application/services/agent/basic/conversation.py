@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Any, Dict
 
-from src.application.cli.theme import COLORS
+from src.application.cli.renderers import BasicTranscriptRenderer
 
 logger = logging.getLogger(__name__)
 
@@ -25,39 +25,37 @@ async def handle_agent_query(ctx, query: str) -> str:
     agent = config.get("agent_instance")
     if agent is None:
         raise RuntimeError("Agent engine is not initialized.")
+    renderer = BasicTranscriptRenderer(ctx.console)
 
     try:
-        with ctx.console.status("[dim]Agent reasoning...[/]"):
-            result = await agent.ainvoke(query, session_id=ctx.session_id)
+        renderer.start_spinner()
+        result = await agent.ainvoke(query, session_id=ctx.session_id)
+        renderer.stop_spinner()
 
         if result.get("success"):
             answer = result.get("output", "No response generated.")
-            ctx.console.print(f"[bold blue]BasicAgent >[/] {answer}")
+            renderer.emit_assistant_text(answer)
             tool_calls = result.get("tool_calls", 0)
             if tool_calls:
-                tool_names = result.get("tool_names") or []
-                if tool_names:
-                    # Display unique tool count and names
-                    ctx.console.print(f"[dim]Used {len(tool_names)} tools ({tool_calls} calls): {', '.join(tool_names)}[/]")
-                else:
-                    ctx.console.print(f"[dim]Used {tool_calls} tool calls[/]")
+                renderer.emit_summary(
+                    {
+                        "tool_calls": tool_calls,
+                        "tool_names": result.get("tool_names") or [],
+                    }
+                )
             return answer
 
         error_message = result.get("error", "Unknown error")
-        ctx.console.print(f"[bold red]Agent Error: {error_message}[/]")
+        renderer.emit_error(f"Agent Error: {error_message}")
         return ""
 
     except KeyboardInterrupt:
-        ctx.console.print(
-            "\nAgent execution interrupted by user.",
-            style=COLORS["warning"],
-        )
+        renderer.stop_spinner()
+        renderer.emit_warning("\nAgent execution interrupted by user.")
         logger.info("BasicAgent execution interrupted by user via Ctrl+C")
         return ""
     except asyncio.CancelledError:
-        ctx.console.print(
-            "\nAgent execution cancelled.",
-            style=COLORS["warning"],
-        )
+        renderer.stop_spinner()
+        renderer.emit_warning("\nAgent execution cancelled.")
         logger.info("BasicAgent execution cancelled")
         return ""

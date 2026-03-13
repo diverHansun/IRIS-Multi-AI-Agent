@@ -8,6 +8,9 @@
 > 3. middleware / raw updates / debug trace 不进入聊天 transcript
 > 4. `--debug` 仅影响日志与运行时诊断，不产生独立 UI 模式
 > 5. 保留一个极简总耗时模块，只显示从 Agent 启动到最终输出完成的总时长
+>
+> **相关文档**:
+> - `renderer-boundary-refactor.md`: 说明该 UI 形态后续应如何从 `service/conversation` 层迁移到 `src/application/cli/` 渲染层
 
 ---
 

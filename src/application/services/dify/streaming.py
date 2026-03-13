@@ -2,24 +2,24 @@
 Streaming helpers for processing Dify API responses and rendering output.
 """
 
-import json
 import asyncio
-import time
-from typing import Dict, Any, Optional, AsyncGenerator
-from rich.console import Console
-from rich.text import Text
-from rich.status import Status
-from rich.panel import Panel
+import json
 import logging
+import time
+from typing import Any, AsyncGenerator, Dict, Optional
+
+from rich.console import Console
+from rich.status import Status
 
 from src.application.cli.theme import COLORS
+
 logger = logging.getLogger(__name__)
 
 
 class DifyStreaming:
     """Handle streaming responses and status output for Dify."""
 
-    def __init__(self, console: Console):
+    def __init__(self, console: Console, renderer: Any | None = None):
         """
         Initialise the streaming helper.
 
@@ -27,6 +27,7 @@ class DifyStreaming:
             console: Rich console instance used for rendering.
         """
         self.console = console
+        self.renderer = renderer
         self._current_message_id = None
         self._current_conversation_id = None
 
@@ -211,23 +212,23 @@ class DifyStreaming:
         # Reset pending metadata
         self._pending_metadata.clear()
 
+        status: Status | None = None
         try:
-            # Show the waiting status indicator
             if show_typing:
-                status = Status("Thinking...", console=self.console, spinner="dots")
-                status.start()
+                if self.renderer is not None:
+                    self.renderer.start_spinner()
+                else:
+                    status = Status("Thinking...", console=self.console, spinner="dots")
+                    status.start()
 
             first_content_received = False
             content_buffer = []
-            display_buffer = []  # Display buffer to reduce output frequency
+            display_buffer = []
 
             chunk_count = 0
-            max_chunks = 10000  # Max chunks to prevent infinite loops
-            buffer_size = getattr(
-                self, "buffer_size", 200
-            )  # Buffer size from config, default 200
+            max_chunks = 10000
+            buffer_size = getattr(self, "buffer_size", 200)
 
-            # Update statistics
             self._start_time = None
             self._chunk_count = 0
             self._total_chars = 0
@@ -235,122 +236,90 @@ class DifyStreaming:
             async for raw_data in stream_generator:
                 chunk_count += 1
 
-                # Prevent unbounded buffer growth by limiting chunks
                 if chunk_count > max_chunks:
-                    logger.warning(f"Stream chunk count exceeded limit: {max_chunks}")
-                    self.console.print(
-                        "\nWarning: Response too long, truncated",
-                        style=COLORS["warning"],
+                    logger.warning("Stream chunk count exceeded limit: %s", max_chunks)
+                    self._display_warning(
+                        f"\nWarning: Response exceeded limit ({self.max_content_length} chars), truncated"
                     )
                     break
 
                 parsed_data = self.parse_stream_data(raw_data)
-
                 if not parsed_data:
                     continue
 
                 data_type = parsed_data["type"]
 
-                if data_type == "message" or data_type == "agent_message":
-                    # Handle assistant replies
+                if data_type in {"message", "agent_message"}:
                     if not first_content_received and show_typing:
-                        status.stop()
+                        self._stop_status(status)
                         first_content_received = True
 
                     content = parsed_data.get("content", "")
                     if content:
-                        # Update statistics for this chunk
                         self._update_statistics(content)
-
                         content_buffer.append(content)
                         display_buffer.append(content)
 
-                        # Truncate overly long responses to avoid flooding
                         total_content_length = sum(len(c) for c in content_buffer)
                         if total_content_length > self.max_content_length:
-                            logger.warning(
-                                f"Response too long: {total_content_length} chars"
-                            )
-                            self.console.print(
-                                f"\nWarning: Response exceeded limit ({self.max_content_length} chars), truncated",
-                                style=COLORS["warning"],
+                            logger.warning("Response too long: %s chars", total_content_length)
+                            self._display_warning(
+                                f"\nWarning: Response exceeded limit ({self.max_content_length} chars), truncated"
                             )
                             break
 
-                        # Handle metadata events
                         await self._apply_rate_limit()
 
-                        # Accumulate content and flush when necessary
                         if len(display_buffer) >= buffer_size or "\n" in content:
-                            # Render assistant output
                             buffered_content = "".join(display_buffer)
-                            self.console.print(
-                                buffered_content, end="", style="bright_white"
-                            )
+                            self._display_chunk(buffered_content)
                             display_buffer.clear()
-
-                            # Add a tiny delay for a smoother visual
                             if self.delay_ms > 0:
                                 await asyncio.sleep(self.delay_ms / 1000.0)
 
-                    # Update conversation identifier
                     if parsed_data.get("message_id"):
                         message_id = parsed_data["message_id"]
                     if parsed_data.get("conversation_id"):
                         conversation_id = parsed_data["conversation_id"]
+                    continue
 
-                elif data_type == "agent_thought":
-                    # Handle agent thinking (minimal display)
+                if data_type == "agent_thought":
                     if not first_content_received and show_typing:
-                        status.stop()
+                        self._stop_status(status)
                         first_content_received = True
 
-                    position = parsed_data.get("position", 0)
                     tool = parsed_data.get("tool", "")
-
                     if tool:
-                        # Minimal agent display: [Agent Step N] tool_name ✓
-                        self.console.print(
-                            f"\n[Agent Step {position}] {tool} ✓",
-                            style=COLORS["info"],
+                        self._display_agent_thought(
+                            int(parsed_data.get("position", 0) or 0),
+                            tool,
                         )
+                    continue
 
-                elif data_type == "message_end":
-                    # Handle message end
+                if data_type == "message_end":
                     if not first_content_received and show_typing:
-                        status.stop()
+                        self._stop_status(status)
                         first_content_received = True
 
-                    # Ensure buffered content is displayed
                     final_content = parsed_data.get("content", "")
                     if final_content and final_content not in "".join(content_buffer):
-                        self.console.print(final_content, style="bright_white")
+                        self._display_final_text(final_content)
 
-                    # Update last message identifier
                     if parsed_data.get("message_id"):
                         message_id = parsed_data["message_id"]
                     if parsed_data.get("conversation_id"):
                         conversation_id = parsed_data["conversation_id"]
 
-                    # Store metadata for later display (not now!)
                     metadata = parsed_data.get("metadata", {})
                     if metadata:
                         self._pending_metadata.update(metadata)
-
                     break
 
-                elif data_type == "ping":
-                    # Ignore ping events (keepalive)
+                if data_type in {"ping", "ignored"}:
                     continue
 
-                elif data_type == "ignored":
-                    # Silently ignore workflow and advanced events
-                    continue
-
-                elif data_type == "error":
-                    if show_typing:
-                        status.stop()
-
+                if data_type == "error":
+                    self._stop_status(status)
                     error_msg = parsed_data.get("error")
                     detail_msg = parsed_data.get("message")
                     if not error_msg:
@@ -359,98 +328,42 @@ class DifyStreaming:
                         error_msg = f"{error_msg}: {detail_msg}"
 
                     logger.error("Dify error event: %s", parsed_data)
-                    self.console.print(f"\nError: {error_msg}", style=COLORS["error"])
+                    self._display_error(f"\nError: {error_msg}")
                     return None
 
-                elif data_type == "file":
-                    # Display information about uploaded files
+                if data_type == "file":
                     if not first_content_received and show_typing:
-                        status.stop()
+                        self._stop_status(status)
                         first_content_received = True
+                    self._display_file(parsed_data.get("filename", "Unknown file"))
 
-                    filename = parsed_data.get("filename", "Unknown file")
-                    self.console.print(f"\nFile: {filename}", style=COLORS["info"])
-
-            # Ensure the status indicator stops cleanly
             if show_typing and not first_content_received:
-                status.stop()
+                self._stop_status(status)
 
-            # Flush any remaining buffered content
             if display_buffer:
-                buffered_content = "".join(display_buffer)
-                self.console.print(buffered_content, end="", style=COLORS["text_primary"])
+                self._display_chunk("".join(display_buffer))
 
-            # Persist buffered content for summary statistics
             if content_buffer:
-                self.console.print()
+                self._display_stream_complete(self._get_performance_stats(), len(content_buffer))
 
-                # Display statistics similar to streaming LLM diagnostics
-                stats = self._get_performance_stats()
-                if stats:
-                    try:
-                        self.console.print(
-                            f"Response complete | "
-                            f"{stats['elapsed_time']:.2f}s | "
-                            f"{stats['total_chars']} chars | "
-                            f"{stats['chars_per_second']:.1f} chars/s | "
-                            f"{stats['total_chunks']} chunks",
-                            style=COLORS["text_dim"],
-                        )
-                    except Exception as stats_e:
-                        logger.debug(f"Failed to display performance stats: {stats_e}")
-                        self.console.print(
-                            f"Response complete ({len(content_buffer)} fragments)",
-                            style=COLORS["text_dim"],
-                        )
-                else:
-                    self.console.print(
-                        f"Response complete ({len(content_buffer)} fragments)",
-                        style=COLORS["text_dim"],
-                    )
-
-            # Persist current conversation information
             self._current_message_id = message_id
             self._current_conversation_id = conversation_id
-
             return conversation_id
 
         except Exception as e:
-            if show_typing:
-                try:
-                    status.stop()
-                except:
-                    pass
-
-            # Provide detailed diagnostic information
+            self._stop_status(status)
             error_type = type(e).__name__
             error_msg = str(e)
 
-            self.console.print(
-                f"\nStreaming error ({error_type}): {error_msg}",
-                style=COLORS["error"],
-            )
-
-            # Suggest potential remediation steps
+            self._display_error(f"\nStreaming error ({error_type}): {error_msg}")
             if "ConnectionError" in error_type or "TimeoutError" in error_type:
-                self.console.print(
-                    "Suggestion: Check network connection or Dify service status",
-                    style=COLORS["warning"],
-                )
+                self._display_warning("Suggestion: Check network connection or Dify service status")
             elif "JSONDecodeError" in error_type:
-                self.console.print(
-                    "Suggestion: Dify API response format error, check configuration",
-                    style=COLORS["warning"],
-                )
+                self._display_warning("Suggestion: Dify API response format error, check configuration")
             elif "KeyError" in error_type:
-                self.console.print(
-                    "Suggestion: Dify API response field missing, may be version incompatible",
-                    style=COLORS["warning"],
-                )
+                self._display_warning("Suggestion: Dify API response field missing, may be version incompatible")
             else:
-                self.console.print(
-                    "Suggestion: Check Dify configuration and network connection",
-                    style=COLORS["warning"],
-                )
+                self._display_warning("Suggestion: Check Dify configuration and network connection")
 
             logger.error(f"Streaming error: {error_type} - {error_msg}", exc_info=True)
             return None
@@ -461,6 +374,102 @@ class DifyStreaming:
                 self._display_final_metadata(self._pending_metadata)
                 self._pending_metadata.clear()
 
+    def _stop_status(self, status: Status | None) -> None:
+        if self.renderer is not None:
+            self.renderer.stop_spinner()
+            return
+        if status is not None:
+            try:
+                status.stop()
+            except Exception:
+                pass
+
+    def _display_chunk(self, text: str) -> None:
+        if not text:
+            return
+        if self.renderer is not None:
+            stream_chunk = getattr(self.renderer, "stream_chunk", None)
+            if callable(stream_chunk):
+                stream_chunk(text)
+                return
+        self.console.print(text, end="", style=COLORS["text_primary"])
+
+    def _display_final_text(self, text: str) -> None:
+        if not text:
+            return
+        if self.renderer is not None:
+            self.renderer.emit_assistant_text(text)
+            return
+        self.console.print(text, style="bright_white")
+
+    def _display_agent_thought(self, position: int, tool: str) -> None:
+        if self.renderer is not None:
+            from src.application.cli.renderers import TranscriptEvent
+
+            self.renderer.emit(
+                TranscriptEvent(
+                    kind="agent_thought",
+                    payload={"position": position, "tool": tool},
+                )
+            )
+            return
+        self.console.print(f"\n[Agent Step {position}] {tool} ✓", style=COLORS["info"])
+
+    def _display_file(self, filename: str) -> None:
+        if self.renderer is not None:
+            from src.application.cli.renderers import TranscriptEvent
+
+            self.renderer.emit(TranscriptEvent(kind="file", text=filename))
+            return
+        self.console.print(f"\nFile: {filename}", style=COLORS["info"])
+
+    def _display_stream_complete(self, stats: Dict[str, Any], fragment_count: int) -> None:
+        if self.renderer is not None:
+            finish_stream = getattr(self.renderer, "finish_stream", None)
+            if callable(finish_stream):
+                finish_stream(stats)
+                return
+        self.console.print()
+        if stats:
+            try:
+                self.console.print(
+                    f"Response complete | "
+                    f"{stats['elapsed_time']:.2f}s | "
+                    f"{stats['total_chars']} chars | "
+                    f"{stats['chars_per_second']:.1f} chars/s | "
+                    f"{stats['total_chunks']} chunks",
+                    style=COLORS["text_dim"],
+                )
+            except Exception as stats_e:
+                logger.debug(f"Failed to display performance stats: {stats_e}")
+                self.console.print(
+                    f"Response complete ({fragment_count} fragments)",
+                    style=COLORS["text_dim"],
+                )
+        else:
+            self.console.print(
+                f"Response complete ({fragment_count} fragments)",
+                style=COLORS["text_dim"],
+            )
+
+    def _display_warning(self, text: str) -> None:
+        if self.renderer is not None:
+            self.renderer.emit_warning(text)
+            return
+        self.console.print(text, style=COLORS["warning"])
+
+    def _display_error(self, text: str) -> None:
+        if self.renderer is not None:
+            self.renderer.emit_error(text)
+            return
+        self.console.print(text, style=COLORS["error"])
+
+    def _display_info(self, text: str) -> None:
+        if self.renderer is not None:
+            self.renderer.emit_info(text)
+            return
+        self.console.print(text, style=COLORS["text_dim"])
+
     def _display_metadata(self, metadata: Dict[str, Any]):
         """
         Display metadata information (deprecated, use _display_final_metadata).
@@ -470,15 +479,12 @@ class DifyStreaming:
         """
         if "usage" in metadata:
             usage = metadata["usage"]
-            self.console.print(f"\nToken usage: {usage}", style=COLORS["text_dim"])
+            self._display_info(f"\nToken usage: {usage}")
 
         if "retriever_resources" in metadata:
             resources = metadata["retriever_resources"]
             if resources:
-                self.console.print(
-                    f"\nReferenced resources: {len(resources)} items",
-                    style=COLORS["text_dim"],
-                )
+                self._display_info(f"\nReferenced resources: {len(resources)} items")
 
     def _display_final_metadata(self, metadata: Dict[str, Any]):
         """
@@ -487,7 +493,12 @@ class DifyStreaming:
         Args:
             metadata: Metadata dictionary from message_end event
         """
-        # Keep current display format
+        if self.renderer is not None:
+            from src.application.cli.renderers import TranscriptEvent
+
+            self.renderer.emit(TranscriptEvent(kind="metadata", payload=metadata))
+            return
+
         if "usage" in metadata:
             usage = metadata["usage"]
             self.console.print(f"\nToken usage: {usage}", style=COLORS["text_dim"])
@@ -508,7 +519,16 @@ class DifyStreaming:
             message: Message content
             style: Message style
         """
-        self.console.print(message, style=style)
+        if style == COLORS["error"]:
+            self._display_error(message)
+        elif style == COLORS["warning"]:
+            self._display_warning(message)
+        elif style in {COLORS["text_dim"], COLORS["info"], COLORS["success"]}:
+            self._display_info(message)
+        elif self.renderer is not None:
+            self.renderer.emit_assistant_text(message)
+        else:
+            self.console.print(message, style=style)
 
     async def display_error(self, error: str):
         """
@@ -517,7 +537,7 @@ class DifyStreaming:
         Args:
             error: Error message
         """
-        self.console.print(f"Error: {error}", style=COLORS["error"])
+        self._display_error(f"Error: {error}")
 
     async def display_success(self, message: str):
         """
@@ -526,7 +546,7 @@ class DifyStreaming:
         Args:
             message: Success message
         """
-        self.console.print(message, style=COLORS["success"])
+        self._display_info(message)
 
     async def display_info(self, message: str):
         """
@@ -535,7 +555,7 @@ class DifyStreaming:
         Args:
             message: Information content
         """
-        self.console.print(message, style=COLORS["info"])
+        self._display_info(message)
 
     def get_current_conversation_id(self) -> Optional[str]:
         """

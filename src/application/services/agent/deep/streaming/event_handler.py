@@ -7,10 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
-from rich.markup import escape
-from rich.text import Text
-
-from src.application.cli.theme import COLORS
+from src.application.cli.renderers import BaseTranscriptRenderer, DeepTranscriptRenderer
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
@@ -32,12 +29,13 @@ class EventProcessingResult:
 
 
 class DeepAgentEventHandler:
-    """Render streaming updates and collect execution statistics."""
+    """Interpret streaming events and delegate transcript rendering."""
 
     def __init__(
         self,
-        console,
+        console_or_renderer,
         *,
+        renderer: BaseTranscriptRenderer | None = None,
         file_tracker=None,
         show_reasoning_steps: bool = True,
         show_tool_calls: bool = True,
@@ -45,12 +43,20 @@ class DeepAgentEventHandler:
         show_subagent_delegations: bool = True,
         show_elapsed_time: bool = True,
     ) -> None:
-        self.console = console
+        if renderer is None and isinstance(console_or_renderer, BaseTranscriptRenderer):
+            renderer = console_or_renderer
+        if renderer is None:
+            renderer = DeepTranscriptRenderer(
+                console_or_renderer,
+                show_elapsed_time=show_elapsed_time,
+                show_subagent_delegations=show_subagent_delegations,
+            )
+        self.renderer = renderer
         self.show_reasoning_steps = show_reasoning_steps
         self.show_tool_calls = show_tool_calls
         self.show_tool_results = show_tool_results
         self.show_subagent_delegations = show_subagent_delegations
-        self.show_elapsed_time = show_elapsed_time
+        self._show_elapsed_time = show_elapsed_time
 
         self._start_time = time.perf_counter()
         self._step = 0
@@ -66,10 +72,6 @@ class DeepAgentEventHandler:
         self._last_flushed_text: str = ""
         self._last_flush_kind: Optional[str] = None
         self._subagent_call_index: Dict[str, int] = {}
-
-        self._spinner_active: bool = False
-        self._spinner_status: Any = None
-        self._has_responded: bool = False
 
     def handle_event(
         self, event: Union[Dict[str, Any], Tuple[Any, str, Any]]
@@ -196,20 +198,13 @@ class DeepAgentEventHandler:
         if tool_name == "bash" and tool_status != "success":
             self._flush_text_buffer(final=True, flush_kind="tool_call")
             if tool_content:
-                self._stop_spinner()
-                self.console.print()
-                self.console.print(tool_content, style=COLORS["error"], markup=False)
-                self.console.print()
-                self._start_spinner()
+                self.renderer.emit_tool_error(tool_content)
             return
 
         # Display file operation results (only for write/edit, skip read operations)
         if record and tool_name in {"write_real_file", "edit_real_file"}:
-            from ..hitl.file_ops import render_file_operation
             self._flush_text_buffer(final=True, flush_kind="tool_call")
-            self._stop_spinner()
-            render_file_operation(record, self.console)
-            self._start_spinner()
+            self.renderer.emit_file_operation(record)
             return
 
         # Skip read operation results - they are internal and don't need to be shown
@@ -232,11 +227,7 @@ class DeepAgentEventHandler:
             stripped = tool_content.lstrip()
             if stripped.lower().startswith("error"):
                 self._flush_text_buffer(final=True, flush_kind="tool_call")
-                self._stop_spinner()
-                self.console.print()
-                self.console.print(tool_content, style=COLORS["error"], markup=False)
-                self.console.print()
-                self._start_spinner()
+                self.renderer.emit_tool_error(tool_content)
 
     def _process_ai_message_content_blocks(
         self,
@@ -444,19 +435,8 @@ class DeepAgentEventHandler:
         ):
             return
 
-        self._stop_spinner()
-
-        if not self._has_responded:
-            self._has_responded = True
-
         display_str = self._format_tool_display(tool_name, tool_args)
-        self.console.print(
-            f"  Tool: {escape(display_str)}",
-            style=f"dim {COLORS['tool']}",
-            markup=False,
-        )
-
-        self._start_spinner()
+        self.renderer.emit_tool_call(display_str)
 
     def _format_tool_display(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
         """Format tool call for display."""
@@ -494,62 +474,23 @@ class DeepAgentEventHandler:
         if not final or not self._pending_text.strip():
             return
 
-        self._stop_spinner()
         text = self._pending_text.rstrip()
         self._last_flushed_text = text
         self._last_flush_kind = flush_kind
 
-        text_style = "dim" if flush_kind == "tool_call" else COLORS["text_primary"]
-        self._has_responded = True
-
-        self.console.print(
-            Text.assemble(
-                ("DeepAgent >", f"bold {COLORS['agent']}"),
-                (" ", ""),
-                (text, text_style),
-            )
+        self.renderer.emit_assistant_text(
+            text,
+            intermediate=(flush_kind == "tool_call"),
         )
         self._pending_text = ""
 
     def _start_spinner(self) -> None:
         """Start spinner if not already active."""
-        if self._spinner_active:
-            return
-
-        self._spinner_active = True
-        status_factory = getattr(self.console, "status", None)
-        if not callable(status_factory):
-            return
-
-        try:
-            spinner_status = status_factory(
-                "[dim]Deep agent reasoning...[/]",
-                spinner="dots",
-            )
-            enter = getattr(spinner_status, "__enter__", None)
-            if callable(enter):
-                enter()
-                self._spinner_status = spinner_status
-        except Exception:
-            self._spinner_status = None
+        self.renderer.start_spinner()
 
     def _stop_spinner(self) -> None:
         """Stop spinner if active."""
-        if not self._spinner_active:
-            return
-
-        self._spinner_active = False
-        spinner_status = self._spinner_status
-        self._spinner_status = None
-        if spinner_status is None:
-            return
-
-        exit_fn = getattr(spinner_status, "__exit__", None)
-        if callable(exit_fn):
-            try:
-                exit_fn(None, None, None)
-            except Exception:
-                pass
+        self.renderer.stop_spinner()
 
     def start_spinner(self) -> None:
         """Public wrapper used by the conversation driver."""
@@ -558,6 +499,20 @@ class DeepAgentEventHandler:
     def stop_spinner(self) -> None:
         """Public wrapper used by the conversation driver."""
         self._stop_spinner()
+
+    def _build_spinner_status_text(self) -> str:
+        """Build spinner label with optional elapsed runtime."""
+        base = "Deep agent reasoning..."
+        if not self.show_elapsed_time:
+            return f"[dim]{base}[/]"
+        return f"[dim]{base} ({self._format_runtime_duration(self.elapsed_time)})[/]"
+
+    @staticmethod
+    def _format_runtime_duration(elapsed_seconds: float) -> str:
+        """Format elapsed seconds as '<m> min <ss>s'."""
+        total_seconds = max(0, int(elapsed_seconds))
+        minutes, seconds = divmod(total_seconds, 60)
+        return f"{minutes} min {seconds:02d}s"
 
     def _render_update(self, node: str, payload: Any) -> None:
         """Consume node update events without rendering them to the transcript."""
@@ -712,29 +667,7 @@ class DeepAgentEventHandler:
 
     def render_summary(self) -> None:
         """Display an execution summary after streaming completes."""
-        lines = ["", "Summary:"]
-
-        if self._tool_call_count:
-            if self._tool_names:
-                names = escape(", ".join(sorted(self._tool_names)))
-                lines.append(f"  - Tool calls: {self._tool_call_count} ({names})")
-            else:
-                lines.append(f"  - Tool calls: {self._tool_call_count}")
-
-        if self.show_subagent_delegations and self._subagent_calls:
-            lines.append(f"  - Subagent delegations: {len(self._subagent_calls)}")
-            for index, call in enumerate(self._subagent_calls, 1):
-                subagent_type = escape(str(call.get("subagent_type", "unknown")))
-                description = escape(str(call.get("description", "")).strip())
-                status = str(call.get("status", "") or "").strip().lower()
-                status_suffix = f" ({escape(status)})" if status and status not in {"delegated", "unknown"} else ""
-                detail = f" - {description}" if description else ""
-                lines.append(f"    [{index}] {subagent_type}{status_suffix}{detail}")
-
-        if len(lines) == 2:
-            return
-
-        self.console.print("\n".join(lines))
+        self.renderer.emit_summary(self.tool_stats)
 
     @property
     def last_agent_state(self) -> Optional[Dict[str, Any]]:
@@ -789,6 +722,17 @@ class DeepAgentEventHandler:
     def elapsed_time(self) -> float:
         """Return the total elapsed wall-clock time since handler creation."""
         return time.perf_counter() - self._start_time
+
+    @property
+    def show_elapsed_time(self) -> bool:
+        """Expose elapsed footer preference."""
+        return self._show_elapsed_time
+
+    @show_elapsed_time.setter
+    def show_elapsed_time(self, value: bool) -> None:
+        self._show_elapsed_time = bool(value)
+        if hasattr(self.renderer, "show_elapsed_time"):
+            self.renderer.show_elapsed_time = self._show_elapsed_time
 
     @staticmethod
     def _truncate(text: str, limit: int = 160) -> str:
