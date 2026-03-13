@@ -41,6 +41,9 @@ class BaseTranscriptRenderer(ABC):
     def emit_tool_call(self, display_text: str) -> None:
         self.emit(TranscriptEvent(kind="tool_call", text=display_text))
 
+    def emit_todo_update(self, todos: list[dict[str, Any]]) -> None:
+        self.emit(TranscriptEvent(kind="todo_update", payload={"todos": todos}))
+
     def emit_tool_error(self, text: str) -> None:
         self.emit(TranscriptEvent(kind="tool_error", text=text))
 

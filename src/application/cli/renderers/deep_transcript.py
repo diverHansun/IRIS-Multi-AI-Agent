@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 import threading
 import time
 from typing import Any, Mapping
@@ -9,7 +10,7 @@ from typing import Any, Mapping
 from rich.markup import escape
 from rich.text import Text
 
-from src.application.cli.theme import COLORS
+from src.application.cli.theme import COLORS, STATUS_SYMBOLS
 from .base import BaseTranscriptRenderer
 from .events import TranscriptEvent
 from .spinner import SpinnerState
@@ -47,6 +48,10 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
             return
         if kind == "tool_call":
             self._render_tool_call(event.text or "")
+            return
+        if kind == "todo_update":
+            todos = list(event.payload.get("todos", []) or [])
+            self._render_todo_update(todos)
             return
         if kind == "tool_error":
             self._render_tool_error(event.text or "")
@@ -198,13 +203,12 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
             return
 
         self.stop_spinner()
-        text_style = "dim" if intermediate else COLORS["text_primary"]
         self._has_responded = True
         self.console.print(
             Text.assemble(
                 ("DeepAgent >", f"bold {COLORS['agent']}"),
                 (" ", ""),
-                (text.rstrip(), text_style),
+                (text.rstrip(), COLORS["text_primary"]),
             )
         )
 
@@ -216,6 +220,39 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
             style=f"dim {COLORS['tool']}",
             markup=False,
         )
+
+    def _render_todo_update(self, todos: list[Mapping[str, Any]]) -> None:
+        if not todos:
+            return
+
+        self.stop_spinner()
+        self._has_responded = True
+        self.console.print(
+            "  Tool: Todos updated",
+            style=f"dim {COLORS['tool']}",
+            markup=False,
+        )
+
+        visible_todos = todos[:6]
+        for todo in visible_todos:
+            status = str(todo.get("status", "pending") or "pending").strip().lower()
+            content = str(todo.get("content", "") or "").strip()
+            if not content:
+                continue
+            symbol = STATUS_SYMBOLS.get(status, STATUS_SYMBOLS["pending"])
+            self.console.print(
+                f"    {symbol} {content}",
+                style=COLORS["text_primary"],
+                markup=False,
+            )
+
+        remaining = len(todos) - len(visible_todos)
+        if remaining > 0:
+            self.console.print(
+                f"    ... +{remaining} more",
+                style=COLORS["text_dim"],
+                markup=False,
+            )
 
     def _render_tool_error(self, text: str) -> None:
         if not text:
@@ -251,18 +288,38 @@ class DeepTranscriptRenderer(BaseTranscriptRenderer):
                 lines.append(f"  - Tool calls: {tool_calls}")
 
         if self.show_subagent_delegations and subagent_calls:
-            lines.append(f"  - Subagent delegations: {len(subagent_calls)}")
-            for index, call in enumerate(subagent_calls, 1):
-                subagent_type = escape(str(call.get("subagent_type", "unknown")))
-                description = escape(str(call.get("description", "")).strip())
-                status = str(call.get("status", "") or "").strip().lower()
-                status_suffix = (
-                    f" ({escape(status)})"
-                    if status and status not in {"delegated", "unknown"}
-                    else ""
+            type_counts = Counter(
+                str(call.get("subagent_type", "unknown") or "unknown").strip() or "unknown"
+                for call in subagent_calls
+            )
+            status_counts = Counter(
+                str(call.get("status", "") or "").strip().lower()
+                for call in subagent_calls
+                if str(call.get("status", "") or "").strip().lower()
+                not in {"", "delegated", "unknown"}
+            )
+
+            detail_parts: list[str] = []
+            if type_counts:
+                type_summary = ", ".join(
+                    f"{escape(subagent_type)} x{count}"
+                    for subagent_type, count in sorted(type_counts.items())
                 )
-                detail = f" - {description}" if description else ""
-                lines.append(f"    [{index}] {subagent_type}{status_suffix}{detail}")
+                detail_parts.append(type_summary)
+
+            if status_counts:
+                status_order = {"failed": 0, "timeout": 1, "completed": 2}
+                status_summary = ", ".join(
+                    f"{escape(status)} {count}"
+                    for status, count in sorted(
+                        status_counts.items(),
+                        key=lambda item: (status_order.get(item[0], 99), item[0]),
+                    )
+                )
+                detail_parts.append(status_summary)
+
+            suffix = f" ({'; '.join(detail_parts)})" if detail_parts else ""
+            lines.append(f"  - Subagent delegations: {len(subagent_calls)}{suffix}")
 
         if len(lines) == 2:
             return

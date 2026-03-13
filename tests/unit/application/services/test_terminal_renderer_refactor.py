@@ -7,6 +7,7 @@ import pytest
 
 from src.application.cli.renderers import (
     BasicTranscriptRenderer,
+    DeepTranscriptRenderer,
     LLMTranscriptRenderer,
     SpinnerState,
     SpinnerStatusController,
@@ -62,6 +63,36 @@ def test_spinner_status_controller_emits_state_transitions() -> None:
         SpinnerState.subagent_running("research"),
         SpinnerState.idle(),
     ]
+
+
+def test_deep_transcript_renderer_keeps_intermediate_text_primary() -> None:
+    console = MagicMock()
+    renderer = DeepTranscriptRenderer(console)
+
+    renderer.emit_assistant_text("intermediate text", intermediate=True)
+
+    rendered = console.print.call_args.args[0]
+    styles = [span.style for span in rendered.spans]
+    assert "dim" not in styles
+
+
+def test_deep_transcript_renderer_renders_todo_updates_as_status_list() -> None:
+    console = MagicMock()
+    renderer = DeepTranscriptRenderer(console)
+
+    renderer.emit_todo_update(
+        [
+            {"content": "Plan the research strategy", "status": "in_progress"},
+            {"content": "Check Southeast University", "status": "pending"},
+            {"content": "Summarize campus findings", "status": "completed"},
+        ]
+    )
+
+    printed = [str(call.args[0]) for call in console.print.call_args_list if call.args]
+    assert any("Tool: Todos updated" in line for line in printed)
+    assert any("[..] Plan the research strategy" in line for line in printed)
+    assert any("[ ] Check Southeast University" in line for line in printed)
+    assert any("[OK] Summarize campus findings" in line for line in printed)
 
 
 class _StreamingLLMStub:
@@ -121,3 +152,5 @@ async def test_dify_streaming_uses_renderer_when_available() -> None:
     renderer.emit.assert_called()
     body_prints = [call for call in console.print.call_args_list if call.args]
     assert not any("Hello" in str(call.args[0]) for call in body_prints)
+
+

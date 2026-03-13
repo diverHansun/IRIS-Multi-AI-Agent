@@ -109,14 +109,28 @@ class ZhipuSearchProvider:
             except HTTPError as e:
                 if attempt < max_retries:
                     wait_time = retry_delay * (2 ** attempt)
-                    logger.warning(f"Request failed (attempt {attempt + 1}/{max_retries + 1}): {e}. Retrying in {wait_time}s...")
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "Request failed (attempt %s/%s): %s. Retrying in %ss...",
+                            attempt + 1,
+                            max_retries + 1,
+                            e,
+                            wait_time,
+                        )
                     time.sleep(wait_time)
                 else:
-                    logger.error(f"Request failed after {max_retries + 1} attempts: {e}")
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "Request failed after %s attempts: %s",
+                            max_retries + 1,
+                            e,
+                            exc_info=True,
+                        )
                     raise
 
             except RequestException as e:
-                logger.error(f"Request exception: {e}")
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("Request exception: %s", e, exc_info=True)
                 raise
 
     def search(self, query: str) -> Dict[str, Any]:
@@ -131,7 +145,8 @@ class ZhipuSearchProvider:
         """
         # Validate query length
         if len(query) > 70:
-            logger.warning(f"Query length {len(query)} exceeds 70 characters, truncating")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Query length %s exceeds 70 characters, truncating", len(query))
             query = query[:70]
 
         # Check cache if enabled
@@ -169,7 +184,8 @@ class ZhipuSearchProvider:
             return result
 
         except Exception as e:
-            logger.error(f"Zhipu search failed: {e}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Zhipu search failed: %s", e, exc_info=True)
             return {"error": str(e)}
 
 
@@ -268,7 +284,8 @@ def zhipu_web_search(
         return format_search_results(result)
 
     except Exception as e:
-        logger.error(f"Zhipu web search tool execution failed: {e}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Zhipu web search tool execution failed: %s", e, exc_info=True)
         return json.dumps({
             "status": "error",
             "error": f"Search execution failed: {str(e)}"
@@ -298,3 +315,5 @@ def get_available_zhipu_tools() -> List[Any]:
     tools.extend(ZHIPU_SEARCH_TOOLS)
     tools.extend(ZHIPU_CRAWL_TOOLS)
     return tools
+
+

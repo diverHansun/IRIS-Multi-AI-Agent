@@ -458,6 +458,28 @@ class TestEventHandlerDualMode(unittest.TestCase):
 
         spinner_controller.set_tool_calling.assert_called_once_with("web_search")
 
+    def test_write_todos_tool_call_renders_status_lines(self):
+        """Test write_todos is rendered as a structured status list."""
+        self.handler._process_direct_tool_call(
+            {
+                "name": "write_todos",
+                "args": {
+                    "todos": [
+                        {"content": "Plan the research strategy", "status": "in_progress"},
+                        {"content": "Check Southeast University", "status": "pending"},
+                        {"content": "Summarize campus findings", "status": "completed"},
+                    ]
+                },
+                "id": "todos-1",
+            }
+        )
+
+        printed = [str(call.args[0]) for call in self.console.print.call_args_list if call.args]
+        self.assertTrue(any("Tool: Todos updated" in line for line in printed))
+        self.assertTrue(any("[..] Plan the research strategy" in line for line in printed))
+        self.assertTrue(any("[ ] Check Southeast University" in line for line in printed))
+        self.assertTrue(any("[OK] Summarize campus findings" in line for line in printed))
+
     def test_format_tool_display_read_file(self):
         """Test tool display formatting for read_file."""
         result = self.handler._format_tool_display(
@@ -539,8 +561,8 @@ class TestEventHandlerDualMode(unittest.TestCase):
 
         self.console.print.assert_not_called()
 
-    def test_subagent_summary_uses_tracked_status_instead_of_unknown(self):
-        """Test tracked subagents render a brief summary line with stable status."""
+    def test_subagent_summary_aggregates_status_without_description(self):
+        """Test tracked subagents render an aggregated summary without descriptions."""
         message = Mock(spec=AIMessage)
         message.tool_calls = [
             {
@@ -550,24 +572,39 @@ class TestEventHandlerDualMode(unittest.TestCase):
                     "description": "Analyse the project architecture in detail",
                 },
                 "id": "task-call-1",
-            }
+            },
+            {
+                "name": "task",
+                "args": {
+                    "subagent_type": "coding",
+                    "description": "Implement the first fix",
+                },
+                "id": "task-call-2",
+            },
         ]
 
         self.handler._track_tool_usage([message])
 
-        tool_msg = Mock(spec=ToolMessage)
-        tool_msg.name = "task"
-        tool_msg.status = "success"
-        tool_msg.content = "Task completed successfully"
-        tool_msg.tool_call_id = "task-call-1"
+        tool_msg_one = Mock(spec=ToolMessage)
+        tool_msg_one.name = "task"
+        tool_msg_one.status = "success"
+        tool_msg_one.content = "Task completed successfully"
+        tool_msg_one.tool_call_id = "task-call-1"
 
-        self.handler._process_tool_message(tool_msg)
+        tool_msg_two = Mock(spec=ToolMessage)
+        tool_msg_two.name = "task"
+        tool_msg_two.status = "error"
+        tool_msg_two.content = "SubAgent execution failed: Connection error"
+        tool_msg_two.tool_call_id = "task-call-2"
+
+        self.handler._process_tool_message(tool_msg_one)
+        self.handler._process_tool_message(tool_msg_two)
         self.handler.render_summary()
 
         rendered = self.console.print.call_args.args[0]
-        self.assertIn("Subagent delegations: 1", rendered)
-        self.assertIn("[1] coding (completed)", rendered)
-        self.assertIn("Analyse the project architecture", rendered)
+        self.assertIn("Subagent delegations: 2 (coding x2; failed 1, completed 1)", rendered)
+        self.assertNotIn("Analyse the project architecture", rendered)
+        self.assertNotIn("Implement the first fix", rendered)
         self.assertNotIn("unknown", rendered.lower())
 
 
@@ -698,3 +735,4 @@ class TestEventHandlerIntegration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

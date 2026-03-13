@@ -567,7 +567,15 @@ class SubAgentMiddleware(AgentMiddleware):
             except Exception as exc:
                 # Generic exception - log and return error
                 error_msg = f"SubAgent execution failed: {exc}"
-                logger.error(f"[SubAgent] '{subagent_type}' failed: {exc}", exc_info=True)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(
+                        "[SubAgent] '%s' failed: %s",
+                        subagent_type,
+                        exc,
+                        exc_info=True,
+                    )
+                else:
+                    logger.info("[SubAgent] '%s' failed: %s", subagent_type, exc)
                 if ainvoke_started is not None and ainvoke_ms == 0.0:
                     ainvoke_ms = _elapsed_ms(ainvoke_started)
                 logger.debug(

@@ -92,13 +92,15 @@ class WebSearchProvider:
                     })
 
                 except Exception as e:
-                    logger.warning(f"解析搜索结果时出错: {e}")
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug("Failed to parse DuckDuckGo result: %s", e, exc_info=True)
                     continue
 
             return results
 
         except Exception as e:
-            logger.error(f"DuckDuckGo搜索失败: {e}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("DuckDuckGo search failed: %s", e, exc_info=True)
             return []
 
     def search_bing(self, query: str, num_results: int = 5) -> List[Dict[str, Any]]:
@@ -155,13 +157,15 @@ class WebSearchProvider:
                     })
 
                 except Exception as e:
-                    logger.warning(f"解析Bing搜索结果时出错: {e}")
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug("Failed to parse Bing result: %s", e, exc_info=True)
                     continue
 
             return results
 
         except Exception as e:
-            logger.error(f"Bing搜索失败: {e}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Bing search failed: %s", e, exc_info=True)
             return []
 
     def get_page_content(self, url: str, max_length: int = 3000) -> str:
@@ -220,7 +224,8 @@ class WebSearchProvider:
             return text
 
         except Exception as e:
-            logger.error(f"获取网页内容失败 {url}: {e}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Failed to fetch webpage content %s: %s", url, e, exc_info=True)
             return f"无法获取网页内容: {str(e)}"
 
 
@@ -270,7 +275,8 @@ def web_search_basic(query: Annotated[str, "Search query keywords"]) -> str:
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        logger.error(f"Search tool execution failed: {e}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Search tool execution failed: %s", e, exc_info=True)
         return json.dumps({
             "query": query,
             "status": "error",
@@ -310,7 +316,8 @@ def get_webpage_content(url: Annotated[str, "Webpage URL address"]) -> str:
         }, ensure_ascii=False, indent=2)
 
     except Exception as e:
-        logger.error(f"Failed to fetch webpage content: {e}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Failed to fetch webpage content: %s", e, exc_info=True)
         return json.dumps({
             "url": url,
             "status": "error",

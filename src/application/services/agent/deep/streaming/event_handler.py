@@ -449,6 +449,12 @@ class DeepAgentEventHandler:
         ):
             return
 
+        if tool_name == "write_todos":
+            todos = self._normalise_todos(tool_args.get("todos"))
+            if todos:
+                self.renderer.emit_todo_update(todos)
+                return
+
         display_str = self._format_tool_display(tool_name, tool_args)
         self.renderer.emit_tool_call(display_str)
 
@@ -787,6 +793,23 @@ class DeepAgentEventHandler:
     def _truncate(text: str, limit: int = 160) -> str:
         """Truncate text to specified limit."""
         return text if len(text) <= limit else text[: limit - 3] + "..."
+
+    @staticmethod
+    def _normalise_todos(raw_todos: Any) -> List[Dict[str, str]]:
+        """Normalise TodoListMiddleware payload into a stable renderer shape."""
+        if not isinstance(raw_todos, list):
+            return []
+
+        todos: List[Dict[str, str]] = []
+        for item in raw_todos:
+            if not isinstance(item, dict):
+                continue
+            content = str(item.get("content", "") or "").strip()
+            if not content:
+                continue
+            status = str(item.get("status", "pending") or "pending").strip().lower()
+            todos.append({"content": content, "status": status})
+        return todos
 
     @staticmethod
     def _visible_text_content(content: Any) -> str:

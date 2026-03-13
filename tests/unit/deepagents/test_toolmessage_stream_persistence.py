@@ -290,7 +290,8 @@ async def test_handle_deep_agent_query_uses_compact_summary_instead_of_verbose_t
     assert answer == "All done"
     assert any("Summary:" in line for line in ctx.console.outputs)
     assert any("Tool calls: 1" in line for line in ctx.console.outputs)
-    assert any("[1] coding (completed) - Create a plugin example" in line for line in ctx.console.outputs)
+    assert any("Subagent delegations: 1 (coding x1; completed 1)" in line for line in ctx.console.outputs)
+    assert not any("Create a plugin example" in line for line in ctx.console.outputs)
     assert not any("Used " in line for line in ctx.console.outputs)
     assert not any("SubAgent Delegations" in line for line in ctx.console.outputs)
     assert not any("(unknown)" in line for line in ctx.console.outputs)
