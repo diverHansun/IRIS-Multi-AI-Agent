@@ -65,6 +65,7 @@ class DeepAgentEventHandler:
         self._file_tracker = file_tracker
         self._last_flushed_text: str = ""
         self._last_flush_kind: Optional[str] = None
+        self._subagent_call_index: Dict[str, int] = {}
 
         self._spinner_active: bool = False
         self._has_responded: bool = False
@@ -102,6 +103,9 @@ class DeepAgentEventHandler:
             return EventProcessingResult()
 
         message, metadata = data
+
+        if isinstance(metadata, dict) and metadata.get("lc_source") == "summarization":
+            return EventProcessingResult()
 
         if isinstance(message, ToolMessage):
             self._process_tool_message(message)
@@ -165,6 +169,9 @@ class DeepAgentEventHandler:
         record = None
         if self._file_tracker:
             record = self._file_tracker.complete_with_message(message)
+
+        if tool_call_id:
+            self._update_subagent_call(tool_call_id, tool_status, tool_content)
 
         # Handle bash errors
         if tool_name == "bash" and tool_status != "success":
@@ -452,23 +459,8 @@ class DeepAgentEventHandler:
             self._spinner_active = False
 
     def _render_update(self, node: str, payload: Any) -> None:
-        """Render node update event (for updates stream mode)."""
-        if not self.show_reasoning_steps:
-            self._capture_state(node, payload)
-            return
-
-        description = self._describe_update(node, payload)
-        if description is None:
-            return
-
-        self._step += 1
-        if self.show_elapsed_time:
-            elapsed = time.perf_counter() - self._start_time
-            prefix = f"  Step {self._step} | {elapsed:0.1f}s | "
-        else:
-            prefix = f"  Step {self._step} | "
-
-        self.console.print(prefix + escape(description))
+        """Consume node update events without rendering them to the transcript."""
+        self._capture_state(node, payload)
 
     def _describe_update(self, node: str, payload: Any) -> Optional[str]:
         """Generate description for a node update."""
@@ -562,33 +554,85 @@ class DeepAgentEventHandler:
         self, call: Dict[str, Any], args: Dict[str, Any]
     ) -> None:
         """Record subagent delegation."""
+        call_id = str(call.get("id", "") or "")
         subagent_type = args.get("subagent_type", "unknown")
         description = args.get("description", "")
+
+        if call_id and call_id in self._subagent_call_index:
+            index = self._subagent_call_index[call_id]
+            self._subagent_calls[index]["description"] = self._truncate(
+                description,
+                limit=120,
+            )
+            return
+
         self._subagent_calls.append(
             {
                 "subagent_type": subagent_type,
                 "description": self._truncate(description, limit=120),
-                "call_id": call.get("id"),
+                "call_id": call_id or None,
+                "status": "delegated",
+                "result": "",
             }
         )
+        if call_id:
+            self._subagent_call_index[call_id] = len(self._subagent_calls) - 1
+
+    def _update_subagent_call(
+        self,
+        tool_call_id: str,
+        tool_status: Any,
+        tool_content: str,
+    ) -> None:
+        """Update tracked subagent status/result from a matching tool message."""
+        index = self._subagent_call_index.get(str(tool_call_id))
+        if index is None:
+            return
+
+        record = self._subagent_calls[index]
+        record["status"] = self._normalise_subagent_status(tool_status, tool_content)
+        record["result"] = self._truncate(tool_content.strip(), limit=150) if tool_content.strip() else ""
+
+    @staticmethod
+    def _normalise_subagent_status(tool_status: Any, tool_content: str) -> str:
+        """Map tool message status/content to a stable user-facing subagent status."""
+        status = str(tool_status or "").strip().lower()
+        content = tool_content.strip().lower()
+
+        if status in {"error", "failed", "failure"}:
+            return "failed"
+        if content.startswith("[timeout]") or "timed out" in content:
+            return "timeout"
+        if content.startswith("subagent execution failed") or content.startswith("error:"):
+            return "failed"
+        if status in {"success", "ok", "completed"} or not status:
+            return "completed"
+        return status
 
     def render_summary(self) -> None:
         """Display an execution summary after streaming completes."""
-        if not self.show_reasoning_steps or self._step == 0:
+        lines = ["", "Summary:"]
+
+        if self._tool_call_count:
+            if self._tool_names:
+                names = escape(", ".join(sorted(self._tool_names)))
+                lines.append(f"  - Tool calls: {self._tool_call_count} ({names})")
+            else:
+                lines.append(f"  - Tool calls: {self._tool_call_count}")
+
+        if self.show_subagent_delegations and self._subagent_calls:
+            lines.append(f"  - Subagent delegations: {len(self._subagent_calls)}")
+            for index, call in enumerate(self._subagent_calls, 1):
+                subagent_type = escape(str(call.get("subagent_type", "unknown")))
+                description = escape(str(call.get("description", "")).strip())
+                status = str(call.get("status", "") or "").strip().lower()
+                status_suffix = f" ({escape(status)})" if status and status not in {"delegated", "unknown"} else ""
+                detail = f" - {description}" if description else ""
+                lines.append(f"    [{index}] {subagent_type}{status_suffix}{detail}")
+
+        if len(lines) == 2:
             return
 
-        lines = [
-            "",
-            "Summary:",
-            f"  - Reasoning steps: {self._step}",
-        ]
-        if self._tool_call_count:
-            names = escape(", ".join(sorted(self._tool_names)))
-            lines.append(f"  - Tool calls: {self._tool_call_count} ({names})")
-        if self._subagent_calls:
-            lines.append(f"  - Subagent delegations: {len(self._subagent_calls)}")
-        total_time = time.perf_counter() - self._start_time
-        lines.append(f"  - Total time: {total_time:0.1f}s")
         self.console.print("\n".join(lines))
 
     @property
@@ -611,6 +655,11 @@ class DeepAgentEventHandler:
             self._last_flush_kind == "message_end"
             and self._last_flushed_text.strip() == answer.strip()
         )
+
+    @property
+    def elapsed_time(self) -> float:
+        """Return the total elapsed wall-clock time since handler creation."""
+        return time.perf_counter() - self._start_time
 
     @staticmethod
     def _truncate(text: str, limit: int = 160) -> str:

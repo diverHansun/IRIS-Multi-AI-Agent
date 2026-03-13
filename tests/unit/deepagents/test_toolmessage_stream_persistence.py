@@ -78,7 +78,13 @@ class _AgentStub:
         output: str = "All done",
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        self.metadata = metadata or {"hitl_config": {}, "streaming": {"show_reasoning_steps": False}}
+        self.metadata = metadata or {
+            "hitl_config": {},
+            "streaming": {
+                "show_reasoning_steps": False,
+                "show_elapsed_time": True,
+            },
+        }
         self.runtime = runtime or _RuntimeStub()
         self.runtime_checkpointer = _RuntimeCheckpointerStub()
         self.deep_checkpointer = _DeepCheckpointerStub()
@@ -199,3 +205,91 @@ async def test_handle_deep_agent_query_falls_back_when_only_intermediate_text_st
     assert len(deepagent_lines) == 2
     assert any("Let me search first" in line for line in deepagent_lines)
     assert any("All done" in line for line in deepagent_lines)
+
+
+@pytest.mark.asyncio
+async def test_handle_deep_agent_query_shows_elapsed_footer_when_enabled() -> None:
+    agent = _AgentStub()
+    ctx = _CtxStub(agent)
+
+    answer = await handle_deep_agent_query(ctx, "show elapsed")
+
+    assert answer == "All done"
+    elapsed_lines = [line for line in ctx.console.outputs if line.startswith("Elapsed: ")]
+    assert len(elapsed_lines) == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_deep_agent_query_hides_elapsed_footer_when_disabled() -> None:
+    agent = _AgentStub(
+        metadata={
+            "hitl_config": {},
+            "streaming": {
+                "show_reasoning_steps": False,
+                "show_elapsed_time": False,
+            },
+        }
+    )
+    ctx = _CtxStub(agent)
+
+    answer = await handle_deep_agent_query(ctx, "hide elapsed")
+
+    assert answer == "All done"
+    assert not any(line.startswith("Elapsed: ") for line in ctx.console.outputs)
+
+
+@pytest.mark.asyncio
+async def test_handle_deep_agent_query_uses_compact_summary_instead_of_verbose_tail() -> None:
+    runtime = _RuntimeStub(
+        events=[
+            (
+                ("agent",),
+                "updates",
+                {
+                    "agent": {
+                        "messages": [
+                            AIMessage(
+                                content="",
+                                tool_calls=[
+                                    {
+                                        "name": "task",
+                                        "args": {
+                                            "subagent_type": "coding",
+                                            "description": "Create a plugin example",
+                                        },
+                                        "id": "call-1",
+                                    }
+                                ],
+                            )
+                        ]
+                    }
+                },
+            ),
+            (
+                ("agent",),
+                "messages",
+                (
+                    ToolMessage(
+                        content="Plugin example completed",
+                        tool_call_id="call-1",
+                        name="task",
+                        status="success",
+                    ),
+                    {},
+                ),
+            ),
+            (("agent",), "updates", {"agent": {"messages": [AIMessage(content="All done")]}}),
+        ]
+    )
+    agent = _AgentStub(runtime=runtime)
+    ctx = _CtxStub(agent)
+
+    answer = await handle_deep_agent_query(ctx, "compact summary")
+
+    assert answer == "All done"
+    assert any("Summary:" in line for line in ctx.console.outputs)
+    assert any("Tool calls: 1" in line for line in ctx.console.outputs)
+    assert any("[1] coding (completed) - Create a plugin example" in line for line in ctx.console.outputs)
+    assert not any("Used " in line for line in ctx.console.outputs)
+    assert not any("SubAgent Delegations" in line for line in ctx.console.outputs)
+    assert not any("(unknown)" in line for line in ctx.console.outputs)

@@ -38,6 +38,7 @@ class DummyAgent:
         self.metadata = {}
         self.memory_sync = None
         self.runtime_checkpointer = None
+        self.deep_checkpointer = None
 
     def create_runtime_config(self, session_id):
         return {"thread_id": "thread-1"}
@@ -67,6 +68,7 @@ class DummyEventHandler:
             def __init__(self):
                 self.interrupts = None
                 self.final_state = None
+                self.step_completed = False
 
         return Result()
 
@@ -74,32 +76,51 @@ class DummyEventHandler:
         return None
 
 
+class DummyDeepCheckpointer:
+    def __init__(self):
+        self.persist_calls = []
+
+    def enhance_runtime_input(self, session_id, query, max_history=10):  # noqa: ARG002
+        return {"messages": [{"role": "user", "content": query}]}
+
+    def persist_from_runtime(self, session_id, runtime_checkpointer, runtime_config, agent_state=None):  # noqa: ARG002
+        self.persist_calls.append(
+            {
+                "session_id": session_id,
+                "runtime_config": runtime_config,
+            }
+        )
+        return True
+
+
 @pytest.mark.asyncio
 async def test_handle_deep_agent_query_handles_keyboard_interrupt(monkeypatch):
     """DeepAgent should persist and notify runtime on interrupt without crashing."""
-    persisted = {}
+    checkpointer = DummyDeepCheckpointer()
 
-    async def fake_persist(ctx, session_ctx, runtime_checkpointer, runtime_config, agent_memory_sync, reason="normal"):
-        persisted["reason"] = reason
-        persisted["session_id"] = session_ctx.session_id
-        persisted["runtime_config"] = runtime_config
-        return True
-
-    monkeypatch.setattr(conv, "_persist_conversation_state", fake_persist)
     monkeypatch.setattr(conv, "DeepAgentEventHandler", DummyEventHandler)
     monkeypatch.setattr(conv, "_ensure_hitl_manager", lambda ctx, hitl_config: SimpleNamespace())
     monkeypatch.setattr(conv, "FileOpTracker", lambda *args, **kwargs: SimpleNamespace())
+    monkeypatch.setattr(conv, "DeepAgentCheckpointer", lambda *args, **kwargs: checkpointer)
 
     agent = DummyAgent()
     config = {"agent_instance": agent, "agent_type": "deep", "provider": "unit-test"}
     console = DummyConsole()
-    ctx = SimpleNamespace(console=console, session_id="s-test", memory_sync=None, hitl_manager=None)
+    ctx = SimpleNamespace(
+        console=console,
+        session_id="s-test",
+        memory_sync=None,
+        hitl_manager=None,
+        project_context=None,
+        metadata_manager=None,
+    )
     ctx.get_engine_config = lambda engine="agent": config
 
     result = await conv.handle_deep_agent_query(ctx, "hello")
 
     assert result == ""
-    assert persisted["reason"] == "user_interrupt"
+    assert checkpointer.persist_calls
+    assert checkpointer.persist_calls[0]["session_id"] == "s-test"
     assert agent.runtime.aupdate_calls
     message = agent.runtime.aupdate_calls[0][1]["messages"][0].content
     assert "Ctrl+C" in message

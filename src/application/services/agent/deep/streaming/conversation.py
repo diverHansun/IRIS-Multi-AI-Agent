@@ -490,32 +490,12 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     if not event_handler.has_streamed_answer(answer):
         ctx.console.print(f"[bold blue]DeepAgent >[/] {escape(answer)}")
 
-    tool_calls = result.get("tool_calls", 0)
-    tool_names = result.get("tool_names") or []
-    if tool_calls:
-        if tool_names:
-            joined_names = ", ".join(tool_names)
-            ctx.console.print(
-                f"[dim]Used {len(tool_names)} tools ({tool_calls} calls): {escape(joined_names)}[/]"
-            )
-        else:
-            ctx.console.print(f"[dim]Used {tool_calls} tool calls[/]")
-
-    subagent_calls = result.get("subagent_calls", [])
-    if subagent_calls:
-        ctx.console.print(f"\n[bold cyan]SubAgent Delegations ({len(subagent_calls)} total)[/]")
-        for idx, call in enumerate(subagent_calls, 1):
-            subagent_type = call.get("subagent_type", "unknown")
-            description = call.get("description", "")
-            call_id = call.get("call_id", "")
-            status = call.get("status", "unknown")
-            ctx.console.print(
-                f"[bold cyan][{idx}] {escape(subagent_type)}[/] ({escape(status)})"
-            )
-            if description:
-                ctx.console.print(f"[dim]  Task:[/] {escape(description)}")
-            if call_id:
-                ctx.console.print(f"[dim]  ID:[/] {escape(call_id)}")
+    if streaming_opts.get("show_elapsed_time", True):
+        ctx.console.print()
+        ctx.console.print(
+            f"Elapsed: {event_handler.elapsed_time:0.1f}s",
+            style=COLORS["text_dim"],
+        )
 
     event_handler.render_summary()
     return answer

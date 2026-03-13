@@ -116,6 +116,7 @@ class TestEventHandlerDualMode(unittest.TestCase):
         result = self.handler.handle_event(event)
 
         self.assertIsInstance(result, EventProcessingResult)
+        self.console.print.assert_not_called()
 
     def test_handle_dict_format_backwards_compatibility(self):
         """Test handling dict format for backwards compatibility."""
@@ -124,6 +125,7 @@ class TestEventHandlerDualMode(unittest.TestCase):
         result = self.handler.handle_event(event)
 
         self.assertIsInstance(result, EventProcessingResult)
+        self.console.print.assert_not_called()
 
     def test_handle_interrupt_in_updates(self):
         """Test interrupt handling in updates stream."""
@@ -265,6 +267,22 @@ class TestEventHandlerDualMode(unittest.TestCase):
         self.assertEqual(self.handler._pending_text, "")
         self.assertTrue(self.handler.has_streamed_answer("final text"))
 
+    def test_messages_stream_skips_summarization_metadata(self):
+        """Test synthetic summarization messages are not rendered."""
+        event = (
+            ("agent",),
+            "messages",
+            (
+                AIMessageChunk(content="summary text", chunk_position="last"),
+                {"lc_source": "summarization"},
+            ),
+        )
+
+        self.handler.handle_event(event)
+
+        self.assertEqual(self.handler._pending_text, "")
+        self.console.print.assert_not_called()
+
     def test_describe_messages_uses_thinking_for_plain_text_ai(self):
         """Test Step rows no longer leak AI text content."""
         message = AIMessage(content="This should not appear in the Step row")
@@ -369,6 +387,60 @@ class TestEventHandlerDualMode(unittest.TestCase):
         self.assertEqual(stats["tool_calls"], 2)
         self.assertIn("read_file", stats["tool_names"])
         self.assertIn("web_search", stats["tool_names"])
+
+    def test_render_summary_compact_tool_stats_only(self):
+        """Test compact summary excludes steps and total time."""
+        message = Mock(spec=AIMessage)
+        message.tool_calls = [
+            {"name": "web_search", "args": {"query": "test"}, "id": "call-1"},
+            {"name": "shell", "args": {"command": "pwd"}, "id": "call-2"},
+        ]
+
+        self.handler._track_tool_usage([message])
+        self.handler.render_summary()
+
+        rendered = self.console.print.call_args.args[0]
+        self.assertIn("Summary:", rendered)
+        self.assertIn("Tool calls: 2", rendered)
+        self.assertNotIn("Reasoning steps", rendered)
+        self.assertNotIn("Total time", rendered)
+
+    def test_render_summary_noop_without_stats(self):
+        """Test summary is omitted when there is nothing meaningful to show."""
+        self.handler.render_summary()
+
+        self.console.print.assert_not_called()
+
+    def test_subagent_summary_uses_tracked_status_instead_of_unknown(self):
+        """Test tracked subagents render a brief summary line with stable status."""
+        message = Mock(spec=AIMessage)
+        message.tool_calls = [
+            {
+                "name": "task",
+                "args": {
+                    "subagent_type": "coding",
+                    "description": "Analyse the project architecture in detail",
+                },
+                "id": "task-call-1",
+            }
+        ]
+
+        self.handler._track_tool_usage([message])
+
+        tool_msg = Mock(spec=ToolMessage)
+        tool_msg.name = "task"
+        tool_msg.status = "success"
+        tool_msg.content = "Task completed successfully"
+        tool_msg.tool_call_id = "task-call-1"
+
+        self.handler._process_tool_message(tool_msg)
+        self.handler.render_summary()
+
+        rendered = self.console.print.call_args.args[0]
+        self.assertIn("Subagent delegations: 1", rendered)
+        self.assertIn("[1] coding (completed)", rendered)
+        self.assertIn("Analyse the project architecture", rendered)
+        self.assertNotIn("unknown", rendered.lower())
 
 
 class TestEventHandlerIntegration(unittest.TestCase):
