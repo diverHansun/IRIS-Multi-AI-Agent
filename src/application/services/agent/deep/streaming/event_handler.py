@@ -68,6 +68,7 @@ class DeepAgentEventHandler:
         self._subagent_call_index: Dict[str, int] = {}
 
         self._spinner_active: bool = False
+        self._spinner_status: Any = None
         self._has_responded: bool = False
 
     def handle_event(
@@ -83,18 +84,25 @@ class DeepAgentEventHandler:
 
         if isinstance(event, tuple) and len(event) == 3:
             namespace, stream_mode, data = event
+            namespace_key = self._normalise_namespace(namespace)
+            is_main_agent = self._is_main_namespace(namespace_key, data)
 
             if stream_mode == "messages":
-                return self._handle_messages_stream(data)
+                return self._handle_messages_stream(data, is_main_agent=is_main_agent)
             elif stream_mode == "updates":
-                return self._handle_updates_stream(data)
+                return self._handle_updates_stream(data, capture_state=is_main_agent)
 
         elif isinstance(event, dict):
-            return self._handle_updates_stream(event)
+            return self._handle_updates_stream(event, capture_state=True)
 
         return EventProcessingResult()
 
-    def _handle_messages_stream(self, data: Any) -> EventProcessingResult:
+    def _handle_messages_stream(
+        self,
+        data: Any,
+        *,
+        is_main_agent: bool,
+    ) -> EventProcessingResult:
         """Handle messages stream mode data.
 
         Messages stream returns (message, metadata) tuples.
@@ -112,11 +120,21 @@ class DeepAgentEventHandler:
             return EventProcessingResult()
 
         if isinstance(message, (AIMessage, AIMessageChunk)):
-            self._process_ai_message_content_blocks(message)
+            self._process_ai_message_content_blocks(
+                message,
+                capture_text=is_main_agent,
+                flush_text=is_main_agent,
+                render_tool_calls=is_main_agent,
+            )
 
         return EventProcessingResult()
 
-    def _handle_updates_stream(self, data: Dict[str, Any]) -> EventProcessingResult:
+    def _handle_updates_stream(
+        self,
+        data: Dict[str, Any],
+        *,
+        capture_state: bool,
+    ) -> EventProcessingResult:
         """Handle updates stream mode data."""
         interrupts: Tuple[Interrupt, ...] = ()
         step_completed = False
@@ -129,7 +147,8 @@ class DeepAgentEventHandler:
         for node, payload in data.items():
             if node in {"__interrupt__", "__metadata__"}:
                 continue
-            self._render_update(node, payload)
+            if capture_state:
+                self._render_update(node, payload)
             if self._is_tool_step_completion(payload):
                 step_completed = True
 
@@ -181,6 +200,7 @@ class DeepAgentEventHandler:
                 self.console.print()
                 self.console.print(tool_content, style=COLORS["error"], markup=False)
                 self.console.print()
+                self._start_spinner()
             return
 
         # Display file operation results (only for write/edit, skip read operations)
@@ -189,6 +209,7 @@ class DeepAgentEventHandler:
             self._flush_text_buffer(final=True, flush_kind="tool_call")
             self._stop_spinner()
             render_file_operation(record, self.console)
+            self._start_spinner()
             return
 
         # Skip read operation results - they are internal and don't need to be shown
@@ -215,8 +236,16 @@ class DeepAgentEventHandler:
                 self.console.print()
                 self.console.print(tool_content, style=COLORS["error"], markup=False)
                 self.console.print()
+                self._start_spinner()
 
-    def _process_ai_message_content_blocks(self, message: BaseMessage) -> None:
+    def _process_ai_message_content_blocks(
+        self,
+        message: BaseMessage,
+        *,
+        capture_text: bool = True,
+        flush_text: bool = True,
+        render_tool_calls: bool = True,
+    ) -> None:
         """Process content_blocks from AIMessage/AIMessageChunk."""
         has_content_blocks = hasattr(message, "content_blocks")
         has_tool_calls = hasattr(message, "tool_calls") and message.tool_calls
@@ -230,26 +259,45 @@ class DeepAgentEventHandler:
                 block_type = block.get("type")
 
                 if block_type == "text":
-                    self._handle_text_block(block)
+                    if capture_text:
+                        self._handle_text_block(block)
                 elif block_type == "reasoning":
                     pass
                 elif block_type == "tool_call_chunk":
                     saw_tool_block = True
-                    self._handle_tool_call_chunk(block)
+                    self._handle_tool_call_chunk(
+                        block,
+                        render_output=render_tool_calls,
+                        flush_pending=flush_text,
+                    )
                 elif block_type == "tool_call":
                     saw_tool_block = True
-                    self._process_direct_tool_call(block)
+                    self._process_direct_tool_call(
+                        block,
+                        render_output=render_tool_calls,
+                        flush_pending=flush_text,
+                    )
 
         # Fallback for providers that expose tool calls directly on the message
         # without corresponding tool_call/tool_call_chunk content blocks.
         if has_tool_calls and not saw_tool_block:
             for tool_call in message.tool_calls:
-                self._process_direct_tool_call(tool_call)
+                self._process_direct_tool_call(
+                    tool_call,
+                    render_output=render_tool_calls,
+                    flush_pending=flush_text,
+                )
 
-        if getattr(message, "chunk_position", None) == "last":
+        if flush_text and getattr(message, "chunk_position", None) == "last":
             self._flush_text_buffer(final=True, flush_kind="message_end")
 
-    def _process_direct_tool_call(self, tool_call: Dict[str, Any]) -> None:
+    def _process_direct_tool_call(
+        self,
+        tool_call: Dict[str, Any],
+        *,
+        render_output: bool = True,
+        flush_pending: bool = True,
+    ) -> None:
         """Process a complete tool call from AIMessage.tool_calls."""
         tool_id = tool_call.get("id")
         tool_name = tool_call.get("name")
@@ -262,7 +310,8 @@ class DeepAgentEventHandler:
         if tool_id and tool_id in self._displayed_tool_ids:
             return
 
-        self._flush_text_buffer(final=True, flush_kind="tool_call")
+        if flush_pending:
+            self._flush_text_buffer(final=True, flush_kind="tool_call")
 
         if not isinstance(tool_args, dict):
             tool_args = {"value": tool_args}
@@ -274,7 +323,7 @@ class DeepAgentEventHandler:
                 self._file_tracker.start_operation(tool_name, tool_args, tool_id)
 
         # Display the tool call
-        if self.show_tool_calls:
+        if render_output and self.show_tool_calls:
             self._render_tool_call(tool_name, tool_args)
 
     def _handle_text_block(self, block: Dict[str, Any]) -> None:
@@ -283,7 +332,13 @@ class DeepAgentEventHandler:
         if text:
             self._pending_text += text
 
-    def _handle_tool_call_chunk(self, block: Dict[str, Any]) -> None:
+    def _handle_tool_call_chunk(
+        self,
+        block: Dict[str, Any],
+        *,
+        render_output: bool = True,
+        flush_pending: bool = True,
+    ) -> None:
         """Buffer and process tool call chunks."""
         chunk_index = block.get("index")
         chunk_id = block.get("id")
@@ -299,7 +354,14 @@ class DeepAgentEventHandler:
 
         buffer = self._tool_call_buffers.setdefault(
             buffer_key,
-            {"name": None, "id": None, "args": None, "args_parts": []},
+            {
+                "name": None,
+                "id": None,
+                "args": None,
+                "args_parts": [],
+                "render_output": render_output,
+                "flush_pending": flush_pending,
+            },
         )
 
         if chunk_name:
@@ -347,7 +409,8 @@ class DeepAgentEventHandler:
         if not isinstance(parsed_args, dict):
             parsed_args = {"value": parsed_args}
 
-        self._flush_text_buffer(final=True, flush_kind="tool_call")
+        if buffer.get("flush_pending", True):
+            self._flush_text_buffer(final=True, flush_kind="tool_call")
 
         if buffer_id is not None:
             self._displayed_tool_ids.add(buffer_id)
@@ -356,7 +419,7 @@ class DeepAgentEventHandler:
 
         self._tool_call_buffers.pop(buffer_key, None)
 
-        if self.show_tool_calls:
+        if buffer.get("render_output", True) and self.show_tool_calls:
             self._render_tool_call(buffer_name, parsed_args)
 
     def _render_tool_call(self, tool_name: str, tool_args: Dict[str, Any]) -> None:
@@ -450,13 +513,51 @@ class DeepAgentEventHandler:
 
     def _start_spinner(self) -> None:
         """Start spinner if not already active."""
-        if not self._spinner_active and self.show_reasoning_steps:
-            self._spinner_active = True
+        if self._spinner_active:
+            return
+
+        self._spinner_active = True
+        status_factory = getattr(self.console, "status", None)
+        if not callable(status_factory):
+            return
+
+        try:
+            spinner_status = status_factory(
+                "[dim]Deep agent reasoning...[/]",
+                spinner="dots",
+            )
+            enter = getattr(spinner_status, "__enter__", None)
+            if callable(enter):
+                enter()
+                self._spinner_status = spinner_status
+        except Exception:
+            self._spinner_status = None
 
     def _stop_spinner(self) -> None:
         """Stop spinner if active."""
-        if self._spinner_active:
-            self._spinner_active = False
+        if not self._spinner_active:
+            return
+
+        self._spinner_active = False
+        spinner_status = self._spinner_status
+        self._spinner_status = None
+        if spinner_status is None:
+            return
+
+        exit_fn = getattr(spinner_status, "__exit__", None)
+        if callable(exit_fn):
+            try:
+                exit_fn(None, None, None)
+            except Exception:
+                pass
+
+    def start_spinner(self) -> None:
+        """Public wrapper used by the conversation driver."""
+        self._start_spinner()
+
+    def stop_spinner(self) -> None:
+        """Public wrapper used by the conversation driver."""
+        self._stop_spinner()
 
     def _render_update(self, node: str, payload: Any) -> None:
         """Consume node update events without rendering them to the transcript."""
@@ -655,6 +756,34 @@ class DeepAgentEventHandler:
             self._last_flush_kind == "message_end"
             and self._last_flushed_text.strip() == answer.strip()
         )
+
+    @staticmethod
+    def _normalise_namespace(namespace: Any) -> Tuple[Any, ...]:
+        """Convert stream namespace into a stable tuple."""
+        if namespace in (None, (), []):
+            return ()
+        if isinstance(namespace, tuple):
+            return namespace
+        if isinstance(namespace, list):
+            return tuple(namespace)
+        return (namespace,)
+
+    @staticmethod
+    def _is_main_namespace(namespace: Tuple[Any, ...], data: Any) -> bool:
+        """Return whether a namespace belongs to the main agent graph.
+
+        LangGraph emits an empty namespace for the main graph. Our current
+        compatibility tests still use single-item namespaces such as
+        ``("agent",)`` and ``("tools",)`` for top-level events, so keep
+        those visible as well and treat everything else as subgraph output.
+        """
+        if not namespace:
+            return True
+        if len(namespace) == 1 and str(namespace[0]) in {"agent", "tools"}:
+            return True
+        if isinstance(data, dict) and len(namespace) == 1 and namespace[0] in data:
+            return True
+        return False
 
     @property
     def elapsed_time(self) -> float:

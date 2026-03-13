@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from rich.markup import escape
+from rich.text import Text
 
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command, Interrupt
@@ -168,6 +169,18 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         **streaming_opts
     )
 
+    def _start_spinner() -> None:
+        start = getattr(event_handler, "start_spinner", None)
+        if callable(start):
+            start()
+
+    def _stop_spinner() -> None:
+        stop = getattr(event_handler, "stop_spinner", None)
+        if callable(stop):
+            stop()
+
+    _start_spinner()
+
     # Pass file_tracker to hitl_manager for approval preview
     hitl_manager._file_tracker = file_tracker
 
@@ -217,8 +230,6 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     else:
         logger.info("Continuing session: MemorySaver will provide history automatically")
         runtime_input = agent.create_runtime_input(query)
-
-    ctx.console.print("[dim]Deep agent reasoning...[/]")
 
     pending_input: Any = runtime_input
     timed_out = False
@@ -290,12 +301,14 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 logger.info("Deep agent streaming interrupted by user")
                 raise
             except GraphRecursionError as exc:
+                _stop_spinner()
                 ctx.console.print(f"[bold red]Recursion limit exceeded:[/] {escape(str(exc))}")
                 return ""
             except TimeoutError as exc:
                 # Step timeout - persist state and notify agent
                 logger.warning(f"Step timeout occurred in Deep Agent: {exc}")
 
+                _stop_spinner()
                 ctx.console.print(
                     f"[yellow]TIMEOUT: The agent took longer than expected for this step.[/]"
                 )
@@ -337,6 +350,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 # Max execution time exceeded (方案B: middleware raises exception)
                 logger.warning(f"Max execution time exceeded: {exc}")
 
+                _stop_spinner()
                 ctx.console.print(
                     f"[yellow]EXECUTION TIMEOUT: Agent exceeded maximum execution time "
                     f"({exc.elapsed_time:.1f}s / {exc.max_execution_time:.1f}s)[/]"
@@ -374,6 +388,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                 return "[Execution time limit exceeded - conversation saved]"
             except Exception as exc:
                 logger.error(f"Unexpected error in agent streaming: {exc}", exc_info=True)
+                _stop_spinner()
                 ctx.console.print(f"[bold red]Unexpected error in agent streaming:[/] {escape(str(exc))}")
                 return ""
 
@@ -400,15 +415,18 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                     pending_input = Command(resume=resume_data)
                     # Continue while loop to resume
                 except HITLDecisionError as exc:
+                    _stop_spinner()
                     ctx.console.print(f"[bold red]HITL approval failed:[/] {escape(str(exc))}")
                     return ""
                 except Exception as exc:
+                    _stop_spinner()
                     ctx.console.print(f"[bold red]Unexpected error during HITL processing:[/] {escape(str(exc))}")
                     return ""
             else:
                 # No interrupts - normal completion
                 break
     except (KeyboardInterrupt, asyncio.CancelledError):
+        _stop_spinner()
         ctx.console.print(
             "\nExecution interrupted by user.",
             style=COLORS["warning"],
@@ -452,6 +470,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
         return ""
 
     if timed_out:
+        _stop_spinner()
         ctx.console.print("[bold red]Deep agent execution timed out.[/]")
         return ""
 
@@ -470,6 +489,7 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     # Get final state for result preparation (event_handler state is OK for this purpose)
     final_state = event_handler.last_agent_state
     if not final_state:
+        _stop_spinner()
         ctx.console.print("[bold red]Deep agent failed to produce a response.[/]")
         return ""
 
@@ -481,14 +501,22 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
     )
 
     if not result.get("success"):
+        _stop_spinner()
         ctx.console.print(
             f"[bold red]Deep Agent Error:[/] {escape(result.get('output', 'Unknown error.'))}"
         )
         return ""
 
+    _stop_spinner()
     answer = result.get("output", "No response generated.")
     if not event_handler.has_streamed_answer(answer):
-        ctx.console.print(f"[bold blue]DeepAgent >[/] {escape(answer)}")
+        ctx.console.print(
+            Text.assemble(
+                ("DeepAgent >", f"bold {COLORS['agent']}"),
+                (" ", ""),
+                (answer, COLORS["text_primary"]),
+            )
+        )
 
     if streaming_opts.get("show_elapsed_time", True):
         ctx.console.print()

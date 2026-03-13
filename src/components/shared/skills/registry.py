@@ -151,7 +151,7 @@ class SkillRegistry:
 
                     if skill.name in self._skills:
                         old = self._skills[skill.name]
-                        logger.warning(
+                        logger.debug(
                             "Skill '%s' from %s shadows skill from %s",
                             skill.name,
                             source.type.value,

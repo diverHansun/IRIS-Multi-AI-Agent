@@ -215,6 +215,7 @@ async def test_handle_deep_agent_query_shows_elapsed_footer_when_enabled() -> No
     answer = await handle_deep_agent_query(ctx, "show elapsed")
 
     assert answer == "All done"
+    assert not any("Deep agent reasoning..." in line for line in ctx.console.outputs)
     elapsed_lines = [line for line in ctx.console.outputs if line.startswith("Elapsed: ")]
     assert len(elapsed_lines) == 1
 

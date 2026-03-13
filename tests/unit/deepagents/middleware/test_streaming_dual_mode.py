@@ -1,8 +1,10 @@
 """Unit tests for dual-mode streaming implementation."""
 
 import json
+import tempfile
 import unittest
-from unittest.mock import MagicMock, Mock
+from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
 
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langgraph.types import Interrupt
@@ -282,6 +284,73 @@ class TestEventHandlerDualMode(unittest.TestCase):
 
         self.assertEqual(self.handler._pending_text, "")
         self.console.print.assert_not_called()
+
+    def test_subgraph_ai_text_is_hidden_from_main_transcript(self):
+        """Test subagent text chunks do not flush into the main terminal transcript."""
+        self.handler._pending_text = "main agent text"
+
+        event = (
+            ("subagent:coder",),
+            "messages",
+            (
+                AIMessageChunk(content="subagent output", chunk_position="last"),
+                {},
+            ),
+        )
+
+        self.handler.handle_event(event)
+
+        self.assertEqual(self.handler._pending_text, "main agent text")
+        self.console.print.assert_not_called()
+
+    def test_subgraph_file_result_is_preserved_without_rendering_subgraph_text(self):
+        """Test subagent file operations still render results while text stays hidden."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "generated.txt"
+            event = (
+                ("subagent:coder",),
+                "messages",
+                (
+                    AIMessageChunk(
+                        content="",
+                        content_blocks=[
+                            {
+                                "type": "tool_call",
+                                "name": "write_real_file",
+                                "id": "file-call-1",
+                                "args": {
+                                    "file_path": str(file_path),
+                                    "content": "hello from subagent\n",
+                                },
+                            }
+                        ],
+                        chunk_position=None,
+                    ),
+                    {},
+                ),
+            )
+
+            self.handler.handle_event(event)
+            self.assertIn("file-call-1", self.handler._file_tracker.active)
+            self.console.print.assert_not_called()
+
+            file_path.write_text("hello from subagent\n", encoding="utf-8")
+            tool_msg = ToolMessage(
+                content="ok",
+                tool_call_id="file-call-1",
+                name="write_real_file",
+                status="success",
+            )
+
+            with patch(
+                "src.application.services.agent.deep.hitl.file_ops.render_file_operation"
+            ) as render_file_operation:
+                self.handler.handle_event(
+                    (("subagent:coder",), "messages", (tool_msg, {}))
+                )
+
+            render_file_operation.assert_called_once()
+            self.assertFalse(self.handler._file_tracker.active)
 
     def test_describe_messages_uses_thinking_for_plain_text_ai(self):
         """Test Step rows no longer leak AI text content."""
