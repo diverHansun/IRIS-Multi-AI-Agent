@@ -42,6 +42,9 @@ from src.core.config import (
 )
 from src.application.cli.state import AppState
 from src.components.deepagents.runtime_middlewares.timeout import ExecutionTimeoutError
+from src.application.cli.input import create_prompt_input
+from prompt_toolkit.patch_stdout import patch_stdout
+from prompt_toolkit.formatted_text import FormattedText
 
 logger = logging.getLogger(__name__)
 
@@ -143,10 +146,13 @@ def _initialize_memory(ctx: AppState) -> None:
 
 
 async def _cli_loop(ctx: AppState) -> None:
+    # Initialise once so that history state persists for the entire session lifetime.
+    prompt_input = create_prompt_input(ctx)
     while True:
         try:
-            prompt = _build_prompt(ctx)
-            query = await asyncio.to_thread(ctx.console.input, prompt)
+            plain_prompt = _build_pt_prompt(ctx)
+            with patch_stdout(raw=True):
+                query = await prompt_input.prompt_async(plain_prompt)
             if ctx.exit_hint_handle:
                 ctx.exit_hint_handle.cancel()
                 ctx.exit_hint_handle = None
@@ -325,6 +331,30 @@ def _build_prompt(ctx: AppState) -> str:
             f"[/bold][/{COLORS['info']}] > "
         )
     return f"\n[{COLORS['info']}][bold]{engine}[/bold][/{COLORS['info']}] > "
+
+
+def _build_pt_prompt(ctx: AppState) -> FormattedText:
+    """Build the CLI prompt as FormattedText for prompt_toolkit, preserving theme colours."""
+    engine = ctx.current_engine
+    style = f"fg:{COLORS['info']} bold"
+
+    if engine == "agent":
+        config = ctx.get_engine_config("agent")
+        agent_type = config.get("agent_type", "basic").upper()
+        stream_indicator = "[S]" if config.get("streaming", True) else ""
+        label = f"{engine}:{agent_type}{stream_indicator}"
+    elif engine == "llm":
+        config = ctx.get_engine_config("llm")
+        stream_indicator = "[S]" if config.get("streaming", True) else ""
+        label = f"{engine}:LLM{stream_indicator}"
+    else:
+        label = engine
+
+    return FormattedText([
+        ("", "\n"),
+        (style, label),
+        ("", " > "),
+    ])
 
 
 def _handle_service_result(ctx: AppState, result: dict) -> bool:

@@ -34,99 +34,14 @@
 
 ## 🎯 二、工作模式说明
 
-本项目支持四种运行引擎，可通过 `/switch <engine>` 命令动态切换：
+本项目支持四种运行引擎，通过 `/switch` 命令动态切换：
 
-### LLM引擎
-
-- **特点**: 快速响应，支持流式输出，纯对话无工具调用
-- **适用场景**: 快速问答、创意写作、代码生成等纯对话任务
-- **切换命令**: `/switch llm`
-- **流式输出**: `/stream on` 开启，`/stream off` 关闭
-- **示例**:
-  ```
-  你 > 写一首关于春天的诗
-  AI > [流式输出] 春风拂面...
-  ```
-
-### Agent引擎
-
-Agent引擎提供两种模式，可通过 `/mode <basic|deep>` 在引擎内切换：
-
-#### 1. Basic模式（默认）
-- **特点**: 基础智能体，支持工具调用和复杂推理
-- **适用场景**: 需要搜索、计算、地图导航等工具的常规任务
-- **切换命令**: `/switch agent` 然后 `/mode basic`
-- **示例**:
-  ```
-  你 > 搜索北京最新的天气预报
-  AI Agent > [调用搜索工具] 为您查询到...
-  ```
-
-#### 2. Deep模式
-- **特点**: 高级智能体，支持任务规划、子代理协作、文件系统操作
-- **功能类型**: 研究型（research）、编程型（coding）、分析型（analysis）
-- **适用场景**: 复杂多步骤任务、需要规划的场景、文件操作任务
-- **切换命令**: `/switch agent` 然后 `/mode deep`
-- **功能切换**: `/use <research|coding|analysis>` 切换DeepAgent功能类型
-- **示例**:
-  ```
-  你 > /mode deep
-  你 > /use research
-  你 > 研究一下人工智能的最新进展
-  AI > [规划任务] → [调用子代理] → [整理结果]...
-  ```
-
-### AgentFlow引擎（开发中）
-
-- **特点**: 基于图结构的工作流引擎，支持复杂的多智能体协作和任务编排
-- **适用场景**: 复杂工作流、多Agent协作、状态管理
-- **切换命令**: `/switch agentflow`
-
-### Dify引擎（云端）
-
-- **特点**: 集成Dify云端AI平台，支持文件上传和多模态理解
-- **适用场景**: 文档分析、图片识别、多模态对话
-- **切换命令**: `/switch dify`
-- **文件支持**:
-  - 文档类：`.pdf`、`.docx`、`.xlsx`、`.txt`、`.md`等
-  - 图片类：`.jpg`、`.png`、`.gif`、`.webp`等
-  - 最大文件：10MB/文件
-- **示例**:
-  ```
-  你 > /upload document.pdf
-  你 > 这个文档主要讲了什么？
-  AI > [分析文档] 该文档主要介绍了...
-  ```
-
-### 引擎切换示例
-```bash
-# 切换到LLM引擎
-/switch llm
-
-# 切换到Agent引擎（Basic模式）
-/switch agent
-/mode basic
-
-# 切换到Agent引擎（Deep模式）
-/switch agent
-/mode deep
-/use research  # 切换到研究型功能
-
-# 在引擎中切换模型（智谱AI）
-/model zhipu glm-4.5-flash
-
-# 在引擎中切换模型（OpenAI）
-/model openai gpt-4o-mini
-
-# 在引擎中切换模型（Ollama本地）
-/model ollama qwen3:8b
-
-# 切换到Dify云端引擎
-/switch dify
-
-# 切换到AgentFlow引擎（开发中）
-/switch agentflow
-```
+| 引擎 | 说明 | 适用场景 |
+|------|------|----------|
+| **LLM** | 纯对话模式，支持流式输出 | 快速问答、创意写作、代码生成 |
+| **Agent** | 智能体模式，支持 Basic/Deep 两种子模式 | 工具调用、任务规划、子代理协作 |
+| **AgentFlow** | 多智能体工作流编排（开发中） | 复杂工作流、多Agent协作 |
+| **Dify** | 云端AI平台，支持文件上传和多模态 | 文档分析、图片识别 |
 
 ## 🚀 三、快速开始
 
@@ -281,107 +196,9 @@ curl http://localhost:11235/health
 /connector status
 /connector tools
 ```
-## 💬 四、常用命令速查
+## 💬 四、命令与交互
 
-### 全局命令（所有引擎可用）
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/help` | 查看帮助信息 | `/help` |
-| `/info` | 查看系统状态和配置信息 | `/info` |
-| `/exit` 或 `/quit` | 退出程序 | `/exit` |
-
-### 引擎切换
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/switch <engine>` | 切换运行引擎 | `/switch llm` |
-|  | 可选引擎：llm, agent, agentflow, dify | `/switch agent` |
-
-### LLM引擎专属命令
-
-#### 模型管理
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/model <provider> [model]` | 切换LLM提供商和模型 | `/model zhipu glm-4.5-flash` |
-| `/llms` | 查看所有可用的LLM模型列表 | `/llms` |
-| `/reload` | 热重载LLM配置文件 | `/reload` |
-
-#### 流式输出
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/stream <on\|off>` | 开启/关闭流式输出 | `/stream on` |
-
-### Agent引擎专属命令
-
-#### 模型管理
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/model <provider> [model]` | 切换LLM提供商和模型 | `/model zhipu glm-4-plus` |
-| `/llms` | 查看所有可用的LLM模型列表 | `/llms` |
-| `/reload` | 热重载LLM配置文件 | `/reload` |
-
-#### 模式管理
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/mode <basic\|deep>` | 切换Agent模式 | `/mode deep` |
-| `/use <type>` | 切换DeepAgent功能类型（仅Deep模式） | `/use research` |
-| `/deep status` | 查看DeepAgent状态 | `/deep status` |
-| `/deep filesystem <mode>` | 设置文件系统权限模式（仅Deep模式） | `/deep filesystem read-only` |
-
-#### 工具管理
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/mcp status [-v]` | 查看MCP工具状态 | `/mcp status -v` |
-| `/mcp tools [--json]` | 列出MCP工具列表 | `/mcp tools` |
-| `/mcp reload` | 重载MCP配置 | `/mcp reload` |
-| `/connector status [-v]` | 查看Connector工具状态 | `/connector status` |
-| `/connector tools [--json]` | 列出Connector工具列表 | `/connector tools` |
-| `/connector reload` | 重载Connector配置 | `/connector reload` |
-
-#### 会话管理
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/new` | 创建新会话 | `/new` |
-| `/clear` | 清空当前会话记忆 | `/clear` |
-| `/sessions` | 查看历史会话列表 | `/sessions` |
-| `/restore <session_id>` | 恢复指定会话 | `/restore session_20250101_120000` |
-| `/delete_session <session_id>` | 删除指定会话 | `/delete_session session_20250101_120000` |
-| `/cleanup` | 清理孤立的会话文件 | `/cleanup` |
-
-### AgentFlow引擎专属命令（开发中）
-
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/graph <name>` | 选择或切换图 | `/graph workflow` |
-| `/nodes` | 查看当前图的节点 | `/nodes` |
-| `/visualize` | 可视化当前图结构 | `/visualize` |
-| `/model <provider> [model]` | 切换LLM提供商和模型 | `/model zhipu glm-4-plus` |
-
-### Dify引擎专属命令
-
-#### 文件管理
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/upload [文件路径]` | 上传文件（支持多选对话框） | `/upload report.pdf` |
-| `/files` | 查看待发送文件列表 | `/files` |
-| `/files remove <序号>` | 移除指定文件 | `/files remove 2` |
-| `/files clear` | 清空所有待发送文件 | `/files clear` |
-
-#### 会话管理
-| 命令 | 说明 | 示例 |
-|------|------|------|
-| `/reset` | 重置Dify会话（清除记忆和文件） | `/reset` |
-| `/reconnect` | 重新连接Dify服务 | `/reconnect` |
-
-### 使用提示
-- 所有命令都以 `/` 开头
-- 命令不区分大小写
-- 不同引擎下可用命令不同：
-  - **全局命令**: 所有引擎都可用
-  - **LLM专属**: 仅在 `/switch llm` 后可用
-  - **Agent专属**: 仅在 `/switch agent` 后可用
-  - **AgentFlow专属**: 仅在 `/switch agentflow` 后可用（开发中）
-  - **Dify专属**: 仅在 `/switch dify` 后可用
-- 使用 `/help` 查看当前引擎下可用的所有命令
+启动后输入 `/help` 查看所有可用命令。支持 **Tab 自动补全**：输入 `/` 后按 Tab 即可浏览当前引擎可用的命令及参数。
 
 ## 📊 五、支持的LLM模型
 

@@ -36,6 +36,7 @@ crawl4ai==0.7.6
 # 命令行界面
 rich==14.2.0
 colorama==0.4.6
+prompt_toolkit==3.0.52
 
 # 数学计算
 numpy==2.2.6
