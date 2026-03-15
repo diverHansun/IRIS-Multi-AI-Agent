@@ -1,8 +1,9 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "description": "BasicAgents provider configuration with complete API and agent parameters",
   "providers": {
     "zhipu": {
+      "adapter": "zhipu",
       "name": "Zhipu AI",
       "api_key_env": "ZHIPU_API_KEY",
       "base_url": null,
@@ -53,6 +54,7 @@
       }
     },
     "openai": {
+      "adapter": "openai",
       "name": "OpenAI",
       "api_key_env": "OPENAI_API_KEY",
       "base_url": "https://api.openai.com/v1",
@@ -121,6 +123,42 @@
           "max_tokens": 4096,
           "context_window": 4096,
           "max_iterations": 8,
+          "max_execution_time": 300,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        }
+      }
+    },
+    "tongyi": {
+      "adapter": "openai",
+      "name": "Tongyi Qwen",
+      "api_key_env": "TONGYI_API_KEY",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "base_url_env": "TONGYI_BASE_URL",
+      "default_model": "qwen3-max",
+      "models": {
+        "qwen3-max": {
+          "name": "Qwen3 Max",
+          "description": "Full-featured Qwen model",
+          "agent_type": "function_calling",
+          "temperature": 0.6,
+          "max_tokens": 4096,
+          "context_window": 128000,
+          "max_iterations": 10,
+          "max_execution_time": 300,
+          "memory_enabled": true,
+          "supports_tools": true,
+          "streaming": false
+        },
+        "qwen3-coder-plus": {
+          "name": "Qwen3 Coder Plus",
+          "description": "Code-optimized Qwen model",
+          "agent_type": "function_calling",
+          "temperature": 0.6,
+          "max_tokens": 8192,
+          "context_window": 128000,
+          "max_iterations": 10,
           "max_execution_time": 300,
           "memory_enabled": true,
           "supports_tools": true,

@@ -1,8 +1,9 @@
 {
-  "schema_version": "1.0",
-  "description": "LLM provider configuration with pure LLM parameters only",
+  "schema_version": "2.0",
+  "description": "LLM provider configuration with adapter routing",
   "providers": {
-    "ZHIPU": {
+    "zhipu": {
+      "adapter": "zhipu",
       "name": "Zhipu AI",
       "api_key_env": "ZHIPU_API_KEY",
       "base_url": null,
@@ -40,7 +41,8 @@
         }
       }
     },
-    "OPENAI": {
+    "openai": {
+      "adapter": "openai",
       "name": "OpenAI",
       "api_key_env": "OPENAI_API_KEY",
       "base_url": "https://api.openai.com/v1",
@@ -96,7 +98,36 @@
         }
       }
     },
-    "OLLAMA": {
+    "tongyi": {
+      "adapter": "openai",
+      "name": "Tongyi Qwen",
+      "api_key_env": "TONGYI_API_KEY",
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "base_url_env": "TONGYI_BASE_URL",
+      "default_model": "qwen3-max",
+      "models": {
+        "qwen3-max": {
+          "name": "Qwen3 Max",
+          "description": "Full-featured Qwen model",
+          "temperature": 0.6,
+          "max_tokens": 4096,
+          "context_window": 128000,
+          "supports_tools": true,
+          "streaming": true
+        },
+        "qwen3-coder-plus": {
+          "name": "Qwen3 Coder Plus",
+          "description": "Code-optimized Qwen model",
+          "temperature": 0.6,
+          "max_tokens": 8192,
+          "context_window": 128000,
+          "supports_tools": true,
+          "streaming": true
+        }
+      }
+    },
+    "ollama": {
+      "adapter": "ollama",
       "name": "Ollama Local Models",
       "api_key_env": null,
       "base_url": "http://localhost:11434",

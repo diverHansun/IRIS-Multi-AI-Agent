@@ -15,7 +15,6 @@ from .adapters import (
 )
 from .managers import (
     LLMManager,
-    LLMProvider,
     get_llm_info,
 )
 from src.core.providers.utils import (
@@ -39,7 +38,6 @@ __all__ = [
     "OllamaAdapter",
     # Managers
     "LLMManager",
-    "LLMProvider",
     "get_llm_info",
     # Provider utilities
     "OllamaClient",

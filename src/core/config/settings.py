@@ -138,29 +138,29 @@ settings = Settings()
 
 
 def _validate_config() -> None:
-    """验证配置信息 - 检查必需的配置项"""
-    errors = []
+    """Validate configuration -- check at least one LLM provider is configured."""
+    has_any_llm = False
 
-    # 1. 检查必需的LLM配置（至少一个）
-    has_zhipu = settings.has_zhipu()
-    has_openai = settings.has_openai()
-    has_anthropic = settings.has_anthropic()
-    has_ollama = True  # Ollama 通常本地运行，无需密钥
-
-    if not has_zhipu and not has_openai and not has_anthropic:
-        errors.append(
-            "At least one LLM API key must be configured "
-            "(ZHIPU_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY)"
+    try:
+        from src.core.providers import llm_registry
+        for provider_name, config in llm_registry.list_providers().items():
+            api_key_env = config.get("api_key_env")
+            if not api_key_env:
+                has_any_llm = True  # Ollama: no key needed
+                continue
+            key = os.getenv(api_key_env, "")
+            if key and not key.startswith("your_"):
+                has_any_llm = True
+                logger.debug("LLM provider available: %s", provider_name)
+    except Exception:
+        # Fallback to legacy check if registry unavailable during import
+        has_any_llm = (
+            settings.has_zhipu()
+            or settings.has_openai()
+            or settings.has_anthropic()
+            or settings.has_tongyi()
         )
 
-    # 2. 记录可选配置状态（仅在 DEBUG 级别）
-    logger.debug(
-        "LLM Providers: zhipu=%s, openai=%s, anthropic=%s, ollama=%s",
-        has_zhipu,
-        has_openai,
-        has_anthropic,
-        has_ollama,
-    )
     logger.debug(
         "Optional services: tavily=%s, amap=%s, notion=%s",
         settings.has_tavily(),
@@ -168,11 +168,11 @@ def _validate_config() -> None:
         settings.has_notion(),
     )
 
-    # 3. 输出错误信息
-    if errors:
-        for error in errors:
-            logger.warning(error)
-        logger.warning("Please configure your API keys in ~/.iris/.env or project .env file")
+    if not has_any_llm:
+        logger.warning(
+            "No LLM API key configured. "
+            "Please run '/iris setup' or edit ~/.iris/.env"
+        )
 
 
 def reload_settings() -> Settings:

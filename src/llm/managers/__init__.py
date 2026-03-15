@@ -6,9 +6,7 @@ LLM Managers
 
 from .llm_manager import (
     LLMManager,
-    LLMProvider,
     llm_manager,
-    # 便捷函数
     get_available_providers,
     create_llm,
     get_llm_info,
@@ -18,9 +16,7 @@ from .llm_manager import (
 
 __all__ = [
     "LLMManager",
-    "LLMProvider",
     "llm_manager",
-    # 便捷函数
     "get_available_providers",
     "create_llm",
     "get_llm_info",

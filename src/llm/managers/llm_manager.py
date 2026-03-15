@@ -6,8 +6,8 @@ Delegates configuration to ProviderRegistry and parameter handling to adapters.
 """
 
 import logging
-from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+import os
+from typing import Any, Dict, List, Optional
 
 from src.core.config import settings
 from src.core.providers import llm_registry
@@ -24,13 +24,12 @@ from src.llm.instances import (
 
 logger = logging.getLogger(__name__)
 
-
-class LLMProvider(Enum):
-    """Supported LLM providers."""
-
-    ZHIPU = "zhipu"
-    OPENAI = "openai"
-    OLLAMA = "ollama"
+# Adapter type -> (AdapterClass, InstanceClass)
+ADAPTER_REGISTRY = {
+    "zhipu": (ZhipuAdapter, ZhipuAILLM),
+    "openai": (OpenAIAdapter, OpenAILLM),
+    "ollama": (OllamaAdapter, OllamaLLM),
+}
 
 
 class LLMManager:
@@ -39,45 +38,41 @@ class LLMManager:
 
     Responsibilities:
     - Manage provider configuration via ProviderRegistry.
-    - Collect API credentials from settings and user overrides.
+    - Collect API credentials from env vars via registry config.
     - Use adapters to normalise LLM parameters.
     - Instantiate provider specific LLM wrappers.
     """
 
     def __init__(self):
         self.provider_registry = llm_registry
-        self._api_keys: Dict[LLMProvider, str] = {}
-        self._adapter_map = {
-            "ZHIPU": ZhipuAdapter,
-            "OPENAI": OpenAIAdapter,
-            "OLLAMA": OllamaAdapter,
-        }
-        self._instance_map = {
-            "ZHIPU": ZhipuAILLM,
-            "OPENAI": OpenAILLM,
-            "OLLAMA": OllamaLLM,
-        }
+        self._api_keys: Dict[str, str] = {}
         self._load_api_keys()
         logger.info("LLM Manager initialized")
 
     def _load_api_keys(self) -> None:
-        """Load API keys from settings."""
+        """Load API keys dynamically from provider configs."""
         try:
-            if settings.zhipu_api_key:
-                self._api_keys[LLMProvider.ZHIPU] = settings.zhipu_api_key
-            if settings.openai_api_key:
-                self._api_keys[LLMProvider.OPENAI] = settings.openai_api_key
+            self._api_keys = {}
+            for provider_name, config in self.provider_registry.list_providers().items():
+                api_key_env = config.get("api_key_env")
+                if not api_key_env:
+                    continue  # No API key needed (e.g., Ollama)
+                api_key = os.getenv(api_key_env)
+                if api_key and not api_key.startswith("your_"):
+                    self._api_keys[provider_name] = api_key
         except Exception as exc:
-            logger.warning("Failed to load API keys from settings: %s", exc)
+            logger.warning("Failed to load API keys from registry: %s", exc)
 
     def reload_config(self) -> bool:
         """Reload provider configuration."""
         logger.info("Reloading LLM configuration")
-        return self.provider_registry.reload_config()
+        result = self.provider_registry.reload_config()
+        self._load_api_keys()
+        return result
 
     async def create_llm(
         self,
-        provider: Union[str, LLMProvider],
+        provider: str,
         model: Optional[str] = None,
         mode: str = "llm",
         **kwargs,
@@ -86,7 +81,7 @@ class LLMManager:
         Create an LLM instance.
 
         Args:
-            provider: Provider identifier.
+            provider: Provider identifier (e.g., "zhipu", "openai", "tongyi").
             model: Model name, uses provider default when omitted.
             mode: Behavioural mode for adapter, defaults to "llm".
             **kwargs: User supplied overrides.
@@ -94,17 +89,18 @@ class LLMManager:
         Returns:
             LangChain compatible LLM client.
         """
-        provider_key, provider_enum = self._normalise_provider(provider)
-        provider_config = self._get_provider_config(provider_key)
+        provider_name = self._normalise_provider(provider)
+        provider_config = self._get_provider_config(provider_name)
+        adapter_type = self._resolve_adapter_type(provider_name, provider_config)
         model_name = self._resolve_model_name(provider_config, model)
 
         user_params = kwargs.copy()
         explicit_api_key = user_params.pop("api_key", None)
 
-        adapter = self._create_adapter(provider_key, model_name, mode)
+        adapter = self._create_adapter(provider_name, model_name, mode)
 
         # Resolve auto model for Ollama provider
-        if provider_key == "OLLAMA" and model_name == "auto":
+        if adapter_type == "ollama" and model_name == "auto":
             base_url = (
                 user_params.get("base_url")
                 or kwargs.get("base_url")
@@ -117,17 +113,18 @@ class LLMManager:
         llm_params["model"] = model_name  # Ensure resolved model is used
 
         final_params = self._prepare_instance_params(
-            provider_key=provider_key,
-            provider_enum=provider_enum,
+            provider_name=provider_name,
+            adapter_type=adapter_type,
+            provider_config=provider_config,
             adapter=adapter,
             adapter_params=llm_params,
             explicit_api_key=explicit_api_key,
             user_params=user_params,
         )
 
-        instance = self._create_instance(provider_key, final_params)
+        instance = self._create_instance(provider_name, final_params)
         llm = instance.create_llm()
-        logger.info("Created LLM instance: provider=%s model=%s", provider_key, model_name)
+        logger.info("Created LLM instance: provider=%s model=%s", provider_name, model_name)
         return llm
 
     def get_available_providers(self) -> List[Dict[str, Any]]:
@@ -163,26 +160,26 @@ class LLMManager:
             )
         return providers
 
-    def get_provider_models(self, provider: Union[str, LLMProvider]) -> Dict[str, Any]:
+    def get_provider_models(self, provider: str) -> Dict[str, Any]:
         """Return raw model registry for a provider."""
-        provider_key, _ = self._normalise_provider(provider)
-        config = self._get_provider_config(provider_key)
+        provider_name = self._normalise_provider(provider)
+        config = self._get_provider_config(provider_name)
         return config.get("models", {})
 
     def get_llm_info(
         self,
-        provider: Union[str, LLMProvider],
+        provider: str,
         model: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Return enriched model information."""
-        provider_key, _ = self._normalise_provider(provider)
+        provider_name = self._normalise_provider(provider)
         try:
-            info = self.provider_registry.get_model_info(provider_key, model)
+            info = self.provider_registry.get_model_info(provider_name, model)
         except ValueError:
             # For providers with dynamic models (e.g., Ollama) fall back to defaults.
-            resolved_model = model or self._get_provider_config(provider_key).get("default_model")
+            resolved_model = model or self._get_provider_config(provider_name).get("default_model")
             info = {
-                "provider": provider_key.lower(),
+                "provider": provider_name,
                 "model": resolved_model,
                 "name": resolved_model,
                 "description": "",
@@ -192,22 +189,28 @@ class LLMManager:
                 "max_tokens": None,
                 "context_window": None,
                 "mode_defaults": {
-                    "llm": self._get_provider_config(provider_key).get("mode_defaults", {}).get("llm", {})
+                    "llm": self._get_provider_config(provider_name).get("mode_defaults", {}).get("llm", {})
                 },
             }
         info["available"] = self._provider_available(info["provider"])
         return info
 
-    def set_api_key(self, provider: Union[str, LLMProvider], api_key: str) -> None:
-        """Set or override provider API key."""
+    def set_api_key(self, provider: str, api_key: str) -> None:
+        """Set or override provider API key at runtime."""
         if not api_key:
             raise ValueError("API key must not be empty")
-        provider_key, provider_enum = self._normalise_provider(provider)
-        if provider_enum == LLMProvider.OLLAMA:
-            logger.info("OLLAMA does not require an API key, ignoring provided value")
+        provider_name = provider.lower()
+        provider_config = self.provider_registry.get_provider_config(provider_name)
+        if not provider_config:
+            raise ValueError(f"Provider '{provider_name}' not found")
+        if not provider_config.get("api_key_env"):
+            logger.info(
+                "Provider '%s' does not require an API key, ignoring",
+                provider_name,
+            )
             return
-        self._api_keys[provider_enum] = api_key
-        logger.info("API key set for provider %s", provider_key)
+        self._api_keys[provider_name] = api_key
+        logger.info("API key set for provider %s", provider_name)
 
     def get_recommended_models(self) -> List[Dict[str, Any]]:
         """Return recommended models for all available providers."""
@@ -216,7 +219,7 @@ class LLMManager:
             for model_name, model_config in config.get("models", {}).items():
                 if model_config.get("recommended"):
                     try:
-                        info = self.get_llm_info(provider_key.lower(), model_name)
+                        info = self.get_llm_info(provider_key, model_name)
                         if info.get("available"):
                             recommendations.append(
                                 {
@@ -233,21 +236,27 @@ class LLMManager:
 
     # Internal helpers
 
-    def _normalise_provider(
-        self,
-        provider: Union[str, LLMProvider],
-    ) -> Tuple[str, LLMProvider]:
-        if isinstance(provider, LLMProvider):
-            return provider.value.upper(), provider
+    def _normalise_provider(self, provider: str) -> str:
+        """Normalise provider name to lowercase and validate existence."""
         provider_name = str(provider).lower()
-        provider_enum = LLMProvider(provider_name)
-        return provider_enum.value.upper(), provider_enum
+        if not self.provider_registry.get_provider_config(provider_name):
+            raise ValueError(f"Provider '{provider_name}' not found in registry")
+        return provider_name
 
-    def _get_provider_config(self, provider_key: str) -> Dict[str, Any]:
-        config = self.provider_registry.get_provider_config(provider_key)
+    def _get_provider_config(self, provider_name: str) -> Dict[str, Any]:
+        config = self.provider_registry.get_provider_config(provider_name)
         if not config:
-            raise ValueError(f"Provider {provider_key} not found")
+            raise ValueError(f"Provider '{provider_name}' not found")
         return config
+
+    def _resolve_adapter_type(self, provider_name: str, config: Dict[str, Any]) -> str:
+        """Get adapter type from config, with fallback for legacy configs."""
+        adapter = config.get("adapter")
+        if adapter:
+            return adapter
+        # Fallback for old configs without adapter field
+        known = {"zhipu": "zhipu", "ollama": "ollama"}
+        return known.get(provider_name, "openai")
 
     def _resolve_model_name(self, provider_config: Dict[str, Any], model: Optional[str]) -> str:
         if model:
@@ -257,22 +266,44 @@ class LLMManager:
             raise ValueError("Provider configuration does not define a default model")
         return default_model
 
-    def _create_adapter(self, provider_key: str, model: str, mode: str):
-        adapter_cls = self._adapter_map.get(provider_key)
-        if not adapter_cls:
-            raise ValueError(f"No adapter registered for provider {provider_key}")
-        return adapter_cls(model=model, provider_registry=self.provider_registry, mode=mode)
+    def _create_adapter(self, provider_name: str, model: str, mode: str):
+        """Create adapter based on provider's configured adapter type."""
+        provider_config = self._get_provider_config(provider_name)
+        adapter_type = self._resolve_adapter_type(provider_name, provider_config)
 
-    def _create_instance(self, provider_key: str, params: Dict[str, Any]):
-        instance_cls = self._instance_map.get(provider_key)
-        if not instance_cls:
-            raise ValueError(f"No instance registered for provider {provider_key}")
+        entry = ADAPTER_REGISTRY.get(adapter_type)
+        if not entry:
+            raise ValueError(
+                f"Unknown adapter type '{adapter_type}' for provider '{provider_name}'"
+            )
+
+        adapter_cls = entry[0]
+        return adapter_cls(
+            model=model,
+            provider_registry=self.provider_registry,
+            mode=mode,
+            provider_name=provider_name,
+        )
+
+    def _create_instance(self, provider_name: str, params: Dict[str, Any]):
+        """Create LLM instance based on provider's configured adapter type."""
+        provider_config = self._get_provider_config(provider_name)
+        adapter_type = self._resolve_adapter_type(provider_name, provider_config)
+
+        entry = ADAPTER_REGISTRY.get(adapter_type)
+        if not entry:
+            raise ValueError(
+                f"Unknown adapter type '{adapter_type}' for provider '{provider_name}'"
+            )
+
+        instance_cls = entry[1]
         return instance_cls(**params)
 
     def _prepare_instance_params(
         self,
-        provider_key: str,
-        provider_enum: LLMProvider,
+        provider_name: str,
+        adapter_type: str,
+        provider_config: Dict[str, Any],
         adapter,
         adapter_params: Dict[str, Any],
         explicit_api_key: Optional[str],
@@ -281,37 +312,56 @@ class LLMManager:
         params = adapter_params.copy()
         params.setdefault("model", adapter.model)
 
-        if provider_enum == LLMProvider.OLLAMA:
+        if adapter_type == "ollama":
             base_url = params.get("base_url") or user_params.get("base_url") or settings.ollama_base_url
             params["base_url"] = base_url
             params.setdefault("timeout", user_params.get("timeout") or settings.ollama_timeout)
             params.setdefault("keep_alive", user_params.get("keep_alive") or settings.ollama_keep_alive)
         else:
-            api_key = self._resolve_api_key(provider_enum, explicit_api_key)
+            api_key = self._resolve_api_key(provider_name, explicit_api_key)
             params["api_key"] = api_key
-            if provider_enum == LLMProvider.OPENAI:
-                base_url = params.get("base_url") or user_params.get("base_url") or settings.openai_base_url
-                if base_url:
-                    params["base_url"] = base_url
+            # Delegate base_url resolution to registry (handles base_url_env)
+            base_url = (
+                params.get("base_url")
+                or user_params.get("base_url")
+                or self.provider_registry._resolve_base_url(provider_config)
+            )
+            if base_url:
+                params["base_url"] = base_url
 
         return params
 
-    def _resolve_api_key(self, provider_enum: LLMProvider, explicit_api_key: Optional[str]) -> str:
+    def _resolve_api_key(self, provider_name: str, explicit_api_key: Optional[str]) -> str:
+        """Resolve API key with priority: explicit > cached > env (fallback)."""
         if explicit_api_key:
             return explicit_api_key
-        cached = self._api_keys.get(provider_enum)
+
+        cached = self._api_keys.get(provider_name)
         if cached:
             return cached
-        provider_key = provider_enum.value.upper()
-        provider_config = self._get_provider_config(provider_key)
+
+        # Fallback to live env check (supports runtime key addition)
+        provider_config = self._get_provider_config(provider_name)
         env_name = provider_config.get("api_key_env", "API_KEY")
-        raise ValueError(f"API key for provider {provider_enum.value} not configured. Please set environment {env_name}")
+        api_key = os.getenv(env_name)
+        if api_key and not api_key.startswith("your_"):
+            self._api_keys[provider_name] = api_key
+            return api_key
+
+        raise ValueError(
+            f"API key for provider '{provider_name}' not configured. "
+            f"Please set environment variable {env_name}"
+        )
 
     def _provider_available(self, provider_name: str) -> bool:
-        if provider_name == LLMProvider.OLLAMA.value:
+        """Check if provider has available API key or doesn't need one."""
+        provider_config = self.provider_registry.get_provider_config(provider_name)
+        if not provider_config:
+            return False
+        # Providers without api_key_env (e.g., Ollama) are always available
+        if not provider_config.get("api_key_env"):
             return True
-        provider_enum = LLMProvider(provider_name)
-        return provider_enum in self._api_keys
+        return provider_name in self._api_keys
 
 
 # Global manager instance

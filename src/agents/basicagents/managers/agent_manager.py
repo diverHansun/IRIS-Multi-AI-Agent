@@ -24,6 +24,17 @@ from src.core.providers import basicagents_registry
 logger = logging.getLogger(__name__)
 
 
+def _get_agent_adapter_class(adapter_type: str):
+    """Lazy-load agent adapter class by adapter type."""
+    if adapter_type == "zhipu":
+        from src.agents.basicagents.adapters.zhipu_agent_adapter import ZhipuAgentAdapter
+        return ZhipuAgentAdapter
+    elif adapter_type == "openai":
+        from src.agents.basicagents.adapters.openai_agent_adapter import OpenAIAgentAdapter
+        return OpenAIAgentAdapter
+    return None
+
+
 class AgentManager:
     """
     Agent manager for BasicAgents module.
@@ -165,7 +176,7 @@ class AgentManager:
         shared_checkpointer: Optional[Any] = None,
     ):
         """
-        Create appropriate Adapter for provider.
+        Create appropriate Adapter for provider based on config adapter type.
 
         Args:
             provider: Provider name
@@ -178,19 +189,23 @@ class AgentManager:
         Raises:
             ProviderNotFoundError: If no adapter found for provider
         """
-        from src.agents.basicagents.adapters.zhipu_agent_adapter import ZhipuAgentAdapter
-        from src.agents.basicagents.adapters.openai_agent_adapter import OpenAIAgentAdapter
+        provider_config = self.provider_registry.get_provider_config(provider)
+        if not provider_config:
+            raise ProviderNotFoundError(
+                provider, list(self.provider_registry.list_providers().keys())
+            )
 
-        # Adapter mapping
-        adapter_map = {
-            "zhipu": ZhipuAgentAdapter,
-            "openai": OpenAIAgentAdapter,
-        }
+        adapter_type = provider_config.get("adapter")
+        if not adapter_type:
+            # Fallback for old configs without adapter field
+            known = {"zhipu": "zhipu", "ollama": "ollama"}
+            adapter_type = known.get(provider, "openai")
 
-        adapter_class = adapter_map.get(provider)
+        adapter_class = _get_agent_adapter_class(adapter_type)
         if not adapter_class:
-            available_providers = list(adapter_map.keys())
-            raise ProviderNotFoundError(provider, available_providers)
+            raise ProviderNotFoundError(
+                provider, ["zhipu", "openai"]
+            )
 
         logger.debug(f"Creating {adapter_class.__name__} for {provider}")
         return adapter_class(config=config, shared_checkpointer=shared_checkpointer)

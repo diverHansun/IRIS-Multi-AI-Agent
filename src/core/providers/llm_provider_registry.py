@@ -115,7 +115,9 @@ class LLMProviderRegistry:
         if not config_data and self._custom_config_path:
             config_data = _load_json_file(self._custom_config_path) or {}
 
-        providers = config_data.get("providers", {})
+        providers_raw = config_data.get("providers", {})
+        # Normalise all keys to lowercase for consistency across registries
+        providers = {k.lower(): v for k, v in providers_raw.items()}
         self._providers = _deep_merge(self._providers, providers)
 
         logger.info("Loaded %d LLM provider configurations", len(self._providers))
@@ -145,8 +147,7 @@ class LLMProviderRegistry:
         Returns:
             Provider configuration dict or None if not found
         """
-        provider_key = provider.upper()
-        return self._providers.get(provider_key)
+        return self._providers.get(provider.lower())
 
     def list_providers(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -197,7 +198,7 @@ class LLMProviderRegistry:
         Raises:
             ValueError: If provider or model not found
         """
-        provider_key = provider.upper()
+        provider_key = provider.lower()
         provider_config = self.get_provider_config(provider_key)
 
         if not provider_config:

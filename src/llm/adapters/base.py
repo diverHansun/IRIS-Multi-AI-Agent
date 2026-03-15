@@ -35,7 +35,7 @@ class LLMAdapter(ABC):
         mode: str = "llm",
     ):
         self.provider_registry = provider_registry or default_registry
-        self.provider = provider.upper()
+        self.provider = provider.lower()
         self.mode = mode
 
         provider_config = self.provider_registry.get_provider_config(self.provider)

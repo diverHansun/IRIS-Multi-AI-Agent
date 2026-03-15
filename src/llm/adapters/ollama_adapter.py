@@ -24,9 +24,10 @@ class OllamaAdapter(LLMAdapter):
         model: Optional[str],
         provider_registry: Optional[LLMProviderRegistry] = None,
         mode: str = "llm",
+        provider_name: str = "ollama",
     ):
         super().__init__(
-            provider="OLLAMA",
+            provider=provider_name,
             model=model,
             provider_registry=provider_registry,
             mode=mode,

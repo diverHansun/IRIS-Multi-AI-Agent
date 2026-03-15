@@ -22,9 +22,10 @@ class ZhipuAdapter(LLMAdapter):
         model: Optional[str],
         provider_registry: Optional[LLMProviderRegistry] = None,
         mode: str = "llm",
+        provider_name: str = "zhipu",
     ):
         super().__init__(
-            provider="ZHIPU",
+            provider=provider_name,
             model=model,
             provider_registry=provider_registry,
             mode=mode,
