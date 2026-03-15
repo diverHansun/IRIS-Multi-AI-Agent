@@ -6,6 +6,7 @@ the same pattern as BasicAgentsProviderRegistry for consistency.
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -170,15 +171,60 @@ class SubAgentsProviderRegistry:
         """
         Extract LLM configuration from subagent config.
 
+        Supports both old (llm_config) and new (providers) format.
+
         Returns:
             Dictionary with provider, model, api_config, and model_params
         """
+        # New multi-provider format: pick first provider with a valid API key
+        providers = config.get("providers", {})
+        if providers:
+            return self._resolve_from_providers(providers)
+
+        # Old single-provider format
         llm_cfg = config.get("llm_config", {})
         return {
             "provider": llm_cfg.get("provider", ""),
             "model": llm_cfg.get("model", ""),
             "api_config": llm_cfg.get("api_config", {}),
             "model_params": llm_cfg.get("model_params", {}),
+        }
+
+    @staticmethod
+    def _resolve_from_providers(providers: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Resolve provider from multi-provider dict.
+
+        Picks the first provider whose API key is present in the environment.
+        Falls back to the first provider if none have a configured key.
+        """
+        for provider_name, pconf in providers.items():
+            api_key_env = pconf.get("api_config", {}).get("api_key_env", "")
+            if not api_key_env:
+                # No key needed (e.g., ollama)
+                return {
+                    "provider": provider_name,
+                    "model": pconf.get("model", ""),
+                    "api_config": pconf.get("api_config", {}),
+                    "model_params": pconf.get("model_params", {}),
+                }
+            api_key = os.getenv(api_key_env, "")
+            if api_key and not api_key.startswith("your_"):
+                return {
+                    "provider": provider_name,
+                    "model": pconf.get("model", ""),
+                    "api_config": pconf.get("api_config", {}),
+                    "model_params": pconf.get("model_params", {}),
+                }
+
+        # Fallback: use first provider regardless of key status
+        first_name = next(iter(providers))
+        pconf = providers[first_name]
+        return {
+            "provider": first_name,
+            "model": pconf.get("model", ""),
+            "api_config": pconf.get("api_config", {}),
+            "model_params": pconf.get("model_params", {}),
         }
 
     def _extract_agent_config(self, config: Dict[str, Any]) -> Dict[str, Any]:

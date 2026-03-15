@@ -52,8 +52,12 @@ class DeepAgentManager:
             raise ValueError(f"Provider '{provider}' has no models configured")
         if model is None:
             model = next(iter(models_cfg.keys()))
-        if model not in models_cfg:
-            raise ValueError(f"Model '{model}' not found for provider '{provider}'")
+        elif model not in models_cfg:
+            logger.warning(
+                "Model '%s' is not registered for provider '%s'; runtime parameters will inherit provider defaults.",
+                model,
+                provider,
+            )
 
         # Resolve factory and adapter
         factory = self.factory_registry.get_factory(function_type)

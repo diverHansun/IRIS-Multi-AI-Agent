@@ -88,11 +88,31 @@ class AgentConfig:
                 config_key="default_model"
             )
 
-        # Validate model exists
+        # Validate model exists; for explicit custom model names, inherit defaults
+        # from provider default model so users can try newly released models
+        # without editing providers.json first.
         model_config = registry.get_model_config(provider, resolved_model)
         if not model_config:
             available_models = list(provider_config.get("models", {}).keys())
-            raise ModelNotFoundError(provider, resolved_model, available_models)
+            fallback_model = provider_config.get("default_model")
+            if not fallback_model and available_models:
+                fallback_model = available_models[0]
+            fallback_config = (
+                registry.get_model_config(provider, fallback_model)
+                if fallback_model
+                else None
+            )
+            if model and fallback_config:
+                model_config = dict(fallback_config)
+                logger.warning(
+                    "Model '%s' is not registered for provider '%s'; "
+                    "using '%s' as parameter template.",
+                    resolved_model,
+                    provider,
+                    fallback_model,
+                )
+            else:
+                raise ModelNotFoundError(provider, resolved_model, available_models)
 
         # Merge provider and model configurations
         merged_config = cls._merge_configs(provider_config, model_config, resolved_model)

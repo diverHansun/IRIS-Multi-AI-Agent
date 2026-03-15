@@ -1,13 +1,14 @@
 {
-  "anthropic": {
-    "description": "Anthropic Claude models configured for deep agents",
-    "default_model": "claude-4.5-sonnet",
+  "openai": {
+    "description": "OpenAI-compatible models for deep agents (supports custom base_url)",
+    "default_model": "gpt-4o",
     "api_config": {
-      "base_url": "https://api.anthropic.com/v1",
-      "api_key_env": "ANTHROPIC_API_KEY"
+      "base_url": "https://api.openai.com/v1",
+      "base_url_env": "OPENAI_BASE_URL",
+      "api_key_env": "OPENAI_API_KEY"
     },
     "models": {
-      "claude-4.5-sonnet": {
+      "gpt-4o": {
         "llm_params": {
           "temperature": 0.6,
           "max_tokens": 4096,
@@ -56,10 +57,10 @@
           }
         },
         "metadata": {
-          "context_window": 200000,
+          "context_window": 128000,
           "supports_tools": true,
           "max_input_tokens": 100000,
-          "max_output_tokens": 50000
+          "max_output_tokens": 16384
         }
       }
     }

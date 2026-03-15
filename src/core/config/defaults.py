@@ -30,10 +30,15 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "tool_call_timeout_ms": 60000,
     },
     "deep_agent": {
-        "default_provider": "anthropic",
-        "default_model": "claude-4.5-sonnet",
+        "default_provider": "zhipu",
+        "default_model": "glm-4.6",
         "max_execution_time": 900,
         "recursion_limit": 300,
+    },
+    "setup": {
+        "completed": False,
+        "completed_at": "",
+        "version": "",
     },
     "ollama": {
         "base_url": "http://localhost:11434",
@@ -119,8 +124,8 @@ tool_call_timeout_ms = 60000
 # =============================================================================
 
 [deep_agent]
-default_provider = "anthropic"
-default_model = "claude-4.5-sonnet"
+default_provider = "zhipu"
+default_model = "glm-4.6"
 max_execution_time = 900
 recursion_limit = 300
 
@@ -134,33 +139,60 @@ basic_agent_providers = "agents/basic/providers.json"
 deep_agent_subagents = "agents/deep/subagents.json"
 deep_agent_mainagents = "agents/deep/mainagents.json"
 mcp_config = "tools/mcp/mcp.toml"
+
+# =============================================================================
+# Setup Wizard State (managed automatically, do not edit manually)
+# =============================================================================
+
+[setup]
+completed = false
+completed_at = ""
+version = ""
 '''
 
 # .env 模板
 DEFAULT_ENV_TEMPLATE = '''# IRIS Global Environment Variables
-# This file is loaded automatically when running iris from any directory
-# Copy this file to .env and fill in your API keys
+# This file is loaded automatically when running iris from any directory.
+# Copy this file to .env and fill in your API keys.
 
 # =============================================================================
-# LLM Providers
+# LLM Providers (at least one is required)
 # =============================================================================
 ZHIPU_API_KEY=your_zhipu_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
 TONGYI_API_KEY=your_tongyi_api_key_here
 
-# OpenAI-compatible API (optional, for custom endpoints)
+# OpenAI-compatible API (optional, for custom endpoints / proxy)
 # OPENAI_BASE_URL=https://api.openai.com/v1
 
 # =============================================================================
-# Tool Services
+# Default LLM Settings
+# =============================================================================
+DEFAULT_LLM_PROVIDER=zhipu
+DEFAULT_LLM_MODEL=glm-4.5-flash
+
+# =============================================================================
+# Tool Services (optional, skip if not needed)
 # =============================================================================
 TAVILY_API_KEY=your_tavily_api_key_here
 AMAP_API_KEY=your_amap_api_key_here
-NOTION_TOKEN=your_notion_token_here
 
 # =============================================================================
-# Ollama (local models)
+# MCP Services (optional, skip if not needed)
+# =============================================================================
+NOTION_TOKEN=your_notion_token_here
+CONTEXT7_API_KEY=your_context7_api_key_here
+AMAP_MAPS_API_KEY=your_amap_maps_api_key_here
+FIRECRAWL_API_KEY=your_firecrawl_api_key_here
+
+# =============================================================================
+# Dify Engine (optional, skip if not needed)
+# =============================================================================
+DIFY_API_KEY=your_dify_api_key_here
+DIFY_BASE_URL=https://api.dify.ai/v1
+
+# =============================================================================
+# Ollama (local models, optional)
 # =============================================================================
 # OLLAMA_BASE_URL=http://localhost:11434
 '''

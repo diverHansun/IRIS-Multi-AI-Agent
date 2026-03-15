@@ -56,6 +56,7 @@ def register_default_commands() -> None:
     from src.application.commands.shared.skills_commands import SkillsCommand
     from src.application.commands.shared.system_commands import ExitCommand, HelpCommand, InfoCommand
     from src.application.commands.shared.tools_commands import ToolsCommand
+    from src.application.commands.shared.setup_commands import SetupCommand, DoctorCommand
 
     commands: list[BaseCommand] = [
         SwitchEngineCommand(),
@@ -88,6 +89,8 @@ def register_default_commands() -> None:
         DifyFilesCommand(),
         DifyResetCommand(),
         DifyReconnectCommand(),
+        SetupCommand(),
+        DoctorCommand(),
     ]
 
     for command in commands:

@@ -100,7 +100,7 @@ def print_welcome(console: Console) -> None:
 
     summary = dedent(
         """
-        Multi-Engine AI Assistant
+        IRIS:Multi-Engine AI Assistant
 
         Highlights:
         - Unified CLI for LLM, Agent, AgentFlow, and Dify engines

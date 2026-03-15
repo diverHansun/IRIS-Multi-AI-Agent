@@ -285,7 +285,19 @@ class DeepAgentsProviderRegistry:
         models_cfg = provider_cfg.get("models", {})
         model_cfg = models_cfg.get(model)
         if not model_cfg:
-            raise ValueError(f"Model {model} not found for provider {provider}")
+            fallback_model = provider_cfg.get("default_model")
+            if not fallback_model and models_cfg:
+                fallback_model = next(iter(models_cfg.keys()))
+            fallback_cfg = models_cfg.get(fallback_model) if fallback_model else None
+            if not fallback_cfg:
+                raise ValueError(f"Model {model} not found for provider {provider}")
+            logger.warning(
+                "Model '%s' is not registered for provider '%s'; using '%s' as parameter template.",
+                model,
+                provider,
+                fallback_model,
+            )
+            model_cfg = dict(fallback_cfg)
 
         return model_cfg
 

@@ -46,7 +46,7 @@ async def _instantiate_agent(
         model_map = providers[resolved_provider].get("models", {})
         if not model_map:
             raise RuntimeError(f"No models configured for provider {resolved_provider}.")
-        if not model or model not in model_map:
+        if not model:
             resolved_model = next(iter(model_map.keys()))
         else:
             resolved_model = model

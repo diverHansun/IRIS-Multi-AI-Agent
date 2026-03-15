@@ -61,16 +61,11 @@ async def run() -> None:
     Entrypoint for the CLI main loop.
 
     Initialization order:
-    1. Ensure global config (~/.iris/) is initialized
-    2. Create project context
-    3. Set project context for config loader
-    4. Initialize memory system
-    5. Start CLI loop
+    1. Create app state
+    2. Initialize memory system and project context
+    3. Initialize active service
+    4. Start CLI loop
     """
-    # 1. Ensure global configuration is initialized
-    # This will create ~/.iris/ and copy default configs on first run
-    ensure_initialized(quiet=True)
-
     ctx = AppState()
     if MCP_AVAILABLE:
         ctx.mcp_manager = GlobalMCPManager
@@ -384,4 +379,12 @@ async def _cleanup_engines(ctx: AppState) -> None:
 
 
 def main() -> None:
+    # Startup preflight must run before asyncio event loop starts.
+    # Setup wizard uses prompt_toolkit Application.run(), which internally
+    # calls asyncio.run() and cannot be nested under an active loop.
+    ensure_initialized(quiet=True)
+    from src.core.config.setup.wizard import SetupWizard
+    wizard = SetupWizard()
+    if not wizard.check_and_run():
+        return
     asyncio.run(run())
