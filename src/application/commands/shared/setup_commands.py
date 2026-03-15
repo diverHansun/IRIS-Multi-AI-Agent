@@ -1,8 +1,4 @@
-"""
-Setup and Doctor commands.
-
-Thin shell over core-layer SetupWizard and ConfigValidator.
-"""
+"""CLI commands for configuration wizard and health check."""
 
 from __future__ import annotations
 
@@ -11,8 +7,71 @@ import asyncio
 from src.application.commands.base import BaseCommand, CommandResult
 
 
+async def _run_setup(ctx, args: str) -> CommandResult:
+    """Delegate to SetupWizard based on parsed flags."""
+    from src.core.config.setup.wizard import SetupWizard
+
+    parts = args.strip().split()
+    if not parts:
+        wizard = SetupWizard(console=ctx.console)
+        success = await asyncio.to_thread(wizard.run_all)
+        return (
+            CommandResult.success("Setup completed.")
+            if success
+            else CommandResult.error("Setup failed or was interrupted.")
+        )
+
+    flag = parts[0]
+    sub_target = parts[1] if len(parts) > 1 else None
+
+    target_map = {
+        "--llm":   ("llm",   None),
+        "--agent": ("agent", sub_target),
+        "--tools": ("tools", sub_target),
+        "--dify":  ("dify",  None),
+    }
+    if flag not in target_map:
+        return CommandResult.error(
+            f"Unknown flag '{flag}'. Valid: --llm, --agent [basic|deep], --tools [sdk|mcp], --dify"
+        )
+    if flag == "--agent" and sub_target not in (None, "basic", "deep"):
+        return CommandResult.error(
+            f"Invalid --agent target '{sub_target}'. Valid: basic, deep"
+        )
+    if flag == "--tools" and sub_target not in (None, "sdk", "mcp"):
+        return CommandResult.error(
+            f"Invalid --tools target '{sub_target}'. Valid: sdk, mcp"
+        )
+
+    target, sub = target_map[flag]
+    wizard = SetupWizard(console=ctx.console)
+    success = await asyncio.to_thread(wizard.run_specific, target, sub)
+    label = f"{target}" + (f" ({sub})" if sub else "")
+    return (
+        CommandResult.success(f"Setup [{label}] completed.")
+        if success
+        else CommandResult.error(f"Setup [{label}] failed or was interrupted.")
+    )
+
+
+async def _run_doctor(ctx) -> CommandResult:
+    """Run a full configuration health check and print the report."""
+    from src.core.config.setup.validator import ConfigValidator
+
+    validator = ConfigValidator(console=ctx.console)
+    results = validator.check_all()
+    validator.print_report(results)
+
+    failed = [r for r in results if r.status == "fail"]
+    if failed:
+        return CommandResult.error(
+            f"{len(failed)} issue(s) found. Run /setup to fix."
+        )
+    return CommandResult.success("All configuration checks passed.")
+
+
 class SetupCommand(BaseCommand):
-    """Run configuration wizard (LLM, agents, tools, dify)."""
+    """Interactive wizard for configuring LLM providers, agents, tools, and Dify."""
 
     name = "setup"
     help_text = "Run configuration wizard (LLM, agents, tools, dify)"
@@ -20,91 +79,16 @@ class SetupCommand(BaseCommand):
     engine_scope = ("all",)
 
     async def execute(self, ctx, args: str) -> CommandResult:
-        """Parse args and delegate to SetupWizard."""
-        from src.core.config.setup.wizard import SetupWizard
-
-        parts = args.strip().split()
-
-        if not parts:
-            wizard = SetupWizard(console=ctx.console)
-            success = await asyncio.to_thread(wizard.run_all)
-            return (
-                CommandResult.success("Setup completed.")
-                if success
-                else CommandResult.error("Setup failed.")
-            )
-
-        flag = parts[0]
-        sub_target = parts[1] if len(parts) > 1 else None
-
-        target_map = {
-            "--llm": ("llm", None),
-            "--agent": ("agent", sub_target),
-            "--tools": ("tools", sub_target),
-            "--dify": ("dify", None),
-        }
-
-        if flag not in target_map:
-            return CommandResult.error(
-                f"Unknown setup target: {flag}. "
-                f"Valid options: --llm, --agent, --tools, --dify"
-            )
-
-        if flag == "--agent" and sub_target not in (None, "basic", "deep"):
-            return CommandResult.error(
-                f"Unknown setup sub-target for --agent: {sub_target}. "
-                f"Valid options: basic, deep"
-            )
-        if flag == "--tools" and sub_target not in (None, "sdk", "mcp"):
-            return CommandResult.error(
-                f"Unknown setup sub-target for --tools: {sub_target}. "
-                f"Valid options: sdk, mcp"
-            )
-
-        target, sub = target_map[flag]
-        wizard = SetupWizard(console=ctx.console)
-        success = await asyncio.to_thread(wizard.run_specific, target, sub)
-        return (
-            CommandResult.success(f"Setup ({target}) completed.")
-            if success
-            else CommandResult.error(f"Setup ({target}) failed.")
-        )
+        return await _run_setup(ctx, args)
 
 
 class DoctorCommand(BaseCommand):
-    """Check configuration health status."""
+    """Check that all required configuration values are present and valid."""
 
     name = "doctor"
-    help_text = "Check configuration health status"
+    help_text = "Check configuration health (LLM keys, agents, tools, dify)"
     aliases = ("check",)
     engine_scope = ("all",)
 
     async def execute(self, ctx, args: str) -> CommandResult:
-        """Run configuration health check."""
-        from src.core.config.setup.validator import ConfigValidator
-
-        validator = ConfigValidator(console=ctx.console)
-        parts = args.strip().split()
-
-        valid_categories = {"llm", "agent", "tools", "dify"}
-
-        if not parts:
-            results = validator.check_all()
-        else:
-            category = parts[0].lstrip("-")
-            if category not in valid_categories:
-                return CommandResult.error(
-                    f"Unknown category '{category}'. "
-                    f"Valid options: {', '.join(sorted(valid_categories))}"
-                )
-            results = validator.check_category(category)
-
-        validator.print_report(results)
-
-        failed = [r for r in results if r.status == "fail"]
-        if failed:
-            return CommandResult.error(
-                f"{len(failed)} configuration issue(s) found. "
-                "Run /iris setup to fix."
-            )
-        return CommandResult.success("All configuration checks passed.")
+        return await _run_doctor(ctx)

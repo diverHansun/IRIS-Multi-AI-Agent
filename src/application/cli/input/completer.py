@@ -43,10 +43,16 @@ _ARG_VALUES: dict[str, list[str]] = {
     "files":           ["clear", "remove"],
     "tools":           ["--list"],
     "sessions":        ["all"],
+    "setup":           [
+        "--llm",
+        "--agent", "--agent basic", "--agent deep",
+        "--tools", "--tools sdk", "--tools mcp",
+        "--dify",
+    ],
 }
 
 # Commands available in every engine.
-_GLOBAL: frozenset[str] = frozenset({"switch", "help", "info", "exit", "quit"})
+_GLOBAL: frozenset[str] = frozenset({"switch", "help", "info", "exit", "quit", "setup", "doctor"})
 
 # Commands shared across llm, agent, and agentflow engines.
 _SESSION_SHARED: frozenset[str] = frozenset(

@@ -44,6 +44,7 @@ _PARAM_HINTS: dict[str, list[str]] = {
     "files":          ["clear | remove <index>"],
     "upload":         ["<file_path>"],
     "sessions":       ["[all]"],
+    "setup":          ["--llm | --agent [basic|deep] | --tools [sdk|mcp] | --dify"],
 }
 
 

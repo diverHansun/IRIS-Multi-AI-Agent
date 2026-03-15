@@ -72,6 +72,15 @@ SKILL_COMMANDS = [
     ("/skills reload", "Reload skills from disk"),
 ]
 
+CONFIGURATION_COMMANDS = [
+    ("/setup", "Run full configuration wizard (LLM, agents, tools, dify)"),
+    ("/setup --llm", "Configure LLM providers and API keys"),
+    ("/setup --agent [basic|deep]", "Configure agent settings"),
+    ("/setup --tools [sdk|mcp]", "Configure tool integrations"),
+    ("/setup --dify", "Configure Dify engine"),
+    ("/doctor", "Check configuration health (all categories)"),
+]
+
 DIFY_FILE_COMMANDS = [
     ("/upload <paths...>", "Upload files (dialog opens when no path is provided)"),
     ("/files", "List files queued for the next conversation"),
@@ -117,6 +126,7 @@ def print_welcome(console: Console) -> None:
         _format_command_section("Deep Agent Commands", DEEP_AGENT_COMMANDS),
         _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
         _format_command_section("Skills", SKILL_COMMANDS),
+        _format_command_section("Configuration", CONFIGURATION_COMMANDS),
     ]
 
     body = summary + "\n\n" + "\n\n".join(sections)
@@ -172,6 +182,7 @@ def print_help(console: Console, dify_mode: bool = False) -> None:
         _format_command_section("Deep Agent Commands", DEEP_AGENT_COMMANDS),
         _format_command_section("Agent Tools", AGENT_TOOL_COMMANDS),
         _format_command_section("Skills", SKILL_COMMANDS),
+        _format_command_section("Configuration", CONFIGURATION_COMMANDS),
     ]
 
     examples = dedent(

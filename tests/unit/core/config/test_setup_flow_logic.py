@@ -90,9 +90,20 @@ def test_setup_command_rejects_invalid_subtargets():
 
     invalid_agent = asyncio.run(command.execute(ctx, "--agent invalid"))
     assert invalid_agent.type == "error"
-    assert "Unknown setup sub-target for --agent" in invalid_agent.message
+    assert "--agent" in invalid_agent.message
 
     invalid_tools = asyncio.run(command.execute(ctx, "--tools invalid"))
     assert invalid_tools.type == "error"
-    assert "Unknown setup sub-target for --tools" in invalid_tools.message
+    assert "--tools" in invalid_tools.message
+
+
+def test_setup_command_rejects_unknown_flag():
+    command = SetupCommand()
+    ctx = MagicMock()
+    ctx.current_engine = "agent"
+    ctx.console = MagicMock()
+
+    result = asyncio.run(command.execute(ctx, "--unknown"))
+    assert result.type == "error"
+    assert "Unknown flag" in result.message
 

@@ -403,8 +403,11 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
             if timed_out:
                 break
 
-            # Process HITL interrupts after streaming completes
+            # Process HITL interrupts after streaming completes.
+            # Stop the spinner first so its update thread does not overlap
+            # the approval panel or the user input prompt.
             if captured_interrupts:
+                _stop_spinner()
                 try:
                     resume_payloads = await handle_hitl_interrupt(
                         ctx,
@@ -421,13 +424,12 @@ async def handle_deep_agent_query(ctx, query: str) -> str:
                         resume_data = resume_payloads
 
                     pending_input = Command(resume=resume_data)
-                    # Continue while loop to resume
+                    # Restart spinner for the next streaming round.
+                    _start_spinner()
                 except HITLDecisionError as exc:
-                    _stop_spinner()
                     renderer.emit_error(f"HITL approval failed: {escape(str(exc))}")
                     return ""
                 except Exception as exc:
-                    _stop_spinner()
                     renderer.emit_error(
                         f"Unexpected error during HITL processing: {escape(str(exc))}"
                     )
