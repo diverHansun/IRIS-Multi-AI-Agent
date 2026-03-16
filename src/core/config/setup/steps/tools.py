@@ -2,7 +2,7 @@
 Tools Configuration Step.
 
 Covers SDK tools (Tavily, DuckDuckGo, Zhipu Search/Crawl, AMap)
-and MCP tools (Notion, Context7, AMap Maps, Firecrawl, Chrome DevTools).
+and MCP tools (Notion, Context7, AMap Maps, Firecrawl, Playwright).
 """
 
 from __future__ import annotations
@@ -39,7 +39,6 @@ _MCP_TOOLS = [
     {"name": "Context7", "key_env": "CONTEXT7_API_KEY", "description": "Context7 MCP service"},
     {"name": "AMap Maps", "key_env": "AMAP_MAPS_API_KEY", "description": "AMap maps MCP"},
     {"name": "Firecrawl", "key_env": "FIRECRAWL_API_KEY", "description": "Web crawling via Firecrawl"},
-    {"name": "Chrome DevTools", "key_env": None, "description": "Browser automation"},
 ]
 
 

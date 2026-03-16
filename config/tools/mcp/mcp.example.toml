@@ -47,9 +47,3 @@ rename_prefix = "firecrawl:"
 [mcp_servers.firecrawl-mcp.env]
 FIRECRAWL_API_KEY = "$FIRECRAWL_API_KEY"
 
-# Chrome DevTools MCP
-[mcp_servers.chrome-devtools]
-transport = "stdio"
-command = "npx"
-args = ["-y", "chrome-devtools-mcp@latest"]
-rename_prefix = "chrome:"
