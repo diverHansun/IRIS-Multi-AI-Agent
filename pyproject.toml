@@ -3,6 +3,7 @@ name = "iris-muti-ai-agent"
 version = "0.1.4"
 description = "IRIS:muti-ai-agent multi-engine AI agent CLI"
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
     "aiohttp==3.12.15",
