@@ -45,7 +45,7 @@ class ZhipuAdapter(LLMAdapter):
         - max_iterations, max_execution_time等由AgentAdapter处理
 
         特殊逻辑:
-        - glm-4.5/glm-4.5-flash: thinking_mode=True (从配置读取)
+        - 支持 thinking_mode 的模型（glm-4.5/4.6/4.7/5 系列）：从配置读取 thinking_mode
         - temperature从mode_overrides.llm优先应用
 
         Args:
@@ -56,7 +56,7 @@ class ZhipuAdapter(LLMAdapter):
         """
         params = self.get_base_params()
 
-        if self.model in {"glm-4.5", "glm-4.5-flash"}:
+        if self.supports_function_calling():
             overrides = self.get_llm_mode_overrides()
             if "thinking_mode" in overrides:
                 params["thinking_mode"] = overrides["thinking_mode"]
@@ -68,10 +68,17 @@ class ZhipuAdapter(LLMAdapter):
         logger.debug("Zhipu %s (%s) params: %s", self.model, self.mode, params)
         return params
 
+    # 支持原生 Function Calling 的模型集合（通过智谱官方 SDK 访问）
+    _FCALL_MODELS = {
+        "glm-4.5", "glm-4.5-flash",
+        "glm-4.6", "glm-4.6-flash",
+        "glm-4.7", "glm-4.7-flash",
+        "glm-5",
+    }
+
     def supports_function_calling(self) -> bool:
-        """判断模型是否支持Function Calling"""
-        # glm-4.5和glm-4.5-flash使用原生Function Calling
-        return self.model in ["glm-4.5", "glm-4.5-flash"]
+        """判断模型是否支持原生 Function Calling（智谱 SDK）"""
+        return self.model in self._FCALL_MODELS
 
     def get_agent_type(self) -> str:
         """

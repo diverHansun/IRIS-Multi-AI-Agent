@@ -13,7 +13,7 @@ Architecture:
 Usage:
     from src.agents.basicagents import agent_manager
 
-    agent = await agent_manager.create_agent("zhipu", "glm-4.5-flash")
+    agent = await agent_manager.create_agent("zhipu", "glm-4.7-flash")
     result = await agent.invoke("query", session_id="user123")
 """
 

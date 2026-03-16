@@ -12,7 +12,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "api_keys": {},
     "defaults": {
         "llm_provider": "zhipu",
-        "llm_model": "glm-4.5-flash",
+        "llm_model": "glm-4.7-flash",
         "agent_type": "basic",
         "streaming": True,
         "temperature": 0.6,
@@ -84,7 +84,7 @@ notion_token = "${NOTION_TOKEN}"
 
 [defaults]
 llm_provider = "zhipu"      # zhipu, openai, anthropic, ollama
-llm_model = "glm-4.5-flash" # Model to use
+llm_model = "glm-4.7-flash" # Model to use
 agent_type = "basic"        # basic, deep
 streaming = true            # Enable streaming output
 temperature = 0.6           # LLM temperature
@@ -169,7 +169,7 @@ TONGYI_API_KEY=your_tongyi_api_key_here
 # Default LLM Settings
 # =============================================================================
 DEFAULT_LLM_PROVIDER=zhipu
-DEFAULT_LLM_MODEL=glm-4.5-flash
+DEFAULT_LLM_MODEL=glm-4.7-flash
 
 # =============================================================================
 # Tool Services (optional, skip if not needed)
@@ -200,12 +200,10 @@ DIFY_BASE_URL=https://api.dify.ai/v1
 # 配置文件迁移映射表
 # 从项目 config/ 目录到 ~/.iris/ 的映射
 CONFIG_MIGRATION_MAPPING: Dict[str, str] = {
-    "config/llm/models/providers.json": "llm/providers.json",
-    "config/agents/basic/models/providers.json": "agents/basic/providers.json",
+    "config/llm/providers.json": "llm/providers.json",
+    "config/agents/basic/providers.json": "agents/basic/providers.json",
     "config/agents/deep/subagents.example.json": "agents/deep/subagents.json",
     "config/agents/deep/mainagents.example.json": "agents/deep/mainagents.json",
-    "config/agents/deep/models/subagents.json": "agents/deep/subagents.json",
-    "config/agents/deep/models/mainagents.json": "agents/deep/mainagents.json",
     "config/agents/deep/middleware/filesystem/real_filesystem.json": "agents/deep/middleware/filesystem/real_filesystem.json",
     "config/agents/deep/middleware/filesystem/virtual_filesystem.json": "agents/deep/middleware/filesystem/virtual_filesystem.json",
     "config/agents/deep/middleware/shell.json": "agents/deep/middleware/shell.json",
@@ -214,6 +212,7 @@ CONFIG_MIGRATION_MAPPING: Dict[str, str] = {
     "config/tools/sdk/zhipu/zhipu_search.json": "tools/sdk/zhipu_search.json",
     "config/tools/sdk/zhipu/zhipu_crawl.json": "tools/sdk/zhipu_crawl.json",
     "config/tools/sdk/search/duckduckgo.json": "tools/sdk/duckduckgo.json",
+    "config/dify/config.example.json": "dify/config.json",
 }
 
 # 需要创建的目录列表
@@ -223,5 +222,6 @@ REQUIRED_DIRS = [
     "agents/deep/middleware/filesystem",
     "tools/mcp",
     "tools/sdk",
+    "dify",
     "sessions",
 ]

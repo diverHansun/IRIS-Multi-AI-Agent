@@ -1,4 +1,4 @@
-# IRIS      Multi-AI-Agent 🤖
+# IRIS:Multi-AI-Agent 🤖
 基于LangChain和多LLM的中文优化智能代理演示项目，集成了上下文记忆系统、多搜索引擎、高德地图、OKX加密货币和Notion知识管理功能。
 
 ## ✨ 一、功能特性
@@ -131,7 +131,7 @@ NOTION_TOKEN=your_notion_integration_token_here
 
 # LLM配置
 DEFAULT_LLM_PROVIDER=zhipu
-DEFAULT_LLM_MODEL=glm-4.5-flash
+DEFAULT_LLM_MODEL=glm-4.7-flash
 ```
 
 ### 4. 运行程序
@@ -202,61 +202,28 @@ curl http://localhost:11235/health
 
 ## 📊 五、支持的LLM模型
 
-本项目支持多个LLM提供商，在LLM引擎和Agent引擎下可通过 `/model <provider> [model]` 命令动态切换。
+在LLM引擎和Agent引擎下可通过 `/model <provider> [model]` 命令动态切换。
 
-### 模型概览
-
-| Provider | 推荐模型 | 核心特性 | 适用场景 |
-|----------|----------|----------|----------|
-| **智谱AI** | `glm-4.5-flash` ⭐ | 免费、128K上下文、思考模式 | 通用任务、成本敏感场景 |
-| | `glm-4.5` | 96K输出、Function Calling | 代码生成、复杂推理 |
-| | `glm-4-plus` | ReAct框架、综合能力强 | 多步骤任务、通用对话 |
-| **OpenAI** | `gpt-5` ⭐ | 高级推理、温度固定(1.0) | 创意写作、复杂推理 |
-| | `gpt-5-mini` | 快速推理、32K输出 | 快速响应、成本优化 |
-| | `gpt-4o-mini` | 多模态、16K输出 | 通用任务、长上下文 |
-| **Ollama** | `qwen3:8b` ⭐ | 本地部署、中文优化 | 离线场景、隐私优先 |
-| | `gpt-oss:20b` | 工具调用、开源GPT | 复杂推理、本地Agent |
-
-### 快速切换示例
+| Provider | 模型 | 说明 |
+|----------|------|------|
+| **智谱AI** | `glm-4.7-flash` ⭐ | 免费、128K上下文、默认推荐 |
+| | `glm-4.7` | 高性能思考模型 |
+| | `glm-4-plus` | 综合能力强 |
+| **OpenAI** | `gpt-4o-mini` ⭐ | 轻量高性价比 |
+| | `gpt-4o` | 通用旗舰 |
+| | `gpt-5` / `gpt-5-mini` | 最新推理模型，温度固定(1.0) |
+| **通义千问** | `qwen3-max` ⭐ | 全能旗舰 |
+| | `qwen3-coder-plus` | 代码优化 |
+| **Ollama** | `qwen3:8b` | 本地部署、离线运行 |
 
 ```bash
-# 切换到LLM引擎或Agent引擎
-/switch llm
-# 或
-/switch agent
-
-# 智谱AI - 免费闪电版（推荐入门）
-/model zhipu glm-4.5-flash
-
-# 智谱AI - Function Calling模式
-/model zhipu glm-4.5
-
-# OpenAI - GPT-5
-/model openai gpt-5
-
-# Ollama - 本地模型(仅LLM引擎，需自行配置)
-/model ollama qwen3:8b
+/model zhipu glm-4.7-flash   # 智谱AI 免费版（默认）
+/model openai gpt-4o-mini    # OpenAI 轻量版
+/model tongyi qwen3-max      # 通义千问
+/model ollama qwen3:8b       # 本地模型
 ```
 
-### Ollama本地模型使用
-
-Ollama支持完全离线运行，需要自行下载模型：
-
-```bash
-# 1. 安装Ollama（访问 https://ollama.com/）
-# 2. 下载模型
-ollama pull qwen3:8b
-ollama pull gpt-oss:20b
-
-# 3. 在项目中使用
-/switch llm  # 或 /switch agent
-/model ollama qwen3:8b
-```
-
-> **💡 提示**:
-> - 详细配置参见 `config/llm/models/providers.json`
-> - 使用 `/llms` 命令查看所有可用模型
-> - OpenAI的GPT-5系列温度固定为1.0，无法调整
+> 使用 `/llms` 查看所有可用模型，配置详见 `config/llm/providers.json`
 
 
 ## ⚙️ 六、配置说明
@@ -295,7 +262,7 @@ ollama pull gpt-oss:20b
 | `OPENAI_API_KEY` | OpenAI API密钥 | `sk-xxxxxxxx...` | ✅ 二选一 |
 | `OLLAMA_BASE_URL` | Ollama服务地址 | `http://localhost:11434` | ❌ |
 | `DEFAULT_LLM_PROVIDER` | 默认提供商 | `zhipu` / `openai` / `ollama` | ❌ |
-| `DEFAULT_LLM_MODEL` | 默认模型 | `glm-4.5-flash` / `gpt-4o-mini` | ❌ |
+| `DEFAULT_LLM_MODEL` | 默认模型 | `glm-4.7-flash` / `gpt-4o-mini` | ❌ |
 | `DIFY_API_KEY` | Dify云端API密钥 | `app-xxxxxxxx...` | ❌ |
 | `TAVILY_API_KEY` | Tavily搜索API密钥 | `tvly-xxxxxxxx...` | ❌ 推荐 |
 | `AMAP_API_KEY` | 高德地图API密钥 | `xxxxxxxx...` | ❌ 推荐 |

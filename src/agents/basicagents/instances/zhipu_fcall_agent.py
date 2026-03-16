@@ -1,7 +1,7 @@
 """
 Zhipu AI Function Calling agent implementation.
 
-Specialized agent for Zhipu GLM-4.5 models with native function calling support.
+Specialized agent for Zhipu GLM models with native function calling support.
 """
 
 import logging
@@ -19,12 +19,19 @@ from src.agents.basicagents.instances.base_agent import BaseAgent
 logger = logging.getLogger(__name__)
 
 
+_FCALL_SUPPORTED_MODELS = {
+    "glm-4.5", "glm-4.5-flash",
+    "glm-4.6", "glm-4.6-flash",
+    "glm-4.7", "glm-4.7-flash",
+    "glm-5",
+}
+
+
 class ZhipuFCallAgent(BaseAgent):
     """
-    Zhipu function calling agent for GLM-4.5 models.
+    Zhipu function calling agent for GLM models with native function calling support.
 
-    Uses native function calling capabilities of glm-4.5 and glm-4.5-flash models.
-    Optimized for tool usage with thinking mode support.
+    Supports: glm-4.5/4.5-flash, glm-4.6/4.6-flash, glm-4.7/4.7-flash, glm-5.
     """
 
     def __init__(
@@ -42,7 +49,7 @@ class ZhipuFCallAgent(BaseAgent):
 
         Args:
             provider: Provider name (should be 'zhipu')
-            model: Model name (should be 'glm-4.5' or 'glm-4.5-flash')
+            model: Model name (e.g. 'glm-4.7-flash', 'glm-4.5')
             llm: Initialized ChatZhipuAI instance
             graph: Compiled state graph
             tools: List of tools
@@ -50,10 +57,10 @@ class ZhipuFCallAgent(BaseAgent):
             config: Agent configuration
         """
         # Validate model supports function calling
-        if model not in ["glm-4.5", "glm-4.5-flash"]:
+        if model not in _FCALL_SUPPORTED_MODELS:
             logger.warning(
                 f"Model {model} may not support native function calling. "
-                "Recommended models: glm-4.5, glm-4.5-flash"
+                f"Recommended models: {', '.join(sorted(_FCALL_SUPPORTED_MODELS))}"
             )
 
         super().__init__(

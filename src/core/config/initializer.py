@@ -145,6 +145,18 @@ class ConfigInitializer:
                 else src_relative
             )
             src_path = self._config_dir / rel
+            if not src_path.exists():
+                # Try example variants: mcp.toml->mcp.example.toml,
+                # providers.json->providers.example.json, config.json->config.example.json, etc.
+                candidates = []
+                stem, suffix = src_path.stem, src_path.suffix
+                candidates.append(src_path.parent / f"{stem}.example{suffix}")
+                candidates.append(src_path.parent / f"{stem}_example{suffix}")
+                for fb in candidates:
+                    if fb.exists():
+                        src_path = fb
+                        logger.debug("Using example fallback: %s", fb)
+                        break
             dst_path = self._share_dir / dst_relative
 
             if not src_path.exists():
@@ -178,10 +190,6 @@ class ConfigInitializer:
             return copied
 
         allowed_suffixes = {".json", ".toml", ".yaml", ".yml"}
-        skipped_legacy_files = {
-            Path("agents/deep/models/mainagents.json"),
-            Path("agents/deep/models/subagents.json"),
-        }
         for src_path in self._config_dir.rglob("*"):
             if not src_path.is_file():
                 continue
@@ -191,8 +199,6 @@ class ConfigInitializer:
                 continue
 
             rel = src_path.relative_to(self._config_dir)
-            if rel in skipped_legacy_files:
-                continue
             dst_path = self._share_dir / rel
 
             if dst_path.exists():

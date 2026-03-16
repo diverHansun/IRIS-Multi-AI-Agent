@@ -57,7 +57,7 @@ class DefaultsConfig(BaseModel):
     """默认设置配置"""
 
     llm_provider: str = "zhipu"
-    llm_model: str = "glm-4.5-flash"
+    llm_model: str = "glm-4.7-flash"
     agent_type: str = "basic"  # basic, deep
     streaming: bool = True
     temperature: float = 0.6

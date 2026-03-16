@@ -2,6 +2,26 @@
 
 本文档记录了项目的所有版本更新历史。
 
+## v0.1.4 (2026-03-16)
+
+- **Setup Wizard**: 新增交互式配置向导，支持 `/setup [--llm|--agent|--tools|--dify]` 和 `/doctor` 命令
+  - 四步配置流程：LLM Provider → Agent → Tools → Dify，每步可独立运行
+  - Esc 全局返回导航，API Key 明文显示，已有值自动回填，跳过不中断流程
+  - `/doctor` 全量健康检查，逐项输出 pass / warn / fail
+- **prompt_toolkit 输入层** (03-14)：历史记录（↑/↓）、Tab 自动补全、Esc 取消输入
+- **LLM 路由重构** (03-15)：以配置驱动的 adapter 路由替代 `LLMProvider` 枚举，新增 tongyi provider 支持
+- **配置目录整理** (03-16)：
+  - 移除 `config/llm/models/`、`config/agents/basic/models/`、`config/agents/deep/models/` 三个 legacy 子目录
+  - 示例文件统一命名为 `providers.example.json`，`.gitignore` 同步更新
+  - 默认模型从 `glm-4.5-flash` 升级为 `glm-4.7-flash`
+
+## v0.1.3 (2026-03-13)
+
+- **Deep Agent 终端输出统一** (03-12 ~ 03-13)：重构流式渲染，分离中间过程与最终输出显示通道，消除重复打印
+- **语义化 Spinner** (03-13)：各执行阶段使用专属状态图标与计时显示，提升任务进度可读性
+- **CLI 渲染器统一** (03-13)：LLM / Basic / Deep 三种引擎共用同一套 transcript UI 框架
+- **Deep Agent 配置路径规范化** (03-13)：统一 mainagents / subagents 配置文件路径引用
+
 ## v0.1.2 (2026-03-01)
 
 - **Shell 安全策略**: 2026-02-17 至 2026-03-01，新增 `SecurityPolicy` / `ShellExecutor` 抽象，支持运行时动态 HITL 优化；安全策略默认关闭，向后兼容

@@ -32,6 +32,7 @@ class OpenAIAgentAdapter(AgentAdapter):
     - System prompt configuration
     """
 
+
     def __init__(
         self,
         config: AgentConfig,

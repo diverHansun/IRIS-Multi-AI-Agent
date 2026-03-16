@@ -21,7 +21,7 @@ def _resolve_default_model(provider: str) -> str:
     if settings.default_llm_model:
         return settings.default_llm_model.strip()
     if provider == "zhipu":
-        return "glm-4.5-flash"
+        return "glm-4.7-flash"
     if provider == "openai":
         return "gpt-4o-mini"
     return "auto"

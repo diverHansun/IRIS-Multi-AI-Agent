@@ -63,7 +63,7 @@ class AgentSetupStep(SetupStep):
 
         # Basic agent check
         default_provider = os.getenv("DEFAULT_LLM_PROVIDER", "zhipu")
-        default_model = os.getenv("DEFAULT_LLM_MODEL", "glm-4.5-flash")
+        default_model = os.getenv("DEFAULT_LLM_MODEL", "glm-4.7-flash")
         provider_key = _provider_env_key(default_provider)
 
         if provider_key is None or _has_key(provider_key):

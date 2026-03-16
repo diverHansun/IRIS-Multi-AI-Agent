@@ -7,7 +7,7 @@ Provides pure LLM parameters without agent-specific configurations.
 Supports three-layer configuration:
 1. Project-level config (<project>/.iris/llm/providers.json)
 2. User-level config (~/.iris/llm/providers.json)
-3. Built-in config (config/llm/models/providers.json)
+3. Built-in config (config/llm/providers.json)
 
 Following SOLID principles:
 - SRP: Only manages LLM configurations
@@ -61,7 +61,7 @@ class LLMProviderRegistry:
     Configuration priority (high to low):
     1. Project-level config (<project>/.iris/llm/providers.json)
     2. User-level config (~/.iris/llm/providers.json)
-    3. Built-in config (config/llm/models/providers.json)
+    3. Built-in config (config/llm/providers.json)
     """
 
     def __init__(

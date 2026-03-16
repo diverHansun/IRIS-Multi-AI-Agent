@@ -31,7 +31,7 @@ _PROVIDERS = [
         "name": "Zhipu AI",
         "description": "Zhipu GLM (recommended)",
         "api_key_env": "ZHIPU_API_KEY",
-        "default_model": "glm-4.5-flash",
+        "default_model": "glm-4.7-flash",
         "has_base_url": False,
     },
     {

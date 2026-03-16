@@ -4,7 +4,7 @@
     "description": "Research specialist for deep information gathering",
     "providers": {
       "zhipu": {
-        "model": "glm-4.5-flash",
+        "model": "glm-4.7-flash",
         "api_config": {
           "base_url": "https://open.bigmodel.cn/api/paas/v4",
           "api_key_env": "ZHIPU_API_KEY"
@@ -66,7 +66,7 @@
     "description": "Code generation, refactoring, and debugging specialist",
     "providers": {
       "zhipu": {
-        "model": "glm-4.5-flash",
+        "model": "glm-4.7-flash",
         "api_config": {
           "base_url": "https://open.bigmodel.cn/api/paas/v4",
           "api_key_env": "ZHIPU_API_KEY"
@@ -128,7 +128,7 @@
     "description": "Data analysis, visualization, and interpretation specialist",
     "providers": {
       "zhipu": {
-        "model": "glm-4.5-flash",
+        "model": "glm-4.7-flash",
         "api_config": {
           "base_url": "https://open.bigmodel.cn/api/paas/v4",
           "api_key_env": "ZHIPU_API_KEY"
