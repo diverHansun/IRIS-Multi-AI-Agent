@@ -11,6 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from prompt_toolkit import prompt as _pt_prompt
 from prompt_toolkit.application import Application
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.key_binding import KeyBindings
@@ -19,6 +20,31 @@ from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.layout import Layout
 
 logger = logging.getLogger(__name__)
+
+
+def text_input(label: str, default: str = "") -> Optional[str]:
+    """Single-line plaintext input with Esc-to-cancel support.
+
+    Displays '  LABEL: ' and returns the typed text on Enter.
+    Returns None if Esc is pressed or the prompt is interrupted.
+    """
+    kb = KeyBindings()
+    _cancelled = [False]
+
+    @kb.add("escape", eager=True)
+    def _on_escape(event):
+        _cancelled[0] = True
+        event.app.exit()
+
+    try:
+        text = _pt_prompt(f"  {label}: ", default=default, key_bindings=kb)
+    except (KeyboardInterrupt, EOFError):
+        return None
+
+    if _cancelled[0]:
+        return None
+    return text
+
 
 # prompt_toolkit ANSI styles mapped to project theme
 PT_STYLES = {
@@ -86,15 +112,14 @@ class SelectOne:
                 self._result = opt
                 event.app.exit()
 
-        @kb.add("q")
-        @kb.add("escape")
+        @kb.add("escape", eager=True)
         def _cancel(event):
             self._cancelled = True
             event.app.exit()
 
         control = FormattedTextControl(self._get_formatted_text)
         hint_control = FormattedTextControl(
-            FormattedText([("class:hint", "  [PgUp/PgDn] Navigate  [Enter] Select  [q] Cancel")])
+            FormattedText([("class:hint", "  [Up/Down] Navigate  [Enter] Select  [Esc] Cancel")])
         )
 
         layout = Layout(
@@ -211,8 +236,7 @@ class SelectMany:
         def _select_none(event):
             self._selected.clear()
 
-        @kb.add("q")
-        @kb.add("escape")
+        @kb.add("escape", eager=True)
         def _cancel(event):
             self._cancelled = True
             self._selected.clear()
@@ -221,7 +245,7 @@ class SelectMany:
         control = FormattedTextControl(self._get_formatted_text)
         hint_control = FormattedTextControl(
             FormattedText([("class:hint",
-                           "  [PgUp/PgDn] Navigate  [Space] Toggle  [Enter] Confirm  [a] All  [n] None")])
+                           "  [Up/Down] Navigate  [Space] Toggle  [Enter] Confirm  [a] All  [n] None  [Esc] Cancel")])
         )
 
         layout = Layout(

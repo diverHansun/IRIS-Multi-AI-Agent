@@ -18,6 +18,7 @@ from src.core.config.setup.steps.base import (
     SetupStep,
     StepResult,
 )
+from src.core.config.setup.widgets import text_input
 
 logger = logging.getLogger(__name__)
 
@@ -48,21 +49,21 @@ class DifySetupStep(SetupStep):
         if answer != "y":
             return StepResult(success=True, skipped=True)
 
-        # API key
-        key = Prompt.ask("  DIFY_API_KEY", password=True, console=console)
-        if key and not key.startswith("your_"):
-            context.env_writer.write_key("DIFY_API_KEY", key)
-            configured_items.append("DIFY_API_KEY")
-        else:
-            console.print("  [-] Skipped (empty or placeholder)", style="dim")
+        # API key (pre-fill existing value if configured)
+        existing_key = os.getenv("DIFY_API_KEY", "")
+        default_key = existing_key if existing_key and not existing_key.startswith("your_") else ""
+        key = text_input("DIFY_API_KEY", default=default_key)
+        if not key or key.startswith("your_"):
+            console.print("  [-] Skipped (empty input)", style="dim")
             return StepResult(success=True, skipped=True)
+        context.env_writer.write_key("DIFY_API_KEY", key)
+        configured_items.append("DIFY_API_KEY")
 
-        # Base URL
-        base_url = Prompt.ask(
-            f"  DIFY_BASE_URL",
-            default=_DEFAULT_DIFY_BASE_URL,
-            console=console,
-        )
+        # Base URL (pre-fill existing or use default)
+        existing_url = os.getenv("DIFY_BASE_URL", "") or _DEFAULT_DIFY_BASE_URL
+        base_url = text_input("DIFY_BASE_URL", default=existing_url)
+        if not base_url:
+            base_url = _DEFAULT_DIFY_BASE_URL
         context.env_writer.write_key("DIFY_BASE_URL", base_url)
         configured_items.append(f"DIFY_BASE_URL={base_url}")
 

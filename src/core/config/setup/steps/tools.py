@@ -20,6 +20,7 @@ from src.core.config.setup.steps.base import (
     SetupStep,
     StepResult,
 )
+from src.core.config.setup.widgets import text_input
 
 logger = logging.getLogger(__name__)
 
@@ -110,30 +111,37 @@ class ToolsSetupStep(SetupStep):
         tools: list,
         configured_items: List[str],
     ) -> None:
-        """Ask user to configure unconfigured tools."""
+        """Ask user to configure/confirm tools. Pre-fills existing values."""
         console = context.console
+        seen_keys: set = set()
 
         for tool in tools:
             key_env = tool["key_env"]
             if key_env is None:
                 continue  # no key needed
-            if _has_key(key_env):
-                continue  # already configured
+            if key_env in seen_keys:
+                continue  # same key already handled (e.g. Zhipu Search + Crawl)
+            seen_keys.add(key_env)
+
+            existing = os.getenv(key_env, "")
+            has_existing = bool(existing) and not existing.startswith("your_")
+            status_hint = " (configured)" if has_existing else ""
 
             answer = Prompt.ask(
-                f"  Configure {key_env}?",
+                f"  Configure {key_env}{status_hint}?",
                 choices=["y", "skip"],
                 default="skip",
                 console=console,
             )
             if answer == "y":
-                key = Prompt.ask(f"  {key_env}", password=True, console=console)
+                default_val = existing if has_existing else ""
+                key = text_input(key_env, default=default_val)
                 if key and not key.startswith("your_"):
                     context.env_writer.write_key(key_env, key)
                     configured_items.append(key_env)
                     console.print(f"  [*] {key_env} saved", style="green")
                 else:
-                    console.print(f"  [-] Skipped (empty or placeholder)", style="dim")
+                    console.print(f"  [-] Skipped", style="dim")
 
     @staticmethod
     def _check_tool(tool: dict, category: str) -> CheckResult:

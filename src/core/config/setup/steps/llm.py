@@ -20,7 +20,7 @@ from src.core.config.setup.steps.base import (
     SetupStep,
     StepResult,
 )
-from src.core.config.setup.widgets import Option, SelectOne
+from src.core.config.setup.widgets import Option, SelectOne, text_input
 
 logger = logging.getLogger(__name__)
 
@@ -77,17 +77,32 @@ class LLMSetupStep(SetupStep):
         # Show current status table
         self._print_status_table(context)
 
-        # Select default provider
-        options = self._build_provider_options(context)
-        selector = SelectOne(
-            title="Select default LLM provider:",
-            options=options,
-            default="zhipu",
-        )
-        selected = selector.run()
+        # Provider selection with back-navigation support
+        last_selected_key: Optional[str] = "zhipu"
+        while True:
+            options = self._build_provider_options(context)
+            selector = SelectOne(
+                title="Select default LLM provider:",
+                options=options,
+                default=last_selected_key,
+            )
+            selected = selector.run()
 
-        if selected is None:
-            return StepResult(success=False, error="No provider selected")
+            if selected is None:
+                return StepResult(success=False, error="No provider selected")
+
+            last_selected_key = selected.key
+            provider_info = self._get_provider_info(selected.key)
+
+            if provider_info["api_key_env"] is None:
+                # No key needed (e.g., ollama) — proceed immediately
+                break
+
+            result = self._configure_provider_key(context, provider_info, configured_items)
+            if result is None:
+                # Esc pressed — go back to provider selector
+                continue
+            break
 
         default_provider = selected.key
         provider_info = self._get_provider_info(default_provider)
@@ -95,7 +110,8 @@ class LLMSetupStep(SetupStep):
         # Configure the selected provider
         key_configured = provider_info["api_key_env"] is None
         if provider_info["api_key_env"]:
-            key_configured = self._configure_provider_key(context, provider_info, configured_items)
+            # Already configured above — check if it was saved
+            key_configured = context.env_writer.has_key(provider_info["api_key_env"])
 
         # Write default provider/model
         context.env_writer.write_key("DEFAULT_LLM_PROVIDER", default_provider)
@@ -251,31 +267,39 @@ class LLMSetupStep(SetupStep):
         context: SetupContext,
         provider_info: dict,
         configured_items: List[str],
-    ) -> bool:
-        """Ask user for API key and optionally base_url."""
+    ) -> Optional[bool]:
+        """Ask user for API key and optionally base_url.
+
+        Returns True if configured/confirmed, None if Esc pressed (go back).
+        Pre-fills existing values as defaults so the user can confirm with Enter.
+        For providers with has_base_url, base_url is prompted first.
+        """
         console = context.console
         env_var = provider_info["api_key_env"]
 
-        key = Prompt.ask(f"  {env_var}", password=True, console=console)
-        if key and not key.startswith("your_"):
-            context.env_writer.write_key(env_var, key)
-            configured_items.append(env_var)
-            console.print(f"  [*] API key saved", style="green")
-        else:
-            console.print(f"  [-] Skipped (empty or placeholder)", style="dim")
-            return False
-
         if provider_info.get("has_base_url"):
             base_url_env = provider_info.get("base_url_env", "")
-            base_url = Prompt.ask(
-                f"  Custom base URL (press Enter to skip)",
-                default="",
-                console=console,
-            )
-            if base_url:
-                context.env_writer.write_key(base_url_env, base_url)
-                configured_items.append(f"{base_url_env}={base_url}")
-                console.print(f"  [*] Base URL saved", style="green")
+            default_url = "https://api.openai.com/v1"
+            existing_url = os.getenv(base_url_env, "") or default_url
+            base_url = text_input(base_url_env, default=existing_url)
+            if base_url is None:
+                return None  # Esc pressed — go back
+            base_url = base_url.strip() or default_url
+            context.env_writer.write_key(base_url_env, base_url)
+            configured_items.append(f"{base_url_env}={base_url}")
+
+        existing_key = os.getenv(env_var, "")
+        default_key = existing_key if existing_key and not existing_key.startswith("your_") else ""
+        key = text_input(env_var, default=default_key)
+        if key is None:
+            return None  # Esc pressed — go back
+        if not key or key.startswith("your_"):
+            console.print("  [-] Skipped (empty input)", style="dim")
+            return None
+
+        context.env_writer.write_key(env_var, key)
+        configured_items.append(env_var)
+        console.print("  [*] API key saved", style="green")
         return True
 
     @staticmethod

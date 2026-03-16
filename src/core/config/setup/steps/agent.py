@@ -21,6 +21,7 @@ from src.core.config.setup.steps.base import (
     SetupStep,
     StepResult,
 )
+from src.core.config.setup.widgets import text_input
 
 logger = logging.getLogger(__name__)
 
@@ -236,11 +237,13 @@ class AgentSetupStep(SetupStep):
                         if key_env in seen_keys:
                             continue
                         seen_keys.add(key_env)
-                        key = Prompt.ask(f"  {key_env}", password=True, console=console)
+                        key = text_input(key_env)
                         if key and not key.startswith("your_"):
                             context.env_writer.write_key(key_env, key)
                             configured_items.append(key_env)
                             console.print(f"  [*] {key_env} saved", style="green")
+                        elif key is None:
+                            console.print(f"  [-] {key_env} skipped", style="dim")
 
     def _load_deep_config(self, share_dir: Path, filename: str) -> Optional[Dict[str, Any]]:
         """Load deep agent config JSON from ~/.iris/agents/deep/."""
