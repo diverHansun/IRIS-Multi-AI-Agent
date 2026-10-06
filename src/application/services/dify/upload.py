@@ -275,10 +275,11 @@ async def handle_upload_command(
 def _resolve_file_paths(query: str, uploader: DifyUploader) -> Optional[List[str]]:
     """
     Parse file paths from query string using platform-appropriate shell syntax.
-    Uses pathlib.Path for cross-platform path handling.
+    Windows keeps backslashes; macOS/Linux use POSIX quoting and escapes.
+    Path resolves against the current host, including its home directory.
     """
-    # Use posix=False on Windows to handle Windows-style paths correctly
-    tokens = shlex.split(query, posix=False)
+    # POSIX parsing handles quoted paths and backslash escapes from macOS/Linux terminals.
+    tokens = shlex.split(query, posix=os.name != "nt")
     if not tokens:
         uploader.console.print(
             "[dim]Opening file selection dialog (multi-select supported)...[/dim]"
@@ -289,7 +290,9 @@ def _resolve_file_paths(query: str, uploader: DifyUploader) -> Optional[List[str
     resolved: List[str] = []
     for token in tokens:
         # Use pathlib.Path for robust cross-platform path handling
-        path_obj = Path(token)
+        if os.name == "nt" and len(token) >= 2 and token[0] == token[-1] and token[0] in "\"'":
+            token = token[1:-1]
+        path_obj = Path(token).expanduser()
         if path_obj.is_absolute():
             resolved.append(str(path_obj))
         else:

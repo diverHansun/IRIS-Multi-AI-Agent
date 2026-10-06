@@ -35,7 +35,7 @@ class ShellToolMiddleware(AgentMiddleware[ShellToolState, Any]):
 
     This middleware creates and manages a long-lived shell session that:
     - Maintains state across command executions (working directory, environment)
-    - Supports Windows (cmd, powershell) and Unix (bash) shells
+    - Supports Windows (cmd, powershell) and macOS/Linux (bash) shells
     - Handles HITL interrupts by recreating the session on resume
     - Provides safe output truncation and timeout handling
 

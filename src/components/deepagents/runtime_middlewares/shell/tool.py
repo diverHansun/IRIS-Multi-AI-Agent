@@ -38,7 +38,7 @@ class ShellTool(BaseTool):
         "The session maintains state across commands (working directory, environment variables). "
         "Use this for running system commands, building projects, running tests, etc. "
         "Commands run from the configured workspace directory. "
-        "For Windows, commands execute in cmd or powershell. For Linux/Mac, commands execute in bash. "
+        "With auto configuration, Windows uses cmd and macOS/Linux use bash. Windows can also select powershell. "
         "Prefer a single command per call. "
         "Some installations enable a security policy that blocks destructive commands, "
         "command chaining, pipes, and redirections. "

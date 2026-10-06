@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "workspace_root": "auto",
-  "shell_type": "cmd",
+  "shell_type": "auto",
   "command_timeout": 30.0,
   "startup_timeout": 10.0,
   "termination_timeout": 5.0,

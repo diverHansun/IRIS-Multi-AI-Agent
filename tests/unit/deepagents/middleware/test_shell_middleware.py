@@ -376,5 +376,26 @@ class TestShellToolMiddleware:
         assert result["blocked"] is True
 
 
+@pytest.mark.parametrize('platform_name, expected', [('posix', 'bash'), ('nt', 'cmd')])
+def test_auto_shell_configuration_resolves_for_host(platform_name, expected, monkeypatch):
+    # Replace only the module's os reference; changing global os.name breaks pathlib.
+    from types import SimpleNamespace
+    from src.components.deepagents.runtime_middlewares.shell import config as config_module
+
+    monkeypatch.setattr(config_module, 'os', SimpleNamespace(name=platform_name))
+    assert ShellConfig(shell_type='auto').shell_type == expected
+    assert build_shell_config({'shell_type': 'auto'}).shell_type == expected
+
+
+def test_shell_service_reports_actual_posix_default():
+    if os.name == 'nt':
+        pytest.skip('POSIX host default')
+    from src.application.services.agent.deep.middleware.shell_service import ShellMiddlewareService
+
+    service = ShellMiddlewareService({'enabled': True})
+    assert service.describe()['shell_type'] == 'bash'
+    assert service.get_middleware_config()['shell_type'] == 'bash'
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

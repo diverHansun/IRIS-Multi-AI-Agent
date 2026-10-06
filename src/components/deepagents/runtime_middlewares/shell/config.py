@@ -17,11 +17,15 @@ class SecurityPolicyConfig:
 
 @dataclass(frozen=True)
 class ShellConfig:
-    """Configuration for persistent shell middleware."""
+    """Configuration for persistent shell middleware.
+
+    ``auto`` selects cmd on Windows and bash on macOS/Linux. The terminal
+    launching IRIS (PowerShell or zsh) does not select the agent's shell.
+    """
 
     enabled: bool = True
     workspace_root: Path = field(default_factory=Path.cwd)
-    shell_type: str = "cmd" if os.name == "nt" else "bash"
+    shell_type: str = "auto"
     command_timeout: float = 30.0
     startup_timeout: float = 10.0
     termination_timeout: float = 5.0
@@ -32,7 +36,9 @@ class ShellConfig:
     security_policy: SecurityPolicyConfig = field(default_factory=SecurityPolicyConfig)
 
     def __post_init__(self) -> None:
-        """Validate configuration values."""
+        """Resolve platform defaults and validate configuration values."""
+        if self.shell_type.lower() == "auto":
+            object.__setattr__(self, "shell_type", "cmd" if os.name == "nt" else "bash")
         if self.command_timeout <= 0:
             raise ValueError("command_timeout must be positive")
         if self.startup_timeout <= 0:
@@ -46,7 +52,7 @@ class ShellConfig:
 
     def get_shell_command(self) -> List[str]:
         """
-        Get the shell command for the current platform.
+        Get the shell command for the host: Windows cmd/PowerShell or POSIX bash.
 
         Returns:
             List of command arguments to start shell
@@ -124,7 +130,7 @@ def build_shell_config(
         project_root=project_root,
     )
 
-    shell_type = config_dict.get("shell_type", "cmd" if os.name == "nt" else "bash")
+    shell_type = config_dict.get("shell_type", "auto")
     environment = config_dict.get("environment", {})
     if not isinstance(environment, dict):
         environment = {}

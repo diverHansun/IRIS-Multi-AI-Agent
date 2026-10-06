@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict
 
+from src.components.deepagents.runtime_middlewares.shell.config import ShellConfig
+
 
 class ShellMiddlewareService:
     """Service layer for shell middleware configuration management."""
@@ -20,7 +22,7 @@ class ShellMiddlewareService:
 
         self.enabled: bool = bool(self._config.get("enabled", False))
         self.workspace_root = self._config.get("workspace_root", "auto")
-        self.shell_type = self._config.get("shell_type", "cmd")
+        self.shell_type = ShellConfig(shell_type=self._config.get("shell_type", "auto")).shell_type
         self.command_timeout = float(self._config.get("command_timeout", 30.0))
         self.startup_timeout = float(self._config.get("startup_timeout", 10.0))
         self.termination_timeout = float(self._config.get("termination_timeout", 5.0))

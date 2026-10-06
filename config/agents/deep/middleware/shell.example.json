@@ -4,8 +4,8 @@
   "workspace_root": "auto",
   "_workspace_root_comment": "Working directory for shell commands. Use 'auto' for project directory, or an absolute/relative path (relative paths resolve from project directory when available)",
 
-  "shell_type": "cmd",
-  "_shell_type_comment": "Shell executable type: 'cmd', 'powershell' (Windows), 'bash' (Linux/Mac)",
+  "shell_type": "auto",
+  "_shell_type_comment": "Shell executable type: 'auto' selects cmd on Windows and bash on macOS/Linux; explicit 'cmd', 'powershell', 'bash' remain supported",
 
   "command_timeout": 30.0,
   "_command_timeout_comment": "Timeout in seconds for each command execution",

@@ -152,6 +152,10 @@ class ConfigInitializer:
                 stem, suffix = src_path.stem, src_path.suffix
                 candidates.append(src_path.parent / f"{stem}.example{suffix}")
                 candidates.append(src_path.parent / f"{stem}_example{suffix}")
+                # Older bundled filesystem templates use *_files.example.json.
+                if stem in {"real_filesystem", "virtual_filesystem"}:
+                    legacy_stem = stem.replace("_filesystem", "_files")
+                    candidates.append(src_path.parent / f"{legacy_stem}.example{suffix}")
                 for fb in candidates:
                     if fb.exists():
                         src_path = fb

@@ -16,9 +16,10 @@ def _normalize_relative_path(relative_path: str) -> Path:
     Normalize a config-relative path.
 
     Accepts paths with or without a leading ``config/`` prefix and always
-    returns a path relative to the ``config`` directory.
+    returns a path relative to the ``config`` directory. Both Windows and POSIX
+    separators are accepted; this does not translate absolute host file paths.
     """
-    rel = Path(relative_path.strip().lstrip("/\\"))
+    rel = Path(relative_path.strip().replace("\\", "/").lstrip("/"))
     parts = rel.parts
     if parts and parts[0] == "config":
         rel = Path(*parts[1:]) if len(parts) > 1 else Path()

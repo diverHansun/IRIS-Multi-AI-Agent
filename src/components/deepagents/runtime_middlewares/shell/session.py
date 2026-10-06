@@ -35,7 +35,7 @@ class PersistentShellSession:
     """
     Persistent shell session that maintains state across commands.
 
-    Supports Windows (cmd, powershell) and Unix (bash) shells.
+    Supports Windows (cmd, powershell) and macOS/Linux (bash) shells.
     Commands are executed sequentially in the same session, preserving
     working directory, environment variables, and other shell state.
     """
