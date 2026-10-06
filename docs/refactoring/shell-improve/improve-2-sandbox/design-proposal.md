@@ -1,5 +1,7 @@
 # Shell 安全策略与效率优化 设计方案
 
+> 平台说明（2026-10-06）：下文保留规划时的配置快照，其中 `shell_type: "cmd"` 不是当前跨平台默认值。当前默认值为 `auto`：Windows 使用 cmd，macOS/Linux 使用 bash。安装与迁移方式见 [IRIS_SETUP.md](../../../../IRIS_SETUP.md#platform-reference)。
+
 > **文档定位**: 方案设计文档，定义 SecurityPolicy 架构、ShellExecutor 抽象、HITL 优化策略与 Shell B 清理方案。
 >
 > **关联文档**:

@@ -21,6 +21,25 @@
 
 ---
 
+## 平台兼容性
+
+项目同时支持 **Windows 和 macOS**，共用同一套 Python 代码与配置格式。
+
+| 项目 | Windows | macOS |
+| --- | --- | --- |
+| 启动终端 | PowerShell / Windows Terminal | zsh / bash |
+| 推荐 Python | 3.11 | 3.11 |
+| 虚拟环境 Python | `.venv\Scripts\python.exe` | `.venv/bin/python` |
+| 配置目录 | `%USERPROFILE%\.iris` | `~/.iris` |
+| DeepAgent 默认 Shell | `cmd.exe` | `/bin/bash` |
+| 项目内启动命令 | `uv run --locked iris` | `uv run --locked iris` |
+
+**验证范围（2026-10-06）**：macOS Apple Silicon 已完成安装和 BasicAgent、DeepAgent 实际对话验证；Windows 已保留兼容分支并检查 Shell 启动命令，本轮尚未完成 Windows 真机验收。Linux 沿用 POSIX 路径和 bash 分支，本轮未做实机验收。
+
+跨系统迁移时，请重新创建 `.venv`，并检查配置中的绝对路径及 `startup_commands`。Shell 配置推荐使用 `"shell_type": "auto"`。详细步骤见 [安装指南](IRIS_SETUP.md)。
+
+---
+
 ## 快速开始
 
 ```bash
@@ -142,6 +161,55 @@ IRIS 在同一个 CLI 下提供四种运行引擎，通过 `/switch` 命令动�
 
 ## 安装指南
 
+### Windows 本机安装（PowerShell）
+
+在项目目录运行：
+
+```powershell
+uv sync --python 3.11 --locked
+uv run --locked iris
+```
+
+也可以激活虚拟环境后启动：
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+iris
+```
+
+如果 PowerShell 限制激活脚本执行，直接使用 `uv run --locked iris`。首次启动会创建 `$env:USERPROFILE\.iris` 并进入配置向导。
+
+### macOS 本机安装（zsh / bash）
+
+在项目目录运行以下命令。脚本使用 Python 3.11 和 `uv.lock` 创建 `.venv`，并补齐 `~/.iris/` 配置；已有配置不会被覆盖。需要先安装 `uv`（Homebrew：`brew install uv`）。
+
+```bash
+./scripts/setup-macos.sh
+uv run --locked iris
+```
+
+也可以手动安装、激活虚拟环境：
+
+```bash
+uv sync --python 3.11 --locked
+source .venv/bin/activate
+iris
+```
+
+第一次启动会进入配置向导。使用 OpenAI 或兼容接口时，选择 `openai` 并填写 Base URL 和 API 密钥。默认模型可在 `~/.iris/.env` 中设置：
+
+```dotenv
+DEFAULT_LLM_PROVIDER=openai
+DEFAULT_LLM_MODEL=gpt-4o-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=你的实际密钥
+```
+
+终端可使用 zsh；DeepAgent 的持久 Shell 在 macOS/Linux 上使用 `/bin/bash`，Windows 上使用 `cmd`。`shell_type: "auto"` 会按平台选择。如果从 Windows 复制了 `~/.iris/agents/deep/middleware/shell.json`，建议将该字段改成 `auto`；旧配置不会被安装脚本覆盖。
+
+`npx` 类型的 MCP 工具需要 Node.js。Crawl4AI connector 连接独立的 HTTP 服务（默认 `http://localhost:11235`），需要单独启动服务；安装 Python 依赖不会启动 Docker。配置后可在 CLI 输入 `/doctor` 检查状态。详细说明见 [安装指南](IRIS_SETUP.md)。
+
+
 <details>
 <summary><b>从源码安装（开发 / 编辑模式）</b></summary>
 
@@ -159,21 +227,21 @@ uv sync
 
 **2. 打包安装**
 
-使用 uv 工具安装后，可在项目根目录直接运行 `iris` 命令。
+项目虚拟环境可使用 `uv run --locked iris` 启动。若需要在任意目录直接运行 `iris`，可选择下方的 `uv tool` 安装方式；它会创建独立的工具环境。
 
 - 品牌名称：`IRIS:muti-ai-agent`
 - Python 分发包名：`iris-muti-ai-agent`（用于 `uv tool` 安装管理）
 
 ```powershell
 # Windows PowerShell
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 uv tool uninstall muti-ai-agent 2>$null
 uv tool uninstall iris-muti-ai-agent 2>$null
 uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall --refresh --no-cache .
 ```
 
 ```bash
-# Linux / Mac
+# macOS / Linux
 source .venv/bin/activate
 uv tool uninstall muti-ai-agent || true
 uv tool uninstall iris-muti-ai-agent || true
@@ -182,7 +250,7 @@ uv tool install --python .venv/bin/python --editable --force --reinstall --refre
 
 **3. 更新程序**
 
-修改代码后，重新打包安装即可：
+编辑模式下，源码修改会立即生效。依赖或打包配置变化时，更新项目环境可运行 `uv sync --python 3.11 --locked`；使用独立工具环境时，可运行下方重装命令：
 
 ```powershell
 # Windows PowerShell
@@ -190,7 +258,7 @@ uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall
 ```
 
 ```bash
-# Linux / Mac
+# macOS / Linux
 uv tool install --python .venv/bin/python --editable --force --reinstall --refresh --no-cache .
 ```
 
@@ -205,7 +273,7 @@ uv tool install --python .venv/bin/python --editable --force --reinstall --refre
 
 **支持的 API 服务**
 
-1. **智谱 AI** —— [智谱 AI 开放平台](https://open.bigmodel.cn/)（必需）
+1. **智谱 AI** —— [智谱 AI 开放平台](https://open.bigmodel.cn/)（可选，模型提供商至少配置一个）
 2. **OpenAI** —— [OpenAI API](https://platform.openai.com/)（可选）
 3. **Ollama 本地模型** —— [Ollama](https://ollama.com/)（可选，支持本地离线运行）
 4. **Tavily 搜索** —— [Tavily](https://tavily.com/)（推荐）
@@ -222,7 +290,7 @@ notepad .env
 ```
 
 ```bash
-# Linux / Mac
+# macOS / Linux
 cd ~/.iris
 cp .env.example .env
 nano .env
@@ -271,7 +339,7 @@ Invoke-WebRequest http://localhost:11235/health  # 健康检查
 ```
 
 ```bash
-# Linux / Mac
+# macOS / Linux
 docker compose up -d crawl4ai          # 启动服务
 docker compose ps crawl4ai             # 查看状态
 docker compose logs --tail 100 crawl4ai # 查看日志

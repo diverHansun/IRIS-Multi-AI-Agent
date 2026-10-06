@@ -113,13 +113,13 @@ config/dify/
 - Better alignment with user expectations
 - Clearer information flow
 
-### 7. Windows Path Handling (upload.py)
+### 7. Windows / macOS Path Handling (upload.py)
 
 **Problem:** `shlex.split()` broke Windows paths with backslashes and spaces.
 
 **Solution:**
-- Changed to `shlex.split(query, posix=False)` for Windows compatibility
-- Use `pathlib.Path` for cross-platform path resolution
+- Current code uses `shlex.split(query, posix=os.name != "nt")`: Windows preserves backslashes; macOS/Linux parse POSIX quotes and escapes. Windows outer quotes are removed before constructing the Path.
+- Use `pathlib.Path(...).expanduser()` for native path resolution and home-directory expansion. Absolute file paths must belong to the current host OS.
 - Robust handling of absolute and relative paths
 
 **Benefits:**

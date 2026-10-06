@@ -1,5 +1,7 @@
 # Shell 工作目录优化实施计划
 
+> 平台说明（2026-10-06）：下文保留规划时的配置快照，其中 `shell_type: "cmd"` 不是当前跨平台默认值。当前默认值为 `auto`：Windows 使用 cmd，macOS/Linux 使用 bash。安装与迁移方式见 [IRIS_SETUP.md](../../../../IRIS_SETUP.md#platform-reference)。
+
 > **文档定位**: 实施步骤文档，定义修改清单、执行约束与验证方案。
 >
 > **关联文档**:

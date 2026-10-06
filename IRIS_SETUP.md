@@ -6,7 +6,7 @@ This guide covers installation, the interactive setup wizard, and configuration 
 
 ## 1. Prerequisites
 
-- Windows + PowerShell
+- macOS (zsh/bash), Linux (bash), or Windows (PowerShell)
 - Python 3.10+
 - `uv` installed (`pip install uv` or download from the uv site)
 - Project virtualenv ready at `.venv` (run `uv sync` in the project root first)
@@ -15,10 +15,73 @@ This guide covers installation, the interactive setup wizard, and configuration 
 
 ## 2. Build & Install
 
+### macOS: project virtual environment
+
+Run from this checkout:
+
+```bash
+./scripts/setup-macos.sh
+uv run --locked iris
+```
+
+The script uses Python 3.11, installs the locked dependencies into `.venv`, initializes `~/.iris/`, and creates `.env` with empty API keys and mode `600` only if absent. Existing configuration is preserved. If `uv` is missing, install it with `brew install uv`.
+
+For manual installation:
+
+```bash
+uv sync --python 3.11 --locked
+source .venv/bin/activate
+iris
+```
+
+Use the first-launch wizard to configure a provider, or edit `~/.iris/.env`. For OpenAI-compatible services, configure `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `DEFAULT_LLM_PROVIDER=openai`, and `DEFAULT_LLM_MODEL`. Do not mark setup complete until the provider is configured. `python main.py` uses the same startup wizard as `iris` and also accepts `--debug`.
+
+To update this checkout, run `uv sync --python 3.11 --locked` again. Editable installation makes source changes immediately available. A separate `uv tool install` is optional and creates another environment.
+
+Shell middleware defaults to `shell_type: "auto"` (Windows: cmd; macOS/Linux: bash). If importing an old Windows shell config, set `~/.iris/agents/deep/middleware/shell.json` to `auto`. The interactive terminal can remain zsh.
+
+Node.js/`npx` is needed for stdio MCP servers. The Crawl4AI connector talks to a separate service at `http://localhost:11235`; it is not started by the installer. Docker and Ollama are optional and must be configured separately if used.
+
+### Windows: project virtual environment
+
+Run in PowerShell from the project root:
+
+```powershell
+uv sync --python 3.11 --locked
+uv run --locked iris
+```
+
+Optional activation:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+iris
+```
+
+If PowerShell blocks the activation script, use `uv run --locked iris` directly. It does not require activating the environment manually. The first-launch wizard initializes `$env:USERPROFILE\.iris`.
+
+### Platform reference
+
+| Item | Windows | macOS |
+| --- | --- | --- |
+| Python executable | `.venv\Scripts\python.exe` | `.venv/bin/python` |
+| Activate environment | `.\.venv\Scripts\Activate.ps1` | `source .venv/bin/activate` |
+| User configuration | `%USERPROFILE%\.iris` | `~/.iris` |
+| Persistent agent Shell with `auto` | `cmd.exe /Q` | `/bin/bash --norc --noprofile` |
+| Project launch | `uv run --locked iris` | `uv run --locked iris` |
+
+The terminal used to launch IRIS and the agent's persistent Shell are separate: launching from PowerShell does not change the default agent Shell to PowerShell, and launching from zsh does not change it to zsh. An explicit `powershell` branch exists on Windows, but it is outside this round's live validation; use `auto` for the cross-platform baseline.
+
+**Validation as of 2026-10-06:** macOS Apple Silicon installation and live BasicAgent/DeepAgent conversations passed. Windows Shell command selection was checked, but a full Windows-machine run remains pending. Linux shares the POSIX branch and was not validated on a Linux machine in this round.
+
+When moving between systems, rebuild `.venv`; do not copy it. Update absolute workspace/file paths and OS-specific `startup_commands`. Config-relative references accept either separator, but a Windows drive path such as `C:\...` does not map to a macOS file automatically. Existing user configs are preserved, so replace an old `shell_type: "cmd"` with `auto` when migrating.
+
+### Windows: optional user tool installation
+
 Run in the project root:
 
 ```powershell
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 uv tool uninstall iris-muti-ai-agent 2>$null
 uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall --refresh --no-cache .
 ```
@@ -28,7 +91,15 @@ uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall
 
 This installs `iris` to your user tool path (e.g. `C:\Users\<you>\.local\bin\iris.exe`).
 
-### Rebuild after code changes
+### Update after changes
+
+Source edits are picked up by editable installations. To synchronize project dependencies on either Windows or macOS:
+
+```text
+uv sync --python 3.11 --locked
+```
+
+For a separate Windows user tool environment:
 
 ```powershell
 uv tool install --python .venv\Scripts\python.exe --editable --force --reinstall --refresh --no-cache .
@@ -45,7 +116,7 @@ iris
 On first run, IRIS creates `~/.iris/` and copies bundled default configs:
 
 ```
-C:\Users\<you>\.iris\
+~/.iris/                     # Windows: C:\Users\<you>\.iris\
 ├── config.toml          # main config (LLM, agent, tools settings)
 ├── .env                 # API keys (created from template)
 ├── agents/
@@ -56,7 +127,7 @@ C:\Users\<you>\.iris\
         └── mcp.toml     # MCP server config
 ```
 
-To reset the global config:
+To reset the global config on Windows (this removes saved keys and settings):
 
 ```powershell
 Remove-Item -Recurse -Force $env:USERPROFILE\.iris
@@ -240,6 +311,11 @@ The `.env` file is loaded automatically at startup by `env_loader.py`.
 
 **Manual editing** is also supported:
 
+```bash
+# macOS / Linux
+nano ~/.iris/.env
+```
+
 ```powershell
 notepad $env:USERPROFILE\.iris\.env
 ```
@@ -260,7 +336,7 @@ Placeholder values starting with `your_` are treated as unconfigured by the wiza
 
 1. Current directory `.env`
 2. Current project `.iris/` (if present)
-3. Global `C:\Users\<you>\.iris\.env`
+3. Global `~/.iris/.env` (Windows: `C:\Users\<you>\.iris\.env`)
 4. Bundled defaults inside the installed package
 
 If `iris` reports missing configs or keys, ensure the relevant key exists in one of the higher-priority locations above.
@@ -291,9 +367,24 @@ To activate a MCP server:
 
 ## 10. Verify Installation
 
+```bash
+# macOS / Linux, from the project directory
+uv pip check
+.venv/bin/python -c 'import platform, sys; print(platform.machine(), sys.prefix)'
+ls ~/.iris
+uv run --locked iris
+# Then run /doctor in the CLI.
+```
+
+
 ```powershell
-where iris                     # should show ...\.local\bin\iris.exe
-dir $env:USERPROFILE\.iris     # should contain config.toml, .env, agents/, tools/
+# Windows PowerShell, from the project directory
+uv pip check
+.\.venv\Scripts\python.exe -c "import platform, sys; print(platform.machine(), sys.prefix)"
+Get-ChildItem $env:USERPROFILE\.iris
+uv run --locked iris
+# After activation or uv tool installation, locate the executable with:
+Get-Command iris
 ```
 
 Run `/doctor` inside IRIS to verify all configured keys are detected correctly.
