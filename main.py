@@ -5,7 +5,6 @@ Provides command-line interface and async demo functionality.
 Simplified version using the new MCP integration architecture.
 """
 
-import asyncio
 import sys
 import os
 import logging
@@ -56,7 +55,7 @@ def setup_logging(debug: bool = False):
 
 
 # Import and run CLI
-from src.application.cli.main import run
+from src.application.cli.main import main as cli_main
 
 
 def parse_arguments():
@@ -82,7 +81,7 @@ def main():
     setup_logging(debug=args.debug)
 
     # Run CLI
-    asyncio.run(run())
+    cli_main()
 
 
 if __name__ == "__main__":
