@@ -235,3 +235,40 @@ def test_mode_command_switches_to_basic_when_init_fails(monkeypatch):
     assert result.type == "success"
     assert "will be initialized on first use" in result.message
     assert ctx.get_engine_config("agent")["agent_type"] == "basic"
+
+
+@pytest.mark.parametrize(
+    'default_provider, default_model, wanted_provider, wanted_model',
+    [
+        ('openai', 'openai/gpt-6-luna', 'openai', 'openai/gpt-6-luna'),
+        ('openai', 'not-registered', 'openai', 'openai/gpt-6-luna'),
+        ('missing-provider', 'not-registered', 'openai', 'openai/gpt-6-luna'),
+    ],
+)
+def test_deep_mode_honors_configured_defaults_and_provider_model_fallback(
+    monkeypatch, default_provider, default_model, wanted_provider, wanted_model
+):
+    from types import SimpleNamespace
+
+    ctx = _Ctx()
+    providers = {
+        'openai': {
+            'default_model': 'openai/gpt-6-luna',
+            'models': {'gpt-4o': {}, 'openai/gpt-6-luna': {}},
+        },
+        'zhipu': {'default_model': 'glm-4.6', 'models': {'glm-4.6': {}}},
+    }
+    monkeypatch.setattr('src.core.providers.deepagents_provider_registry', SimpleNamespace(list_providers=lambda: providers))
+    monkeypatch.setattr('src.core.config.get_config', lambda: SimpleNamespace(deep_agent=SimpleNamespace(default_provider=default_provider, default_model=default_model)))
+    monkeypatch.setattr('src.components.shared.memory.SessionManager', lambda **kwargs: _SessionManagerStub(mode='deep'))
+    monkeypatch.setattr('src.components.shared.memory.DeepAgentCheckpointer', lambda **kwargs: 'checkpointer')
+
+    async def create_agent(context, target):
+        configuration = context.get_engine_config('agent')
+        return 'agent', {'provider': configuration['provider'], 'model': configuration['model']}
+
+    monkeypatch.setattr('src.application.services.agent.deep.agent_lifecycle.create_default_deep_agent', create_agent)
+    result = asyncio.run(ModeCommand().execute(ctx, 'deep'))
+    assert result.type == 'success'
+    assert ctx.get_engine_config('agent')['provider'] == wanted_provider
+    assert ctx.get_engine_config('agent')['model'] == wanted_model

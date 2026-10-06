@@ -39,26 +39,28 @@ class ModeCommand(BaseCommand):
 
             providers = deepagents_provider_registry.list_providers()
             if providers:
-                # Use zhipu/glm-4.6 as default if available
-                if "zhipu" in providers:
-                    zhipu_models = providers["zhipu"].get("models", {})
-                    if "glm-4.6" in zhipu_models:
-                        config["provider"] = "zhipu"
-                        config["model"] = "glm-4.6"
-                    else:
-                        # Use first available zhipu model
-                        if zhipu_models:
-                            first_model = next(iter(zhipu_models.keys()))
-                            config["provider"] = "zhipu"
-                            config["model"] = first_model
-                else:
-                    # Fallback to first available provider/model
-                    first_provider = next(iter(providers.keys()))
-                    first_provider_models = providers[first_provider].get("models", {})
-                    if first_provider_models:
-                        first_model = next(iter(first_provider_models.keys()))
-                        config["provider"] = first_provider
-                        config["model"] = first_model
+                from src.core.config import get_config
+
+                defaults = get_config().deep_agent
+                provider = (
+                    defaults.default_provider
+                    if defaults.default_provider in providers
+                    else next(iter(providers))
+                )
+                provider_config = providers[provider]
+                models = provider_config.get("models", {})
+                if models:
+                    model = (
+                        defaults.default_model
+                        if provider == defaults.default_provider
+                        else provider_config.get("default_model")
+                    )
+                    if model not in models:
+                        model = provider_config.get("default_model")
+                    if model not in models:
+                        model = next(iter(models))
+                    config["provider"] = provider
+                    config["model"] = model
 
             # Switch to deep mode memory system
 

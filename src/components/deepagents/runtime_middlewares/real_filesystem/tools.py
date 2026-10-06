@@ -205,6 +205,11 @@ class RealFilesystemToolFactory:
         as the primary search engine, falling back to Python if unavailable.
         Follows YAGNI by only adding complexity where needed (performance-critical path).
         """
+        # The JSON formatter currently handles match records only. Use the
+        # Python scanner when context is requested so surrounding lines survive.
+        if context_lines > 0:
+            return None
+
         cmd = ["rg", "--json", "--no-heading"]
 
         if not case_sensitive:
